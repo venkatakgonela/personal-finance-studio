@@ -1,8 +1,8 @@
 # SPEC-002: Screen Plan & Design System
 
 **Author:** Kiran Gonela / Codex  
-**Status:** Phase 1.5 implemented locally  
-**Date:** 2026-06-14
+**Status:** Phase 1.75 implemented locally
+**Date:** 2026-06-15
 
 ## 1. Design Direction
 
@@ -63,6 +63,7 @@ The app uses distinct page routes, not dashboard anchor jumps:
 - `#/transactions`
 - `#/cash-flow`
 - `#/calendar`
+- `#/budget`
 - `#/recurring`
 - `#/goals`
 - `#/sinking-funds`
@@ -70,6 +71,7 @@ The app uses distinct page routes, not dashboard anchor jumps:
 - `#/subscriptions`
 - `#/reports`
 - `#/decision-queue`
+- `#/import`
 - `#/settings`
 
 Dashboard cards may preview important data, but clicking primary navigation must change the
@@ -85,6 +87,9 @@ previews.
 - Show accounts discovered.
 - Show balances if present; otherwise request review/edit.
 - Show import summary: imported, duplicate, skipped, invalid.
+- Phase 1.75 adds a dedicated Import Center route so fresh data entry is discoverable after initial setup.
+- The global data affordance should be an action/status control, not a passive `Local data` label.
+- Import freshness/status belongs on the Import Center and should not be duplicated on Goals.
 
 ### Household Dashboard
 
@@ -96,6 +101,8 @@ previews.
 - Cash Flow readiness/forecast card.
 - Keep the dashboard focused on household decisions. Avoid duplicating the hero's balance-readiness
   message in a second card; show setup/import guidance only when the workspace is incomplete.
+- Phase 1.75 dashboard should add value through compact planning signals: budget remaining, active
+  goal progress, cashflow risk, next bills, open decisions, and import freshness.
 
 ### Calendar
 
@@ -115,6 +122,8 @@ previews.
 - Flexible spend assumption.
 - Projected ending balance.
 - Lowest projected balance point.
+- Phase 1.75 turns Cash Flow into a richer planning screen with projected-balance summary,
+  obligation pressure, candidate-vs-confirmed context, and dated upcoming cash events.
 
 ### Transactions
 
@@ -136,6 +145,19 @@ previews.
 - Emergency-buffer and review-coverage goals derived from real local data.
 - Progress bars, current/target/monthly-set-aside metrics, and next action copy.
 - Links into Cash Flow and Monthly Review so goals are not a dead-end screen.
+- Phase 1.75 adds user-authored goals with add/edit/delete controls, due dates, monthly
+  contribution, and local refresh persistence.
+- Goals should focus on goal creation and progress only; data freshness belongs in Import.
+
+### Budget
+
+- Dedicated `#/budget` route.
+- Monthly planned, actual, and remaining values by group/category.
+- Editable planned amounts.
+- Summary card for income, planned spend, actual spend, remaining, and over/under status.
+- Clear formula copy so users can trust the tally.
+- Budget data may start as local-first preferences, but actuals must come from imported
+  transaction/insight data.
 
 ### Sinking Funds
 
@@ -164,11 +186,16 @@ previews.
 - Actions should train rules or suppress future noise.
 - Current UI uses a desktop review table with summary pills and collapses to mobile-friendly review cards.
 
-### Settings / System Status
+### Settings / System Status / Data Controls
 
 - Show backend API health clearly.
 - Explain how to start the local stack when the API is offline.
 - Keep this operational status separate from finance data so users understand service problems quickly.
+- Phase 1.75 adds a Settings workbench:
+  categories, merchants, rules, tags, data/import status, and system status.
+- Category, tag, rule, and merchant preference edits can be local-first in Phase 1.75, but should be
+  labelled as local planning settings until server persistence exists.
+- System status belongs in Settings and should not be repeated in the Import Center.
 
 ### Insights
 
@@ -232,3 +259,9 @@ previews.
 - Implemented performance polish: frontend GET de-duplication prevents React dev StrictMode from
   duplicating identical in-flight API requests during refresh.
 - Implemented verification: Playwright checks dashboard API availability, dashboard date-range bill-title behavior, compact dashboard Decision Queue rendering, transaction filter behavior, refresh persistence, Phase 1.5 planning routes, all-route UI health, candidate toggle scope, calendar planner updates, colorful account/report graphics, fixed-sidebar scrolling, Decision Queue desktop layout, and Decision Queue mobile actions.
+- Implemented Phase 1.75 pages: Budget and Import Center.
+- Implemented Phase 1.75 upgrades: editable goals, editable local taxonomy/rules/tags/merchant
+  preferences, richer Cash Flow, richer Dashboard, and a purposeful data/import topbar action.
+- Implemented Phase 1.75 UI cleanup: removed duplicated status cards, normalized Settings menu
+  styling, made Goals a cleaner full-width planning page, and aligned Budget to the app's row/table
+  rhythm.

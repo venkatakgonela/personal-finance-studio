@@ -24,6 +24,7 @@ ai-eos-metadata:
 | ADR-011 | Use D3 Sankey for finance-flow reports | Accepted | 2026-06-14 |
 | ADR-012 | Persist view state in the hash URL | Accepted | 2026-06-14 |
 | ADR-013 | De-duplicate in-flight frontend GET requests | Accepted | 2026-06-14 |
+| ADR-014 | Use local-first editable planning preferences for Phase 1.75 | Accepted | 2026-06-15 |
 
 ## ADR-001 - Use Entity-Scoped Household and Business Model
 
@@ -115,3 +116,18 @@ ai-eos-metadata:
 - **Context**: React dev StrictMode intentionally replays effects, which doubled local API traffic during refresh and made the app feel slower in development.
 - **Decision**: De-duplicate identical in-flight GET requests in `frontend/src/api.ts` while leaving mutating requests untouched.
 - **Consequences**: Local dev refreshes avoid duplicate backend work without disabling StrictMode. This is not a full cache; fresh values still load after each request settles.
+
+## ADR-014 - Use Local-First Editable Planning Preferences for Phase 1.75
+
+- **Status**: Accepted
+- **Context**: Phase 1.5 derives goals, review items, and reports from imported data, but the app now
+  needs user-authored planning controls before committing to new server tables and migrations for
+  every product concept.
+- **Decision**: Store Phase 1.75 custom goals, budget plans, category/tag/rule preferences, and
+  merchant display settings in browser local storage as a local-first bridge. Backend-derived
+  accounts, transactions, commitments, insights, and dashboard totals remain the source of truth for
+  actual money movement.
+- **Consequences**: The UI can validate real workflows quickly and preserve edits across refresh.
+  These settings are local to the browser until Phase 2 promotes them to API-backed persistence.
+  Budget actuals and report totals must continue to be calculated from imported data, not manually
+  entered preference data.

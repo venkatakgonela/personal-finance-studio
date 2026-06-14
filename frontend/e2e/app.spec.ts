@@ -158,9 +158,10 @@ test("renders the dashboard with the polished visual system", async ({ page }) =
   await page.goto("/");
 
   await expect(page.getByRole("heading", { name: /Good (morning|afternoon|evening), Kiran\./ })).toBeVisible();
-  await expect(page.getByRole("navigation", { name: "Primary navigation" }).getByRole("link")).toHaveCount(13);
+  await expect(page.getByRole("navigation", { name: "Primary navigation" }).getByRole("link")).toHaveCount(15);
   await expect(page.getByLabel("Date range", { exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: /API online|API checking/ })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Import data" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Spending Pulse" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Decision Queue" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Bills This Month" })).toBeVisible();
@@ -206,7 +207,7 @@ test("renders phase 1.5 planning routes and saved filter URLs", async ({ page })
   await page.goto("/#/goals");
   await expect(page.getByRole("heading", { name: "Goals" })).toBeVisible();
   await expect(page.getByText("Emergency buffer")).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Import Freshness" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Import Freshness" })).toHaveCount(0);
 
   await page.goto("/#/sinking-funds");
   await expect(page.getByRole("heading", { name: "Sinking Funds" })).toBeVisible();
@@ -225,6 +226,59 @@ test("renders phase 1.5 planning routes and saved filter URLs", async ({ page })
   await page.goto("/#/subscriptions");
   await expect(page.getByRole("heading", { name: "Subscriptions" })).toBeVisible();
   await expect(page.getByText("Netflix")).toBeVisible();
+});
+
+test("supports phase 1.75 editable planning controls", async ({ page }) => {
+  await mockAppApis(page);
+  await page.goto("/#/goals");
+
+  await page.getByLabel("Goal name").fill("Holiday fund");
+  await page.getByLabel("Target").fill("1200");
+  await page.getByLabel("Current").fill("300");
+  await page.getByLabel("Monthly").fill("150");
+  await page.getByRole("button", { name: "Add goal" }).click();
+  await expect(page.getByText("Holiday fund")).toBeVisible();
+  await expect(page.getByText("25%")).toBeVisible();
+
+  await page.reload();
+  await expect(page.getByText("Holiday fund")).toBeVisible();
+
+  await page.getByRole("button", { name: "Edit" }).click();
+  await page.getByLabel("Current").fill("600");
+  await page.getByRole("button", { name: "Update goal" }).click();
+  await expect(page.getByText("50%")).toBeVisible();
+
+  await page.goto("/#/budget");
+  await expect(page.getByRole("heading", { name: "Budget" })).toBeVisible();
+  const flexiblePlan = page.getByLabel("Planned amount for Flexible");
+  await flexiblePlan.fill("100");
+  await flexiblePlan.press("Enter");
+  await expect(page.getByLabel("Monthly budget").getByText("£51.01")).toBeVisible();
+
+  await page.goto("/#/settings");
+  await expect(page.getByRole("heading", { name: "Categories" })).toBeVisible();
+  await page.getByLabel("New category name").fill("School meals");
+  await page.getByRole("button", { name: "Create category" }).click();
+  await expect(page.getByText("School meals")).toBeVisible();
+
+  await page.getByRole("button", { name: "Tags" }).click();
+  await page.getByLabel("New tag name").fill("School");
+  await page.getByRole("button", { name: "New tag" }).click();
+  await expect(page.getByText("School")).toBeVisible();
+
+  await page.getByRole("button", { name: "Rules" }).click();
+  await page.getByLabel("Rule condition").fill("morrisons");
+  await page.getByRole("button", { name: "Create rule" }).click();
+  await expect(page.getByText("If merchant contains morrisons")).toBeVisible();
+
+  await page.getByRole("button", { name: "Merchants" }).click();
+  await expect(page.getByLabel("Display name for Morrisons")).toBeVisible();
+
+  await page.getByRole("link", { name: "Import data" }).click();
+  await expect(page).toHaveURL(/#\/import/);
+  await expect(page.getByRole("heading", { name: "Getting Started" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Import Freshness" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "System Status" })).toHaveCount(0);
 });
 
 test("renders colorful account and report graphics", async ({ page }) => {
@@ -326,6 +380,7 @@ test("all primary routes are reachable without visible UI breakage", async ({ pa
     "transactions",
     "cash-flow",
     "calendar",
+    "budget",
     "recurring",
     "goals",
     "sinking-funds",
@@ -333,6 +388,7 @@ test("all primary routes are reachable without visible UI breakage", async ({ pa
     "subscriptions",
     "reports",
     "decision-queue",
+    "import",
     "settings",
   ];
 
@@ -392,6 +448,7 @@ test("shows local service health on the settings page", async ({ page }) => {
   await mockAppApis(page);
   await page.goto("/#/settings");
 
+  await page.getByRole("button", { name: "System" }).click();
   await expect(page.getByRole("heading", { name: "System Status" })).toBeVisible();
   await expect(page.getByText("Backend API")).toBeVisible();
   await expect(page.getByText("Frontend")).toBeVisible();

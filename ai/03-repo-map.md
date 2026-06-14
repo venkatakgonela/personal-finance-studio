@@ -7,8 +7,8 @@ ai-eos-metadata:
 
 # Repo Map - Personal Finance Studio
 
-**Last reviewed:** 2026-06-14  
-**Current repository status:** Phase 1.5 local implementation with backend, frontend, tests, and docs.
+**Last reviewed:** 2026-06-15
+**Current repository status:** Phase 1.75 editable planning control plane complete locally.
 
 ## Root
 
@@ -32,7 +32,9 @@ ai-eos-metadata:
 
 ## Frontend
 
-- `frontend/src/App.tsx`: current route shell, Phase 1/1.5 UI components, URL-hash state persistence, calendar planner, and D3 Sankey report model/rendering.
+- `frontend/src/App.tsx`: current route shell, Phase 1/1.5 UI components, Phase 1.75 editable
+  planning controls, URL-hash state persistence, calendar planner, and D3 Sankey report
+  model/rendering.
 - `frontend/src/api.ts`: typed API client for backend routes, query params, and in-flight GET request de-duplication.
 - `frontend/src/styles.css`: design tokens, layout, tables, filters, and responsive styles.
 - `frontend/src/App.test.tsx`: Vitest/React Testing Library component coverage.

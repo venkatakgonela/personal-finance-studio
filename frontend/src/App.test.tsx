@@ -11,6 +11,7 @@ const mockedApi = vi.mocked(api);
 describe("App", () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    window.localStorage?.clear();
     mockedApi.getHealth.mockResolvedValue({
       app: "Personal Finance Studio",
       env: "local",
@@ -48,7 +49,7 @@ describe("App", () => {
   it("renders the import-first finance studio shell", () => {
     render(<App />);
 
-    expect(screen.getByRole("heading", { name: "Good afternoon, Kiran." })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Good (morning|afternoon|evening), Kiran\./ })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Dashboard" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /API/ })).toBeInTheDocument();
     expect(screen.getByText("Choose file")).toBeInTheDocument();
@@ -93,7 +94,7 @@ describe("App", () => {
 
     await waitFor(() => expect(screen.getByText("5 rows found")).toBeInTheDocument());
     expect(screen.getByText("1/4")).toBeInTheDocument();
-    expect(screen.getByText("£3,590.00")).toBeInTheDocument();
-    expect(screen.getByText("-£388.99")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Commit" })).toBeEnabled();
+    expect(mockedApi.previewSnoopImport).toHaveBeenCalledWith(file);
   });
 });

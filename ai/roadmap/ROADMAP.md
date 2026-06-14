@@ -7,8 +7,8 @@ ai-eos-metadata:
 
 # Project Roadmap - Personal Finance Studio
 
-**Last reviewed:** 2026-06-14  
-**Current phase:** Phase 1.5 complete locally; ready to enter Phase 2 expansion planning.
+**Last reviewed:** 2026-06-15
+**Current phase:** Phase 1.75 complete locally; ready to review Phase 2 scope.
 
 ## Milestones
 
@@ -17,6 +17,7 @@ ai-eos-metadata:
 | Phase 0 | Planning docs, ADRs, specs, task breakdown | Complete |
 | Phase 1 | Household Snoop import, transactions, transfers, commitments, forecast, dashboard | Complete locally |
 | Phase 1.5 | Goals foundation, monthly review, richer reports, subscription review | Complete locally |
+| Phase 1.75 | Editable planning control plane: goals, budgets, taxonomy/rules, import center, richer dashboard/cashflow | Complete locally |
 | Phase 2 | Business entity imports, Tide/NatWest CSV, local LLM assistant | Not Started |
 | Phase 3 | Optional Open Banking, sync health, advanced planning | Not Started |
 
@@ -80,12 +81,55 @@ ai-eos-metadata:
 - The E2E suite also protects dashboard API availability, date-range bill-title behavior, compact dashboard Decision Queue rendering, transaction filters, refresh persistence, candidate-toggle scope, calendar planner behavior, colorful report/account graphics, fixed-sidebar scrolling, and Decision Queue desktop/mobile layouts.
 - Remaining caveat: Phase 1.5 planning data is derived locally rather than user-authored persisted goals. Persisted custom goals can be part of Phase 2/3 if desired.
 
+## Phase 1.75 - Editable Planning Control Plane
+
+Phase 1.75 turns the Phase 1/1.5 read-only planning insights into editable household controls.
+The implementation should stay local-first and deterministic: user-authored settings can be stored
+client-side initially, but every money total shown in budget/cashflow/dashboard must tie back to
+imported transactions, commitments, accounts, or explicit user-entered plan values.
+
+- [x] Goals page: add custom goals, edit progress/targets, delete goals, and show derived goals beside user-authored goals.
+- [x] Budget page: add a dedicated `#/budget` screen with monthly planned/actual/remaining rows by group/category, editable planned amounts, and summary totals.
+- [x] Settings page: add a settings workbench for categories, tags, rules, and merchants with add/edit/delete/update interactions.
+- [x] Import center: add a visible navigation/home for importing new Snoop data, previewing, committing, and rerunning transfer/bill detection.
+- [x] Local data UX: replace the passive `Local data` badge with a purposeful action/status affordance that leads to import/data management.
+- [x] Cash Flow page: improve from readiness-only into a planning view with projected balance, upcoming obligation summary, cash-pressure meter, and grouped cash events.
+- [x] Dashboard: add more useful planning value without crowding: budget left, goal progress, cash after bills, decision pressure, and import action.
+- [x] Tests: add browser coverage for goals CRUD, budget math, settings CRUD, import entry, route health, and refresh-safe behavior.
+- [x] Accounting checks: planned, actual, remaining, net, and cashflow totals are GBP formatted and derived from imported insight/dashboard data plus explicit plan values.
+
+## Phase 1.75 Completion Notes
+
+- New primary routes: `#/budget` and `#/import`.
+- Goals now support local add/edit/delete and refresh persistence while keeping derived goals visible.
+- Budget now shows planned, actual, and remaining values by group with editable planned amounts.
+- Settings now includes Categories, Merchants, Rules, Tags, Data, and System sections.
+- The former passive `Local data` label is now an `Import data` action.
+- Dashboard now includes a compact Planning Snapshot.
+- Cash Flow now includes a richer Cash Flow Plan card with projected ending cash, lowest point, cash pressure, and dated cash events.
+- Duplicate status cards were removed: data freshness is owned by Import, and system/API status is owned by Settings.
+- Dashboard, Settings, Goals, and Budget received a final UI rhythm pass after Phase 1.75 feature implementation.
+- Phase 1.75 preferences are local-first and browser-scoped by ADR-014; server-backed persistence remains a Phase 2 candidate.
+
+## Phase 1.75 Non-Goals
+
+- No real Open Banking connection.
+- No cloud sync or multi-user collaboration.
+- No automatic rule application that rewrites historical transactions without review.
+- No private raw exports committed to git.
+- No AI assistant actions that mutate finance data.
+
 ## Phase 2 - Expansion
 
-- Business entity active UI.
-- Tide CSV parser.
-- NatWest Business CSV parser.
-- Local LLM assistant using deterministic app queries.
+- Business entity active UI, including separate dashboards, categories, tax/reporting labels, and import lanes.
+- Tide CSV parser and NatWest Business CSV parser.
+- Rule engine application workflow: preview rule impact, apply to selected transactions, and undo.
+- Merchant merge/split and merchant aliases.
+- PocketSmith-style cashflow scenario planning: what-if income/outflow changes, long-range projections, and scenario comparison.
+- Monarch-style budget modes: category budgeting, flexible budgeting, rollover handling, and shared household review.
+- Simplifi-style spending plan: income minus bills, subscriptions, savings goals, and left-to-spend.
+- Local LLM assistant using deterministic app queries, read-only at first.
+- Exportable reports and CSV exports for budget, transactions, and monthly review.
 
 ## Phase 3 - Integrations
 

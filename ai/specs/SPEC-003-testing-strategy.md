@@ -1,8 +1,8 @@
 # SPEC-003: Testing Strategy
 
 **Author:** Kiran Gonela / Codex  
-**Status:** Phase 1.5 implemented locally  
-**Date:** 2026-06-14
+**Status:** Phase 1.75 implemented locally
+**Date:** 2026-06-15
 
 ## 1. Problem Statement
 
@@ -18,6 +18,7 @@ Testing is therefore part of the Phase 1 product, not a cleanup activity.
 - Verify dashboard numbers match documented formulas.
 - Verify browser UI flows work end to end.
 - Verify Phase 1.5 planning derivations and route health.
+- Verify Phase 1.75 editable planning controls, local persistence, and budget tally math.
 - Prevent regression in the core money model before visual polish.
 
 ## 3. Non-Goals
@@ -95,6 +96,16 @@ Current implemented checks:
 13. URL-hash state persists date range, search, transaction filters, report tab, and report grouping
     across browser refresh.
 
+Phase 1.75 checks to add:
+
+14. Goals page can add, edit, delete, and refresh-persist a custom goal.
+15. Budget page shows planned, actual, and remaining totals that tally against insight data.
+16. Settings workbench can add/edit/delete categories, tags, rules, and merchant preferences.
+17. Import Center is discoverable from nav/topbar and exposes preview/commit/detect actions.
+18. Cash Flow and Dashboard render richer planning cards without horizontal overflow or duplicated
+    passive data labels.
+19. Goals does not duplicate Import Freshness, and Import does not duplicate System Status.
+
 Additional critical flows to add as Phase 1.5/packaging hardens:
 
 1. Import Snoop CSV preview.
@@ -121,6 +132,10 @@ Before Phase 1 is considered ready:
 - Confirm Reports Sankey labels stay close to the relevant bars, final nodes remain inside the chart,
   category/merchant grouping changes the destinations, spending leaves expand on click, and Income
   defaults to source breakdown.
+- Confirm Budget planned/actual/remaining values are arithmetically correct.
+- Confirm user-authored goals and settings survive browser refresh.
+- Confirm the import/data control is understandable as an action, not decorative chrome.
+- Confirm ownership of status cards is clear: data freshness on Import, API/system status on Settings.
 - Confirm browser refresh preserves the user's current route context and updates values without
   resetting filters or report selections.
 - Confirm terminology feels understandable.
@@ -183,3 +198,12 @@ Phase 1.5 is not ready until:
 - [x] Manual browser review is completed with no blocking UX issues.
 - [x] Phase 1.5 planning overview tests pass.
 - [x] All-route browser health checks pass.
+
+Phase 1.75 release criteria:
+
+- [x] Goals CRUD browser flow passes.
+- [x] Budget tally browser flow passes.
+- [x] Settings CRUD browser flow passes.
+- [x] Import Center browser flow passes.
+- [x] Dashboard/Cash Flow planning-value browser checks pass.
+- [x] Full backend, frontend, build, and E2E quality gates pass.
