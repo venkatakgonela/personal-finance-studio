@@ -24,6 +24,7 @@
 - Roadmap: `ai/roadmap/ROADMAP.md`
 - Phase 1 spec: `ai/specs/SPEC-001-phase-1-household-snoop.md`
 - Design spec: `ai/specs/SPEC-002-screen-and-design-system.md`
+- Testing strategy: `ai/specs/SPEC-003-testing-strategy.md`
 
 ## Planning Boundary
 

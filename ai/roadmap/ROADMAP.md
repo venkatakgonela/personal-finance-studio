@@ -31,6 +31,7 @@ ai-eos-metadata:
 - Flexible spend remaining headline number.
 - Low-noise Decision Queue.
 - Basic Insights and reports.
+- Backend, API, and browser end-to-end tests for critical flows.
 
 ## Phase 1.5 - Planning Depth
 

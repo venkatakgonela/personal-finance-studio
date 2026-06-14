@@ -33,4 +33,6 @@ Expected once implementation begins:
 - `frontend/`: React + Vite app.
 - `frontend/src/`: routes, components, data clients, design tokens.
 - `tests/`: backend tests.
+- `tests/fixtures/`: sanitized Snoop CSV fixtures and expected outputs.
 - `docker-compose.yml`: local PostgreSQL runtime.
+- `frontend/e2e/`: Playwright browser UI and end-to-end tests.

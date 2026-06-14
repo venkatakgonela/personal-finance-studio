@@ -21,6 +21,7 @@ This repository is currently in planning-first mode. Implementation should start
 - [Roadmap](ai/roadmap/ROADMAP.md)
 - [Phase 1 Specification](ai/specs/SPEC-001-phase-1-household-snoop.md)
 - [Screen & Design Specification](ai/specs/SPEC-002-screen-and-design-system.md)
+- [Testing Strategy](ai/specs/SPEC-003-testing-strategy.md)
 
 ## Locked Direction
 

@@ -26,3 +26,4 @@ manifest:
   - path: ai/roadmap/ROADMAP.md
   - path: ai/specs/SPEC-001-phase-1-household-snoop.md
   - path: ai/specs/SPEC-002-screen-and-design-system.md
+  - path: ai/specs/SPEC-003-testing-strategy.md

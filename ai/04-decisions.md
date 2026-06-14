@@ -18,6 +18,7 @@ ai-eos-metadata:
 | ADR-005 | Separate actual, estimated, forecast, and pending values visually | Accepted | 2026-06-14 |
 | ADR-006 | Reserve Goals and annual sinking-fund support in the data model | Accepted | 2026-06-14 |
 | ADR-007 | Keep LLM assistant out of Phase 1 core | Accepted | 2026-06-14 |
+| ADR-008 | Make testing a first-class Phase 1 deliverable | Accepted | 2026-06-14 |
 
 ## ADR-001 - Use Entity-Scoped Household and Business Model
 
@@ -67,3 +68,10 @@ ai-eos-metadata:
 - **Context**: A local LLM assistant can answer questions, but finance calculations must be deterministic first.
 - **Decision**: Do not build LLM assistant in Phase 1. Reserve architecture for later read-only, query-backed assistant.
 - **Consequences**: Phase 1 remains reliable. Future assistant can explain app-computed results instead of guessing.
+
+## ADR-008 - Make Testing a First-Class Phase 1 Deliverable
+
+- **Status**: Accepted
+- **Context**: Personal finance software can look correct while producing wrong balances, duplicated transactions, inflated spending, or misleading forecasts.
+- **Decision**: Phase 1 must include backend unit/integration tests, deterministic finance calculation tests, import fixture tests, API tests, and browser end-to-end tests for core user flows.
+- **Consequences**: Slower initial build, but higher trust. Browser testing becomes part of the release gate rather than a final manual check.
