@@ -21,6 +21,7 @@ ai-eos-metadata:
 | ADR-008 | Make testing a first-class Phase 1 deliverable | Accepted | 2026-06-14 |
 | ADR-009 | Keep Phase 1 frontend simple with typed fetch and CSS tokens | Accepted | 2026-06-14 |
 | ADR-010 | E2E tests must check backend API availability | Accepted | 2026-06-14 |
+| ADR-011 | Use D3 Sankey for finance-flow reports | Accepted | 2026-06-14 |
 
 ## ADR-001 - Use Entity-Scoped Household and Business Model
 
@@ -91,3 +92,10 @@ ai-eos-metadata:
 - **Context**: The UI can render while the backend is down, producing a `Failed to fetch` banner that pure frontend smoke tests miss.
 - **Decision**: Playwright E2E must start/check both FastAPI on `127.0.0.1:8025` and Vite on `127.0.0.1:5175`.
 - **Consequences**: Browser tests catch local-stack failures earlier. Mocked UI tests remain useful for deterministic table/filter/layout behavior, but at least one real-stack smoke test is required.
+
+## ADR-011 - Use D3 Sankey for Finance-Flow Reports
+
+- **Status**: Accepted
+- **Context**: Hand-drawn SVG bands were fast to iterate but became hard to keep natural, flexible, and collision-free as report tabs and grouping changed.
+- **Decision**: Use `d3-sankey` for Cash Flow, Spending, and Income reports while keeping the surrounding UI in React/CSS.
+- **Consequences**: The report chart can adapt to category/merchant grouping and selected report tabs with a real layout engine. Styling remains application-owned: square node bars, labels inside the chart, and lightweight annotation typography are part of the design system rather than library defaults.

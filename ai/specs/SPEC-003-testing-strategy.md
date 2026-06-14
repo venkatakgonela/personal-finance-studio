@@ -90,6 +90,8 @@ Current implemented checks:
 8. Every primary route is reachable without failed-fetch text, dead hash links, unnamed buttons, or horizontal overflow.
 9. Candidate toggle is scoped to planning views and changes upcoming-bill results.
 10. Sidebar remains fixed while page content scrolls.
+11. Calendar planner renders selected-period bill chips and updates when candidates are excluded.
+12. Reports render colorful account/report graphics, including the D3 Sankey chart and grouping controls.
 
 Additional critical flows to add as Phase 1.5/packaging hardens:
 
@@ -112,6 +114,10 @@ Before Phase 1 is considered ready:
 - Browse dashboard, calendar, transactions, accounts, bills, forecast, goals, sinking funds, monthly review, subscriptions, reports, settings, and decision queue.
 - Confirm the dashboard greeting follows UK local time and selected bill windows are not mislabeled.
 - Confirm Household money formatting is GBP-only.
+- Confirm Calendar labels historical/current/future bill windows correctly and shows planned amounts on
+  the appropriate days.
+- Confirm Reports Sankey labels stay close to the relevant bars, final nodes remain inside the chart,
+  and category/merchant grouping changes the destinations.
 - Confirm terminology feels understandable.
 - Confirm Decision Queue is not noisy.
 - Confirm the visual system makes estimates and forecasts obvious.

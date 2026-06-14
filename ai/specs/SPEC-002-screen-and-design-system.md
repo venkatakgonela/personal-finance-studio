@@ -102,6 +102,9 @@ previews.
 - Historical ranges should not be labelled as upcoming.
 - Bills, subscriptions, loans, credit cards, BNPL, income.
 - Clear actual/estimated/pending labels.
+- Current implementation includes a selected-period calendar grid with daily planned totals,
+  commitment chips, a busiest-day summary, and a collapsible bill list whose title changes between
+  `Recent bills`, `Current bills`, and `Upcoming bills`.
 
 ### Cashflow Forecast
 
@@ -175,6 +178,16 @@ previews.
 - BNPL/debt pressure.
 - Internal transfers excluded.
 
+### Reports
+
+- Cash Flow, Spending, and Income report tabs.
+- D3 Sankey cash-flow visualization that adapts to selected grouping and report tab.
+- Final Sankey nodes stay inside the chart; labels sit close to their bars and use lighter,
+  annotation-style typography so the flow bands remain dominant.
+- Category/merchant grouping controls should change the rendered destinations without requiring a
+  page reload.
+- Report summary strip should show income, expenses, and net in GBP for the selected date window.
+
 ## 7. UI Principles
 
 - Prefer fewer, more useful numbers.
@@ -189,6 +202,10 @@ previews.
 - Collapse secondary page grids before controls become cramped; avoid forcing two columns when the
   readable area is too narrow.
 - Leave clear spacing between summary metadata and tables, especially Decision Queue summary pills and review rows.
+- Use collapsible blocks wherever a page has secondary grouped lists below a primary summary or
+  chart, including Accounts, Dashboard insight groups, Calendar bills, and planning/review sections.
+- For chart typography, prefer compact annotation labels over bold display text. Currency values can
+  be slightly stronger than labels, but should not visually overpower bars or flows.
 
 ## 8. Current UI Status
 
@@ -197,4 +214,8 @@ previews.
 - Implemented transaction controls: account, group, type, review state, status, and clear filters.
 - Implemented planning controls: saved report filters with URL query persistence for transaction drilldowns.
 - Implemented dashboard polish: time-aware UK greeting, GBP-only money formatting, date-aware bills terminology, Balance Readiness, Spending Pulse, compact dashboard Decision Queue preview, fixed sidebar, and hidden main scrollbar.
-- Implemented verification: Playwright checks dashboard API availability, dashboard date-range bill-title behavior, compact dashboard Decision Queue rendering, transaction filter behavior, Phase 1.5 planning routes, all-route UI health, candidate toggle scope, fixed-sidebar scrolling, Decision Queue desktop layout, and Decision Queue mobile actions.
+- Implemented calendar polish: selected-period calendar grid, daily planned totals, commitment chips,
+  collapsible bill list, and candidate-toggle-aware planning data.
+- Implemented reports polish: D3 Sankey reports, adaptive Cash Flow/Spending/Income tabs, category
+  vs merchant grouping, square node bars, internal destination labels, and softened chart typography.
+- Implemented verification: Playwright checks dashboard API availability, dashboard date-range bill-title behavior, compact dashboard Decision Queue rendering, transaction filter behavior, Phase 1.5 planning routes, all-route UI health, candidate toggle scope, calendar planner updates, colorful account/report graphics, fixed-sidebar scrolling, Decision Queue desktop layout, and Decision Queue mobile actions.

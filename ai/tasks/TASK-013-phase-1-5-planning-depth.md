@@ -35,6 +35,12 @@ freshness, and stale commitment diagnostics.
 - Dashboard polish now includes a UK time-aware greeting, GBP-only money formatting, Balance
   Readiness setup status, Spending Pulse category bars, compact Decision Queue preview, fixed
   sidebar scrolling, and date-aware bill titles for historical/current/future ranges.
+- Calendar polish now includes a selected-period planner grid, daily planned totals, commitment
+  chips, busiest-day summary, candidate-toggle-aware results, and collapsible recent/current/upcoming
+  bill rows.
+- Reports polish now includes a D3 Sankey chart for Cash Flow, Spending, and Income, category vs
+  merchant grouping, square node bars, final labels kept inside the chart, and lighter annotation
+  typography so labels do not dominate the flow bands.
 
 ## Validation
 
@@ -49,11 +55,12 @@ cd frontend && npm run build
 cd frontend && npm run test:e2e
 ```
 
-Latest dashboard-polish verification also passed:
+Latest dashboard, calendar, and reports polish verification also passed:
 
 ```bash
 cd frontend && npm run lint
 cd frontend && npm run build
+cd frontend && npm run test:e2e -- --grep "colorful account and report graphics"
 cd frontend && npm run test:e2e
 ```
 

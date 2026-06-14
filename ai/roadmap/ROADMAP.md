@@ -31,10 +31,12 @@ ai-eos-metadata:
 - [x] Recurring commitment detection.
 - [x] Bills, bill instances, variable amounts, annual/custom frequencies.
 - [x] Calendar/upcoming commitments by selected date window.
+- [x] Calendar planner grid with daily planned totals, commitment chips, and collapsible bill list.
 - [x] Cashflow forecast and available-after-commitments formula.
 - [x] Flexible spend remaining headline number.
 - [x] Low-noise Decision Queue with desktop table and mobile review-card layout.
 - [x] Basic Insights and Reports route.
+- [x] D3 Sankey report visualization for Cash Flow, Spending, and Income with category/merchant grouping.
 - [x] Backend, API, frontend unit, and browser end-to-end tests for critical flows.
 
 ## Phase 1 Completion Notes
@@ -60,9 +62,13 @@ ai-eos-metadata:
 - Backend planning data is exposed through `GET /api/planning/overview` and remains deterministic from existing accounts, transactions, commitments, decisions, and import logs.
 - Frontend routes now include Goals, Sinking Funds, Monthly Review, and Subscriptions alongside the existing Phase 1 routes.
 - Reports now include saved filters that deep-link into filtered transactions and planning views.
+- Calendar now shows a selected-period planner grid with per-day bill/subscription/commitment chips,
+  daily totals, busiest-day summary, and collapsible current/recent/upcoming bill rows.
+- Reports now use a D3 Sankey visualization with softer fluid flows, square bars, inside-chart final
+  node labels, and lighter annotation typography.
 - Dashboard now has a time-aware UK greeting, GBP formatting, balance-readiness card, spending pulse, compact Decision Queue preview, and date-aware bill naming (`Recent Bills`, `Bills This Month`, `Upcoming Bills`).
 - The E2E suite checks every primary route for reachability, failed-fetch regressions, dead hash links, unnamed buttons, and horizontal overflow.
-- The E2E suite also protects dashboard API availability, date-range bill-title behavior, compact dashboard Decision Queue rendering, transaction filters, candidate-toggle scope, fixed-sidebar scrolling, and Decision Queue desktop/mobile layouts.
+- The E2E suite also protects dashboard API availability, date-range bill-title behavior, compact dashboard Decision Queue rendering, transaction filters, candidate-toggle scope, calendar planner behavior, colorful report/account graphics, fixed-sidebar scrolling, and Decision Queue desktop/mobile layouts.
 - Remaining caveat: Phase 1.5 planning data is derived locally rather than user-authored persisted goals. Persisted custom goals can be part of Phase 2/3 if desired.
 
 ## Phase 2 - Expansion
