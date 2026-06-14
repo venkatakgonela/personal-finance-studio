@@ -1,15 +1,18 @@
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 
 import {
+  API_BASE,
   type AccountsResponse,
   type CommitmentDetectionResult,
   type CommitmentsResponse,
   type DashboardSummary,
   type DecisionQueueResponse,
   type ForecastResponse,
+  type HealthResponse,
   type ImportCommitResult,
   type ImportPreview,
   type InsightsResponse,
+  type PlanningOverview,
   type TransactionFilters,
   type TransactionUpdate,
   type TransactionsResponse,
@@ -24,7 +27,9 @@ import {
   getDashboardSummary,
   getDecisions,
   getForecast,
+  getHealth,
   getInsights,
+  getPlanningOverview,
   getTransactions,
   getUpcomingCommitments,
   markBillInstancePaid,
@@ -36,13 +41,29 @@ import {
 } from "./api";
 
 type LoadState = "idle" | "loading" | "ready" | "error";
+type ApiHealthState = {
+  checkedAt: string | null;
+  details: HealthResponse | null;
+  message: string;
+  status: "checking" | "online" | "offline";
+};
 type PeriodPreset = "this-month" | "last-30" | "next-15" | "next-30" | "custom";
+type DateWindowKind = "current" | "future" | "past";
 type TransactionFilterState = {
   accountId: string;
   normalizedGroup: string;
   reviewed: "all" | "reviewed" | "unreviewed";
   status: string;
   transactionType: string;
+};
+type AccountRow = AccountsResponse["accounts"][number];
+type AccountGroup = {
+  accounts: AccountRow[];
+  defaultOpen: boolean;
+  id: string;
+  label: string;
+  monthChange: number;
+  total: number;
 };
 
 const navItems = [
@@ -52,21 +73,31 @@ const navItems = [
   { label: "Cash Flow", route: "cash-flow" },
   { label: "Calendar", route: "calendar" },
   { label: "Recurring", route: "recurring" },
+  { label: "Goals", route: "goals" },
+  { label: "Sinking Funds", route: "sinking-funds" },
+  { label: "Monthly Review", route: "monthly-review" },
+  { label: "Subscriptions", route: "subscriptions" },
   { label: "Reports", route: "reports" },
   { label: "Decision Queue", route: "decision-queue" },
+  { label: "Settings", route: "settings" },
 ] as const;
 
 type RouteId = (typeof navItems)[number]["route"];
 
 const pageTitles: Record<RouteId, { eyebrow: string; title: string }> = {
-  dashboard: { eyebrow: "Household workspace", title: "Good afternoon, Kiran." },
+  dashboard: { eyebrow: "Household workspace", title: "Good day, Kiran." },
   accounts: { eyebrow: "Accounts", title: "Review balances and account roles." },
   transactions: { eyebrow: "Transactions", title: "Understand where the money moved." },
   "cash-flow": { eyebrow: "Cash flow", title: "See what is coming next." },
   calendar: { eyebrow: "Calendar", title: "Plan bills by date." },
   recurring: { eyebrow: "Recurring", title: "Confirm bills, subscriptions, and debt payments." },
+  goals: { eyebrow: "Goals", title: "Turn spare cash into a plan." },
+  "sinking-funds": { eyebrow: "Sinking funds", title: "Make non-monthly bills feel monthly." },
+  "monthly-review": { eyebrow: "Monthly review", title: "Close the month with confidence." },
+  subscriptions: { eyebrow: "Subscriptions", title: "Keep only what earns its place." },
   reports: { eyebrow: "Reports", title: "Spot spending patterns." },
   "decision-queue": { eyebrow: "Decision queue", title: "Resolve only the decisions that matter." },
+  settings: { eyebrow: "System status", title: "Keep the local stack healthy." },
 };
 
 const periodOptions: Array<{ label: string; value: PeriodPreset }> = [
@@ -103,6 +134,7 @@ export function App() {
   const [upcoming, setUpcoming] = useState<UpcomingCommitmentsResponse | null>(null);
   const [forecast, setForecast] = useState<ForecastResponse | null>(null);
   const [insights, setInsights] = useState<InsightsResponse | null>(null);
+  const [planning, setPlanning] = useState<PlanningOverview | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [periodPreset, setPeriodPreset] = useState<PeriodPreset>("this-month");
   const [customStartDate, setCustomStartDate] = useState(todayIso());
@@ -118,17 +150,50 @@ export function App() {
   const [route, setRoute] = useState<RouteId>(currentRoute());
   const [loadState, setLoadState] = useState<LoadState>("idle");
   const [error, setError] = useState<string | null>(null);
+  const [apiHealth, setApiHealth] = useState<ApiHealthState>({
+    checkedAt: null,
+    details: null,
+    message: `Checking ${API_BASE}`,
+    status: "checking",
+  });
 
   const busy = loadState === "loading";
-  const pageTitle = pageTitles[route];
+  const pageTitle = getPageTitle(route);
+  const showCandidateToggle = candidateToggleApplies(route);
   const dateWindow = useMemo(
     () => getDateWindow(periodPreset, customStartDate, customEndDate),
     [customEndDate, customStartDate, periodPreset],
   );
+  const dateWindowKind = periodKindForPreset(periodPreset, dateWindow.startDate, dateWindow.endDate);
   const transactionQuery = useMemo(
     () => buildTransactionFilters(dateWindow, transactionFilters, searchQuery),
     [dateWindow, searchQuery, transactionFilters],
   );
+
+  async function checkApiHealth() {
+    try {
+      const health = await getHealth();
+      setApiHealth({
+        checkedAt: new Date().toLocaleTimeString(),
+        details: health,
+        message: `${health.app} API is online`,
+        status: "online",
+      });
+    } catch {
+      setApiHealth({
+        checkedAt: new Date().toLocaleTimeString(),
+        details: null,
+        message: `Backend API is offline at ${API_BASE}`,
+        status: "offline",
+      });
+    }
+  }
+
+  useEffect(() => {
+    void checkApiHealth();
+    const intervalId = window.setInterval(() => void checkApiHealth(), 30_000);
+    return () => window.clearInterval(intervalId);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -143,6 +208,7 @@ export function App() {
         upcomingResult,
         forecastResult,
         insightsResult,
+        planningResult,
       ] = await Promise.allSettled([
         getAccounts(),
         getTransactions(transactionQuery),
@@ -160,6 +226,7 @@ export function App() {
           startDate: dateWindow.startDate,
         }),
         getInsights({ endDate: dateWindow.endDate, startDate: dateWindow.startDate }),
+        getPlanningOverview(),
       ]);
 
       if (cancelled) return;
@@ -171,6 +238,7 @@ export function App() {
       if (upcomingResult.status === "fulfilled") setUpcoming(upcomingResult.value);
       if (forecastResult.status === "fulfilled") setForecast(forecastResult.value);
       if (insightsResult.status === "fulfilled") setInsights(insightsResult.value);
+      if (planningResult.status === "fulfilled") setPlanning(planningResult.value);
     }
 
     void hydrateExistingWorkspace();
@@ -199,7 +267,9 @@ export function App() {
 
   useEffect(() => {
     function handleHashChange() {
-      setRoute(currentRoute());
+      const { params, route: nextRoute } = parseHashState();
+      setRoute(nextRoute);
+      applyRouteQuery(params);
     }
 
     if (!window.location.hash) {
@@ -211,6 +281,23 @@ export function App() {
 
     return () => window.removeEventListener("hashchange", handleHashChange);
   }, []);
+
+  function applyRouteQuery(params: URLSearchParams) {
+    const range = params.get("range");
+    const reviewed = params.get("reviewed");
+    if (range && periodOptions.some((option) => option.value === range)) {
+      setPeriodPreset(range as PeriodPreset);
+    }
+    const querySearch = params.get("search");
+    if (querySearch !== null) setSearchQuery(querySearch);
+    setTransactionFilters((filters) => ({
+      accountId: params.get("account") ?? filters.accountId,
+      normalizedGroup: params.get("group") ?? filters.normalizedGroup,
+      reviewed: isReviewFilter(reviewed) ? reviewed : filters.reviewed,
+      status: params.get("status") ?? filters.status,
+      transactionType: params.get("type") ?? filters.transactionType,
+    }));
+  }
 
   async function runPreview(file: File) {
     setSelectedFile(file);
@@ -277,6 +364,7 @@ export function App() {
       upcomingResult,
       forecastResult,
       insightsResult,
+      planningResult,
     ] = await Promise.all([
       getAccounts(),
       getTransactions(transactionQuery),
@@ -294,6 +382,7 @@ export function App() {
         startDate: dateWindow.startDate,
       }),
       getInsights({ endDate: dateWindow.endDate, startDate: dateWindow.startDate }),
+      getPlanningOverview(),
     ]);
     setAccounts(accountsResult);
     setTransactions(transactionsResult);
@@ -303,6 +392,7 @@ export function App() {
     setUpcoming(upcomingResult);
     setForecast(forecastResult);
     setInsights(insightsResult);
+    setPlanning(planningResult);
   }
 
   async function runDecisionAction(
@@ -410,14 +500,18 @@ export function App() {
               onIncludeCandidatesChange={setIncludeCandidates}
               onPresetChange={setPeriodPreset}
               preset={periodPreset}
+              showCandidateToggle={showCandidateToggle}
             />
+            <SystemStatusBadge health={apiHealth} />
             <span className="local-badge">Local data</span>
           </div>
         </header>
 
+        {apiHealth.status === "offline" ? <ApiOfflineBanner onRetry={checkApiHealth} /> : null}
         {error ? <p className="error-banner">{error}</p> : null}
 
         <AppPage
+          apiHealth={apiHealth}
           accounts={accounts}
           busy={busy}
           commitmentResult={commitmentResult}
@@ -427,6 +521,8 @@ export function App() {
           decisions={decisions}
           forecast={forecast}
           insights={insights}
+          planning={planning}
+          onHealthCheck={checkApiHealth}
           onAccountBalanceUpdate={runAccountBalanceUpdate}
           onBillPaid={runBillPaid}
           onCommit={runCommit}
@@ -438,9 +534,11 @@ export function App() {
           preview={preview}
           query={searchQuery}
           route={route}
+          includeCandidates={includeCandidates}
           transactions={transactions}
           onTransactionUpdate={runTransactionUpdate}
           periodLabel={dateWindow.label}
+          periodKind={dateWindowKind}
           setTransactionFilters={setTransactionFilters}
           transactionFilters={transactionFilters}
           transferResult={transferResult}
@@ -486,6 +584,34 @@ function Sidebar({ currentRoute }: { currentRoute: RouteId }) {
   );
 }
 
+function SystemStatusBadge({ health }: { health: ApiHealthState }) {
+  return (
+    <a
+      className={`system-badge system-badge-${health.status}`}
+      href="#/settings"
+      title={health.message}
+    >
+      <span className="system-badge-dot" />
+      API {health.status === "online" ? "online" : health.status === "offline" ? "offline" : "checking"}
+    </a>
+  );
+}
+
+function ApiOfflineBanner({ onRetry }: { onRetry: () => Promise<void> }) {
+  return (
+    <div className="error-banner api-offline-banner" role="alert">
+      <div>
+        <strong>Backend API is offline.</strong>
+        <span> Start the local backend on port 8025, then retry.</span>
+        <code>uv run uvicorn app.main:app --reload --host 127.0.0.1 --port 8025</code>
+      </div>
+      <button onClick={() => void onRetry()} type="button">
+        Check again
+      </button>
+    </div>
+  );
+}
+
 function PeriodControls({
   customEndDate,
   customStartDate,
@@ -495,6 +621,7 @@ function PeriodControls({
   onIncludeCandidatesChange,
   onPresetChange,
   preset,
+  showCandidateToggle,
 }: {
   customEndDate: string;
   customStartDate: string;
@@ -504,6 +631,7 @@ function PeriodControls({
   onIncludeCandidatesChange: (value: boolean) => void;
   onPresetChange: (value: PeriodPreset) => void;
   preset: PeriodPreset;
+  showCandidateToggle: boolean;
 }) {
   return (
     <div className="period-controls" aria-label="Date range controls">
@@ -534,19 +662,22 @@ function PeriodControls({
           />
         </>
       ) : null}
-      <label className="candidate-toggle">
-        <input
-          checked={includeCandidates}
-          onChange={(event) => onIncludeCandidatesChange(event.target.checked)}
-          type="checkbox"
-        />
-        Include candidates
-      </label>
+      {showCandidateToggle ? (
+        <label className="candidate-toggle">
+          <input
+            checked={includeCandidates}
+            onChange={(event) => onIncludeCandidatesChange(event.target.checked)}
+            type="checkbox"
+          />
+          Include bill candidates
+        </label>
+      ) : null}
     </div>
   );
 }
 
 function AppPage({
+  apiHealth,
   accounts,
   busy,
   commitmentResult,
@@ -555,7 +686,10 @@ function AppPage({
   dashboard,
   decisions,
   forecast,
+  includeCandidates,
   insights,
+  planning,
+  onHealthCheck,
   onAccountBalanceUpdate,
   onBillPaid,
   onCommit,
@@ -564,10 +698,11 @@ function AppPage({
   onDetectCommitments,
   onDetectTransfers,
   onPreview,
+  periodKind,
+  periodLabel,
   preview,
   query,
   route,
-  periodLabel,
   setTransactionFilters,
   transactions,
   onTransactionUpdate,
@@ -575,6 +710,7 @@ function AppPage({
   transferResult,
   upcoming,
 }: {
+  apiHealth: ApiHealthState;
   accounts: AccountsResponse | null;
   busy: boolean;
   commitmentResult: CommitmentDetectionResult | null;
@@ -583,7 +719,10 @@ function AppPage({
   dashboard: DashboardSummary | null;
   decisions: DecisionQueueResponse | null;
   forecast: ForecastResponse | null;
+  includeCandidates: boolean;
   insights: InsightsResponse | null;
+  planning: PlanningOverview | null;
+  onHealthCheck: () => Promise<void>;
   onAccountBalanceUpdate: (
     accountId: string,
     balance: string,
@@ -600,6 +739,7 @@ function AppPage({
   onDetectCommitments: () => Promise<void>;
   onDetectTransfers: () => Promise<void>;
   onPreview: (file: File) => Promise<void>;
+  periodKind: DateWindowKind;
   periodLabel: string;
   preview: ImportPreview | null;
   query: string;
@@ -613,7 +753,8 @@ function AppPage({
 }) {
   if (route === "accounts") {
     return (
-      <section className="page-grid page-grid-single" aria-label="Accounts page">
+      <section className="page-grid" aria-label="Accounts page">
+        <AccountPerformanceCard accounts={accounts} dashboard={dashboard} />
         <AccountsCard
           accounts={accounts}
           busy={busy}
@@ -621,7 +762,7 @@ function AppPage({
           onAccountBalanceUpdate={onAccountBalanceUpdate}
           query={query}
         />
-        <BudgetCard dashboard={dashboard} />
+        <AssetSummaryCard accounts={accounts} />
       </section>
     );
   }
@@ -651,12 +792,20 @@ function AppPage({
           dashboard={dashboard}
           decisions={decisions}
           forecast={forecast}
+          includeCandidates={includeCandidates}
           preview={preview}
           transactions={transactions}
           transferResult={transferResult}
           upcoming={upcoming}
         />
-        <UpcomingCard limit={12} onBillPaid={onBillPaid} query={query} upcoming={upcoming} />
+        <UpcomingCard
+          includeCandidates={includeCandidates}
+          limit={12}
+          onBillPaid={onBillPaid}
+          periodKind={periodKind}
+          query={query}
+          upcoming={upcoming}
+        />
       </section>
     );
   }
@@ -665,8 +814,10 @@ function AppPage({
     return (
       <section className="page-grid page-grid-single" aria-label="Calendar page">
         <UpcomingCard
+          includeCandidates={includeCandidates}
           limit={30}
           onBillPaid={onBillPaid}
+          periodKind={periodKind}
           periodLabel={periodLabel}
           query={query}
           upcoming={upcoming}
@@ -684,7 +835,50 @@ function AppPage({
           onCommitmentUpdate={onCommitmentUpdate}
           query={query}
         />
-        <UpcomingCard limit={12} onBillPaid={onBillPaid} query={query} upcoming={upcoming} />
+        <UpcomingCard
+          includeCandidates={includeCandidates}
+          limit={12}
+          onBillPaid={onBillPaid}
+          periodKind={periodKind}
+          query={query}
+          upcoming={upcoming}
+        />
+      </section>
+    );
+  }
+
+  if (route === "goals") {
+    return (
+      <section className="page-grid" aria-label="Goals page">
+        <GoalsCard planning={planning} />
+        <ImportFreshnessCard planning={planning} />
+      </section>
+    );
+  }
+
+  if (route === "sinking-funds") {
+    return (
+      <section className="page-grid" aria-label="Sinking funds page">
+        <SinkingFundsCard planning={planning} />
+        <StaleCommitmentsCard planning={planning} />
+      </section>
+    );
+  }
+
+  if (route === "monthly-review") {
+    return (
+      <section className="page-grid" aria-label="Monthly review page">
+        <MonthlyReviewCard planning={planning} />
+        <SavedFiltersCard planning={planning} />
+      </section>
+    );
+  }
+
+  if (route === "subscriptions") {
+    return (
+      <section className="page-grid" aria-label="Subscriptions page">
+        <SubscriptionsCard planning={planning} />
+        <StaleCommitmentsCard planning={planning} />
       </section>
     );
   }
@@ -705,25 +899,40 @@ function AppPage({
 
   if (route === "reports") {
     return (
-      <section className="page-grid" aria-label="Reports page">
+      <section className="page-grid page-grid-single" aria-label="Reports page">
+        <ReportMetricStrip insights={insights} />
+        <SankeyReportCard insights={insights} periodLabel={periodLabel} />
         <InsightsCard insights={insights} periodLabel={periodLabel} />
-        <CashflowCard
-          commitmentResult={commitmentResult}
-          commitments={commitments}
-          dashboard={dashboard}
-          decisions={decisions}
-          forecast={forecast}
-          preview={preview}
-          transactions={transactions}
-          transferResult={transferResult}
-          upcoming={upcoming}
-        />
+        <SavedFiltersCard planning={planning} />
+      </section>
+    );
+  }
+
+  if (route === "settings") {
+    return (
+      <section className="page-grid page-grid-single" aria-label="Settings page">
+        <SystemStatusCard health={apiHealth} onHealthCheck={onHealthCheck} />
       </section>
     );
   }
 
   return (
     <section className="dashboard-grid" aria-label="Personal Finance Studio dashboard">
+      <DashboardHeroCard
+        dashboard={dashboard}
+        periodKind={periodKind}
+        planning={planning}
+        upcoming={upcoming}
+      />
+      <BudgetCard dashboard={dashboard} />
+      <UpcomingCard
+        includeCandidates={includeCandidates}
+        onBillPaid={onBillPaid}
+        periodKind={periodKind}
+        periodLabel={periodLabel}
+        query={query}
+        upcoming={upcoming}
+      />
       <GettingStartedCard
         accounts={accounts}
         busy={busy}
@@ -739,14 +948,13 @@ function AppPage({
         transactions={transactions}
         transferResult={transferResult}
       />
-      <SpendingCard preview={preview} />
-      <BudgetCard dashboard={dashboard} />
+      <SpendingCard dashboard={dashboard} insights={insights} />
       <InsightsCard insights={insights} periodLabel={periodLabel} />
-      <UpcomingCard onBillPaid={onBillPaid} periodLabel={periodLabel} query={query} upcoming={upcoming} />
       <DecisionQueueCard
         busy={busy}
+        compact
         decisions={decisions}
-        limit={5}
+        limit={3}
         onDecisionAction={onDecisionAction}
         query={query}
       />
@@ -756,6 +964,7 @@ function AppPage({
         dashboard={dashboard}
         decisions={decisions}
         forecast={forecast}
+        includeCandidates={includeCandidates}
         preview={preview}
         transactions={transactions}
         transferResult={transferResult}
@@ -881,38 +1090,90 @@ function GettingStartedCard({
   );
 }
 
-function SpendingCard({ preview }: { preview: ImportPreview | null }) {
+function SpendingCard({
+  dashboard,
+  insights,
+}: {
+  dashboard: DashboardSummary | null;
+  insights: InsightsResponse | null;
+}) {
+  const groups = reportGroups(insights, "category", "spending").slice(0, 4);
+  const totalOutflow = groups.reduce((sum, group) => sum + group.value, 0);
+  const safeTotal = totalOutflow || Number(dashboard?.flexible_spend_actual ?? 0);
+  const topGroup = groups[0];
+
   return (
-    <article className="card">
-      <CardHeader title="Spending" subtitle="Imported inflow vs. outflow" />
-      <div className="chart-shell" aria-label="Spending trend placeholder">
-        <div className="chart-grid" />
-        <svg viewBox="0 0 360 160" role="img" aria-label="Preview spending line">
-          <path d="M20 120 C80 118 100 92 150 98 S230 135 340 72" className="line muted-line" />
-          <path d="M20 126 C90 124 118 122 176 111 S260 85 340 88" className="line active-line" />
-        </svg>
+    <article className="card spending-pulse-card">
+      <CardHeader title="Spending Pulse" subtitle="This month by category" />
+      <div className="spending-pulse-hero">
+        <span>Total outflow</span>
+        <strong>{safeTotal ? money(String(safeTotal)) : "-"}</strong>
+        <small>
+          {dashboard?.flexible_spend_remaining
+            ? `${money(dashboard.flexible_spend_remaining)} flexible left`
+            : "Import transactions to unlock trends"}
+        </small>
       </div>
+      {groups.length > 0 ? (
+        <div className="spending-bar-list" aria-label="Spending by category">
+          {groups.map((group) => {
+            const width = totalOutflow ? Math.max(8, (group.value / totalOutflow) * 100) : 0;
+            return (
+              <div className="spending-bar-row" key={group.label}>
+                <div>
+                  <strong>{group.label}</strong>
+                  <small>{money(String(group.value))}</small>
+                </div>
+                <span className="spending-track">
+                  <span style={{ background: group.color, width: `${width}%` }} />
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <p className="empty-copy">No categorized spending yet.</p>
+      )}
       <div className="split-metrics">
-        <Metric label="Inflow" value={preview ? money(preview.inflow_total) : "-"} />
-        <Metric label="Outflow" value={preview ? money(preview.outflow_total) : "-"} />
+        <Metric label="Top group" value={topGroup?.label ?? "-"} />
+        <Metric
+          label="Flex allowance"
+          value={dashboard?.flexible_spend_allowance ? money(dashboard.flexible_spend_allowance) : "-"}
+        />
       </div>
     </article>
   );
 }
 
-function BudgetCard({ dashboard }: { dashboard: DashboardSummary | null }) {
-  const hasCashOnHand = dashboard?.cash_on_hand !== null && dashboard?.cash_on_hand !== undefined;
+function DashboardHeroCard({
+  dashboard,
+  periodKind,
+  planning,
+  upcoming,
+}: {
+  dashboard: DashboardSummary | null;
+  periodKind: DateWindowKind;
+  planning: PlanningOverview | null;
+  upcoming: UpcomingCommitmentsResponse | null;
+}) {
+  const cashReady = dashboard?.confidence === "ready";
+  const freshness = planning?.import_freshness.status ?? "checking";
   return (
-    <article className="card tall-card">
-      <CardHeader title="Available Money" subtitle={dashboard?.confidence ?? "Setup needed"} />
-      <div className="money-focus">
-        <span>Cash on hand</span>
-        <strong className={hasCashOnHand ? "metric-value" : undefined}>
-          {hasCashOnHand ? money(dashboard.cash_on_hand as string) : "Needs balances"}
-        </strong>
-        <p>{dashboard?.message ?? "Import data and enter current account balances."}</p>
+    <article className="card dashboard-hero-card">
+      <div className="dashboard-hero-copy">
+        <span className="hero-kicker">Today’s household position</span>
+        <strong>{cashReady && dashboard?.cash_on_hand ? money(dashboard.cash_on_hand) : "Needs balances"}</strong>
+        <p>
+          {cashReady
+            ? "Balances are ready. Use cash flow and upcoming bills to decide what is safe to spend."
+            : dashboard?.message ?? "Import data and enter balances to unlock trusted available-money planning."}
+        </p>
+        <div className="hero-actions">
+          <a className="button-link" href="#/accounts">Review balances</a>
+          <a className="button-link button-link-secondary" href="#/cash-flow">Open cash flow</a>
+        </div>
       </div>
-      <div className="split-metrics">
+      <div className="hero-stat-grid">
         <Metric
           label="After bills"
           value={dashboard?.available_after_commitments ? money(dashboard.available_after_commitments) : "-"}
@@ -921,31 +1182,312 @@ function BudgetCard({ dashboard }: { dashboard: DashboardSummary | null }) {
           label="Flexible left"
           value={dashboard?.flexible_spend_remaining ? money(dashboard.flexible_spend_remaining) : "-"}
         />
+        <Metric
+          label={billMetricLabel(periodKind)}
+          value={upcoming ? money(upcoming.expected_total) : "-"}
+        />
+        <Metric label="Decisions" value={dashboard?.decision_count ?? "-"} />
+      </div>
+      <div className={`hero-freshness hero-freshness-${freshness}`}>
+        <span className="system-badge-dot" />
+        <div>
+          <strong>{titleCase(freshness)}</strong>
+          <small>{planning?.import_freshness.message ?? "Checking local data freshness."}</small>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function BudgetCard({ dashboard }: { dashboard: DashboardSummary | null }) {
+  const knownBalances = dashboard?.cash_balance_account_count ?? 0;
+  const missingBalances = dashboard?.missing_balance_account_count ?? 0;
+  const isReady = dashboard?.confidence === "ready";
+  return (
+    <article className="card tall-card balance-readiness-card">
+      <CardHeader title="Balance Readiness" subtitle={balanceStatusLabel(dashboard?.confidence)} />
+      <div className="money-focus balance-focus">
+        <span>Setup status</span>
+        <strong className="metric-value">{isReady ? "Ready" : "Needs balances"}</strong>
+        <p>
+          {isReady
+            ? "Cash balances are trusted, so available-money planning can use real account totals."
+            : "Enter current balances for cash accounts before trusting available-money calculations."}
+        </p>
       </div>
       <div className="split-metrics">
         <Metric
           label="Known balances"
-          value={`${dashboard?.cash_balance_account_count ?? 0} accounts`}
+          value={`${knownBalances} ${knownBalances === 1 ? "account" : "accounts"}`}
         />
-        <Metric label="Missing" value={`${dashboard?.missing_balance_account_count ?? 0} accounts`} />
+        <Metric label="Missing" value={`${missingBalances} ${missingBalances === 1 ? "account" : "accounts"}`} />
+      </div>
+      <a className="button-link button-link-secondary balance-review-link" href="#/accounts">
+        Review account balances
+      </a>
+    </article>
+  );
+}
+
+function AccountPerformanceCard({
+  accounts,
+  dashboard,
+}: {
+  accounts: AccountsResponse | null;
+  dashboard: DashboardSummary | null;
+}) {
+  const total = accountNetWorth(accounts);
+  const series = performanceSeries(total || Number(dashboard?.cash_on_hand ?? 0));
+  const chartPath = areaPath(series, 920, 210);
+  const linePath = linePathFromSeries(series, 920, 210);
+  const change = series.at(-1)! - series[0];
+  const changePercent = series[0] === 0 ? 0 : (change / Math.abs(series[0])) * 100;
+
+  return (
+    <article className="card report-hero-card account-performance">
+      <div className="report-card-toolbar">
+        <CardHeader
+          title="Net Worth Performance"
+          subtitle={`${accounts?.accounts.length ?? 0} accounts · 1 month change`}
+        />
+        <div className="segmented-control" aria-label="Account chart controls">
+          <span>Net worth performance</span>
+          <span>1 month</span>
+        </div>
+      </div>
+      <div className="net-worth-headline">
+        <span>Net worth</span>
+        <strong>{money(String(total))}</strong>
+        <small className={change >= 0 ? "positive-text" : "negative-text"}>
+          {change >= 0 ? "↗" : "↘"} {money(String(change))} ({changePercent.toFixed(1)}%)
+        </small>
+      </div>
+      <svg className="performance-chart" viewBox="0 0 920 250" role="img" aria-label="Net worth performance chart">
+        <defs>
+          <linearGradient id="performanceFill" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stopColor="#2aaed1" stopOpacity="0.28" />
+            <stop offset="100%" stopColor="#2aaed1" stopOpacity="0.02" />
+          </linearGradient>
+        </defs>
+        <g className="chart-lines">
+          {[40, 82, 124, 166, 208].map((y) => (
+            <line key={y} x1="34" x2="900" y1={y} y2={y} />
+          ))}
+        </g>
+        <path d={chartPath} fill="url(#performanceFill)" />
+        <path className="performance-line" d={linePath} />
+        {series.map((value, index) => (
+          <circle
+            className="performance-point"
+            cx={34 + (index / (series.length - 1)) * 866}
+            cy={chartY(value, series, 210)}
+            key={`${value}-${index}`}
+            r={index === series.length - 1 ? 4 : 0}
+          />
+        ))}
+      </svg>
+    </article>
+  );
+}
+
+function AssetSummaryCard({ accounts }: { accounts: AccountsResponse | null }) {
+  const buckets = accountBuckets(accounts);
+  const assetTotal = buckets.assets.reduce((sum, bucket) => sum + bucket.value, 0);
+  const liabilityTotal = buckets.liabilities.reduce((sum, bucket) => sum + bucket.value, 0);
+  const colors = ["#2aaed1", "#3aa66d", "#8d65d8", "#ff8f3d", "#d43c95"];
+
+  return (
+    <article className="card asset-summary-card">
+      <CardHeader title="Summary" subtitle="Assets and liabilities" />
+      <div className="stacked-bar" aria-label="Asset allocation">
+        {buckets.assets.map((bucket, index) => (
+          <span
+            key={bucket.label}
+            style={{
+              background: colors[index % colors.length],
+              width: `${assetTotal ? Math.max(5, (bucket.value / assetTotal) * 100) : 0}%`,
+            }}
+          />
+        ))}
+      </div>
+      <CompactLegend
+        rows={buckets.assets.map((bucket, index) => ({
+          color: colors[index % colors.length],
+          label: bucket.label,
+          value: money(String(bucket.value)),
+        }))}
+        title={`Assets ${money(String(assetTotal))}`}
+      />
+      <div className="section-divider" />
+      <CompactLegend
+        rows={buckets.liabilities.map((bucket, index) => ({
+          color: colors[(index + 3) % colors.length],
+          label: bucket.label,
+          value: money(String(bucket.value)),
+        }))}
+        title={`Liabilities ${money(String(liabilityTotal))}`}
+      />
+    </article>
+  );
+}
+
+function ReportMetricStrip({ insights }: { insights: InsightsResponse | null }) {
+  const totals = reportTotals(insights);
+  const savingsRate = totals.income > 0 ? (totals.net / totals.income) * 100 : 0;
+  return (
+    <div className="report-metric-strip" aria-label="Report totals">
+      <ReportMetric label="Total income" tone="positive" value={money(String(totals.income))} />
+      <ReportMetric label="Total expenses" tone="negative" value={money(String(totals.expenses))} />
+      <ReportMetric label="Total net income" value={money(String(totals.net))} />
+      <ReportMetric label="Savings rate" value={`${savingsRate.toFixed(1)}%`} />
+    </div>
+  );
+}
+
+function ReportMetric({
+  label,
+  tone,
+  value,
+}: {
+  label: string;
+  tone?: "negative" | "positive";
+  value: string;
+}) {
+  return (
+    <div className={`report-metric ${tone ? `report-metric-${tone}` : ""}`}>
+      <strong>{value}</strong>
+      <span>{label}</span>
+    </div>
+  );
+}
+
+function SankeyReportCard({
+  insights,
+  periodLabel,
+}: {
+  insights: InsightsResponse | null;
+  periodLabel?: string;
+}) {
+  const [reportView, setReportView] = useState<"cash-flow" | "income" | "spending">("cash-flow");
+  const [groupBy, setGroupBy] = useState<"category" | "merchant">("category");
+  const totals = reportTotals(insights);
+  const groups = reportGroups(insights, groupBy, reportView);
+  const savings = Math.max(0, totals.net);
+  const sankey = buildSankeyGeometry({
+    expenses: totals.expenses,
+    groups,
+    income: totals.income,
+    savings,
+    view: reportView,
+  });
+
+  return (
+    <article className="card sankey-card">
+      <div className="report-card-toolbar">
+        <CardHeader title={titleCase(reportView)} subtitle={periodLabel ?? "Selected date range"} />
+        <div className="report-controls" aria-label="Report chart controls">
+          <div className="report-tabs" role="tablist" aria-label="Report type">
+            {(["cash-flow", "spending", "income"] as const).map((view) => (
+              <button
+                aria-selected={reportView === view}
+                className={reportView === view ? "active" : ""}
+                key={view}
+                onClick={() => setReportView(view)}
+                role="tab"
+                type="button"
+              >
+                {titleCase(view)}
+              </button>
+            ))}
+          </div>
+          <select
+            aria-label="Report grouping"
+            onChange={(event) => setGroupBy(event.target.value as "category" | "merchant")}
+            value={groupBy}
+          >
+            <option value="category">By category & group</option>
+            <option value="merchant">By top merchants</option>
+          </select>
+        </div>
+      </div>
+      <div className="sankey-stage">
+        <svg className="sankey-svg" viewBox="0 0 1040 430" role="img" aria-label={`${titleCase(reportView)} Sankey report`}>
+          <defs>
+            <linearGradient id="sankeyIncome" x1="0" x2="1" y1="0" y2="0">
+              <stop offset="0%" stopColor="#bfeaf4" stopOpacity="0.92" />
+              <stop offset="100%" stopColor="#d7ecd8" stopOpacity="0.92" />
+            </linearGradient>
+          </defs>
+          {sankey.flows.map((flow) => (
+            <path
+              className="sankey-flow"
+              d={sankeyBandPath(flow.fromX, flow.fromY, flow.height, flow.toX, flow.toY, flow.height)}
+              key={flow.id}
+              style={{ fill: flow.color, opacity: flow.opacity }}
+            />
+          ))}
+          {sankey.nodes.map((node) => (
+            <g key={node.id}>
+              <rect
+                className="sankey-node"
+                fill={node.color}
+                height={node.height}
+                rx="4"
+                width="14"
+                x={node.x}
+                y={node.y}
+              />
+              <text
+                className={`sankey-label ${node.emphasis === "middle" ? "sankey-label-middle" : ""}`}
+                textAnchor={node.anchor}
+                x={node.labelX}
+                y={node.labelY}
+              >
+                {node.label}
+              </text>
+              <text
+                className={`sankey-value ${node.emphasis === "middle" ? "sankey-value-middle" : ""}`}
+                textAnchor={node.anchor}
+                x={node.labelX}
+                y={node.labelY + 22}
+              >
+                {money(String(node.value))}{node.percent ? ` (${node.percent})` : ""}
+              </text>
+            </g>
+          ))}
+        </svg>
+      </div>
+      <div className="flow-footnote">
+        <span>Income</span>
+        <b>{money(String(totals.income))}</b>
+        <span>Expenses</span>
+        <b>{money(String(totals.expenses))}</b>
+        <span>Net</span>
+        <b className={totals.net >= 0 ? "positive-text" : "negative-text"}>{money(String(totals.net))}</b>
       </div>
     </article>
   );
 }
 
 function UpcomingCard({
+  includeCandidates,
   limit = 6,
   onBillPaid,
+  periodKind = "future",
   periodLabel,
   query,
   upcoming,
 }: {
+  includeCandidates: boolean;
   limit?: number;
   onBillPaid?: (instanceId: string, amount: string) => Promise<void>;
+  periodKind?: DateWindowKind;
   periodLabel?: string;
   query: string;
   upcoming: UpcomingCommitmentsResponse | null;
 }) {
+  const candidateMode = includeCandidates ? "Candidate bills included" : "Confirmed bills only";
+  const title = billCardTitle(periodKind, periodLabel);
   const rows = filterByQuery(upcoming?.items ?? [], query, (item) =>
     `${item.commitment_name} ${item.commitment_type} ${item.commitment_status}`,
   ).slice(0, limit);
@@ -953,11 +1495,11 @@ function UpcomingCard({
   return (
     <article className="card">
       <CardHeader
-        title="Upcoming"
+        title={title}
         subtitle={
           upcoming
-            ? `${periodLabel ?? `${upcoming.start_date} to ${upcoming.end_date}`} · ${upcoming.total_count} items · ${money(upcoming.expected_total)}`
-            : "Next 30 days"
+            ? `${periodLabel ?? `${upcoming.start_date} to ${upcoming.end_date}`} · ${candidateMode} · ${upcoming.total_count} items · ${money(upcoming.expected_total)}`
+            : `${periodLabel ?? "Next 30 days"} · ${candidateMode}`
         }
       />
       <CompactList
@@ -985,12 +1527,14 @@ function UpcomingCard({
 
 function DecisionQueueCard({
   busy,
+  compact = false,
   decisions,
   limit = 5,
   query,
   onDecisionAction,
 }: {
   busy: boolean;
+  compact?: boolean;
   decisions: DecisionQueueResponse | null;
   limit?: number;
   query: string;
@@ -1005,6 +1549,49 @@ function DecisionQueueCard({
   ).slice(0, limit);
   const visibleCount = rows.length;
   const decisionCounts = countBy(decisions?.decisions ?? [], (decision) => decision.decision_type);
+  const summary = Object.keys(decisionCounts).length > 0 ? (
+    <div className="decision-summary" aria-label="Decision queue summary">
+      {Object.entries(decisionCounts).map(([type, count]) => (
+        <span className="decision-summary-pill" key={type}>
+          <b>{count}</b>
+          {decisionTypeLabel(type)}
+        </span>
+      ))}
+    </div>
+  ) : null;
+
+  if (compact) {
+    return (
+      <article className="card decision-card decision-card-compact">
+        <CardHeader
+          title="Decision Queue"
+          subtitle={
+            decisions
+              ? `${visibleCount} priority checks · ${decisions.total_count} open`
+              : "High-impact checks"
+          }
+        />
+        {summary}
+        <CompactList
+          empty={
+            decisions?.total_count === 0
+              ? "Nothing needs review right now."
+              : "No decisions match this search."
+          }
+          rows={rows.map((decision) => ({
+            title: decision.title,
+            meta: `${decisionTypeLabel(decision.decision_type)} · ${decision.detail}`,
+            amount: money(decision.amount),
+          }))}
+        />
+        {decisions && decisions.total_count > visibleCount ? (
+          <a className="button-link button-link-secondary compact-card-link" href="#/decision-queue">
+            Review all {decisions.total_count} decisions
+          </a>
+        ) : null}
+      </article>
+    );
+  }
 
   return (
     <article className="card decision-card">
@@ -1016,16 +1603,7 @@ function DecisionQueueCard({
             : "High-impact checks"
         }
       />
-      {Object.keys(decisionCounts).length > 0 ? (
-        <div className="decision-summary" aria-label="Decision queue summary">
-          {Object.entries(decisionCounts).map(([type, count]) => (
-            <span className="decision-summary-pill" key={type}>
-              <b>{count}</b>
-              {decisionTypeLabel(type)}
-            </span>
-          ))}
-        </div>
-      ) : null}
+      {summary}
       {rows.length === 0 ? (
         <p className="empty-copy">
           {decisions?.total_count === 0
@@ -1134,6 +1712,242 @@ function TransactionsCard({
   );
 }
 
+function SystemStatusCard({
+  health,
+  onHealthCheck,
+}: {
+  health: ApiHealthState;
+  onHealthCheck: () => Promise<void>;
+}) {
+  return (
+    <article className="card system-status-card">
+      <CardHeader
+        title="System Status"
+        subtitle="Local services that need to be running for the app to work."
+      />
+      <div className="status-grid">
+        <div className={`status-panel status-panel-${health.status}`}>
+          <span className="system-badge-dot" />
+          <div>
+            <strong>Backend API</strong>
+            <small>{health.message}</small>
+            <code>{API_BASE}</code>
+          </div>
+        </div>
+        <div className="status-panel status-panel-online">
+          <span className="system-badge-dot" />
+          <div>
+            <strong>Frontend</strong>
+            <small>Vite app is running in this browser.</small>
+            <code>{window.location.origin}</code>
+          </div>
+        </div>
+      </div>
+      <div className="command-card">
+        <strong>Start the full local stack</strong>
+        <p>Use this from the project root so Postgres, FastAPI, and Vite come up together.</p>
+        <code>./scripts/dev-local.sh</code>
+      </div>
+      <div className="command-card">
+        <strong>Start backend only</strong>
+        <p>If the page says API offline, this is the missing service.</p>
+        <code>uv run uvicorn app.main:app --reload --host 127.0.0.1 --port 8025</code>
+      </div>
+      <div className="settings-actions">
+        <button className="settings-check-button" onClick={() => void onHealthCheck()} type="button">
+          Check API again
+        </button>
+      </div>
+      {health.checkedAt ? <p className="fine-print">Last checked at {health.checkedAt}.</p> : null}
+    </article>
+  );
+}
+
+function GoalsCard({ planning }: { planning: PlanningOverview | null }) {
+  return (
+    <article className="card planning-card">
+      <CardHeader
+        title="Goals"
+        subtitle={planning ? `${planning.goals.length} active planning goals` : "Planning overview"}
+      />
+      <CollapsibleBlock meta={`${planning?.goals.length ?? 0} goals`} title="Goal progress">
+        <div className="goal-list">
+          {(planning?.goals ?? []).map((goal) => (
+            <div className="goal-row" key={goal.id}>
+              <div className="goal-row-header">
+                <div>
+                  <strong>{goal.name}</strong>
+                  <small>{goal.next_action}</small>
+                </div>
+                <span className={`status-pill status-${goal.status}`}>{titleCase(goal.status)}</span>
+              </div>
+              <div className="progress-track" aria-label={`${goal.name} progress`}>
+                <span style={{ width: `${goal.progress_percent}%` }} />
+              </div>
+              <div className="split-metrics">
+                <Metric label="Current" value={money(goal.current_amount)} />
+                <Metric label="Target" value={money(goal.target_amount)} />
+                <Metric label="Monthly set aside" value={money(goal.monthly_contribution)} />
+              </div>
+            </div>
+          ))}
+        </div>
+      </CollapsibleBlock>
+      {(planning?.goals.length ?? 0) === 0 ? (
+        <p className="empty-copy">Import data and enter balances to derive goals.</p>
+      ) : null}
+      <div className="card-actions">
+        <a className="button-link" href="#/cash-flow">Open cash flow</a>
+        <a className="button-link button-link-secondary" href="#/monthly-review">Monthly review</a>
+      </div>
+    </article>
+  );
+}
+
+function SinkingFundsCard({ planning }: { planning: PlanningOverview | null }) {
+  return (
+    <article className="card planning-card">
+      <CardHeader
+        title="Sinking Funds"
+        subtitle="Annual, quarterly, and custom bills converted into monthly set-asides."
+      />
+      <CollapsibleBlock meta={`${planning?.sinking_funds.length ?? 0} funds`} title="Detected funds">
+        <CompactList
+          empty="No non-monthly commitments detected yet."
+          rows={(planning?.sinking_funds ?? []).map((fund) => ({
+            title: fund.name,
+            meta: `${titleCase(fund.frequency)} · due ${fund.due_date ?? "unknown"} · ${titleCase(fund.status)}`,
+            amount: `${money(fund.monthly_set_aside)}/mo`,
+            action: <a className="button-link button-link-small" href="#/recurring">Review</a>,
+          }))}
+        />
+      </CollapsibleBlock>
+    </article>
+  );
+}
+
+function MonthlyReviewCard({ planning }: { planning: PlanningOverview | null }) {
+  const review = planning?.monthly_review;
+  return (
+    <article className="card planning-card">
+      <CardHeader
+        title="Monthly Review"
+        subtitle={review ? `${review.start_date} to ${review.end_date}` : "Closeout checklist"}
+      />
+      <div className="review-hero">
+        <span>{review?.headline ?? "Review pending"}</span>
+        <strong>{review ? money(review.net_total) : "-"}</strong>
+        <p>Net position after income and outflows in the selected review period.</p>
+      </div>
+      <div className="readiness-grid">
+        <Metric label="Income" value={review ? money(review.income_total) : "-"} />
+        <Metric label="Outflows" value={review ? money(review.outflow_total) : "-"} />
+        <Metric label="Open decisions" value={review?.decision_count ?? "-"} />
+        <Metric label="Reviewed" value={review?.reviewed_count ?? "-"} />
+        <Metric label="Unreviewed" value={review?.unreviewed_count ?? "-"} />
+        <Metric label="Saved filters" value={planning?.saved_filters.length ?? "-"} />
+      </div>
+      <CollapsibleBlock meta={`${review?.next_actions.length ?? 1} actions`} title="Review actions">
+        <div className="action-list" aria-label="Monthly review actions">
+          {(review?.next_actions ?? ["Import transactions to start the review."]).map((action) => (
+            <div className="action-row" key={action}>
+              <span className="status-dot" />
+              <strong>{action}</strong>
+            </div>
+          ))}
+        </div>
+      </CollapsibleBlock>
+      <div className="card-actions">
+        <a className="button-link" href="#/transactions?reviewed=unreviewed">Review transactions</a>
+        <a className="button-link button-link-secondary" href="#/decision-queue">Decision queue</a>
+      </div>
+    </article>
+  );
+}
+
+function SubscriptionsCard({ planning }: { planning: PlanningOverview | null }) {
+  return (
+    <article className="card planning-card">
+      <CardHeader
+        title="Subscriptions"
+        subtitle="Cancellation, renegotiation, and confirmation prompts."
+      />
+      <CollapsibleBlock meta={`${planning?.subscriptions.length ?? 0} subscriptions`} title="Review queue">
+        <CompactList
+          empty="No subscription-style commitments detected yet."
+          rows={(planning?.subscriptions ?? []).map((subscription) => ({
+            title: subscription.name,
+            meta: `${titleCase(subscription.frequency)} · next ${subscription.next_due_date ?? "unknown"} · ${subscription.prompt}`,
+            amount: money(subscription.expected_amount),
+            action: <a className="button-link button-link-small" href="#/recurring">Review</a>,
+          }))}
+        />
+      </CollapsibleBlock>
+    </article>
+  );
+}
+
+function SavedFiltersCard({ planning }: { planning: PlanningOverview | null }) {
+  return (
+    <article className="card planning-card">
+      <CardHeader title="Saved Filters" subtitle="Reusable report and transaction drilldowns." />
+      <CollapsibleBlock meta={`${planning?.saved_filters.length ?? 0} filters`} title="Saved shortcuts">
+        <div className="saved-filter-grid">
+          {(planning?.saved_filters ?? []).map((filter) => (
+            <a className="saved-filter-card" href={savedFilterHref(filter)} key={filter.id}>
+              <strong>{filter.label}</strong>
+              <small>{filter.description}</small>
+            </a>
+          ))}
+        </div>
+      </CollapsibleBlock>
+      {(planning?.saved_filters.length ?? 0) === 0 ? (
+        <p className="empty-copy">Saved planning filters appear after the API loads.</p>
+      ) : null}
+    </article>
+  );
+}
+
+function ImportFreshnessCard({ planning }: { planning: PlanningOverview | null }) {
+  const freshness = planning?.import_freshness;
+  return (
+    <article className="card planning-card">
+      <CardHeader title="Import Freshness" subtitle="How safe the current data is for planning." />
+      <div className={`freshness-panel freshness-${freshness?.status ?? "unknown"}`}>
+        <span className="system-badge-dot" />
+        <div>
+          <strong>{freshness ? titleCase(freshness.status) : "Checking"}</strong>
+          <small>{freshness?.message ?? "Waiting for planning API."}</small>
+        </div>
+      </div>
+      <div className="split-metrics">
+        <Metric label="Latest import" value={freshness?.latest_import_date ?? "-"} />
+        <Metric label="Latest transaction" value={freshness?.latest_transaction_date ?? "-"} />
+        <Metric label="Days old" value={freshness?.days_since_latest_transaction ?? "-"} />
+      </div>
+    </article>
+  );
+}
+
+function StaleCommitmentsCard({ planning }: { planning: PlanningOverview | null }) {
+  return (
+    <article className="card planning-card">
+      <CardHeader title="Stale Commitments" subtitle="Recurring items whose due date has passed." />
+      <CollapsibleBlock meta={`${planning?.stale_commitments.length ?? 0} stale`} title="Needs review">
+        <CompactList
+          empty="No stale commitments need review."
+          rows={(planning?.stale_commitments ?? []).map((commitment) => ({
+            title: commitment.name,
+            meta: `${commitment.next_due_date ?? "No due date"} · ${titleCase(commitment.status)} · ${commitment.reason}`,
+            amount: money(commitment.expected_amount),
+            action: <a className="button-link button-link-small" href="#/recurring">Fix</a>,
+          }))}
+        />
+      </CollapsibleBlock>
+    </article>
+  );
+}
+
 function TransactionReviewRow({
   onTransactionUpdate,
   transaction,
@@ -1207,14 +2021,64 @@ function AccountsCard({
   const rows = filterByQuery(accounts?.accounts ?? [], query, (account) =>
     `${account.display_name} ${account.provider} ${account.account_type}`,
   ).slice(0, limit);
+  const groupedRows = accountGroups(rows);
   return (
     <article className="card">
       <CardHeader title="Accounts" subtitle={accounts ? `${accounts.accounts.length} detected` : "Connect data"} />
       {rows.length === 0 ? (
         <p className="empty-copy">Commit an import to see accounts.</p>
       ) : (
+        <div className="account-group-list">
+          {groupedRows.map((group) => (
+            <AccountGroupSection
+              busy={busy}
+              group={group}
+              key={group.id}
+              onAccountBalanceUpdate={onAccountBalanceUpdate}
+            />
+          ))}
+        </div>
+      )}
+    </article>
+  );
+}
+
+function AccountGroupSection({
+  busy,
+  group,
+  onAccountBalanceUpdate,
+}: {
+  busy: boolean;
+  group: AccountGroup;
+  onAccountBalanceUpdate: (
+    accountId: string,
+    balance: string,
+    accountType: string,
+  ) => Promise<void>;
+}) {
+  const [open, setOpen] = useState(group.defaultOpen);
+  const changeClass = group.monthChange >= 0 ? "positive-text" : "negative-text";
+
+  return (
+    <section className="account-group-section">
+      <button
+        aria-expanded={open}
+        className="account-group-header"
+        onClick={() => setOpen((current) => !current)}
+        type="button"
+      >
+        <span className={`group-chevron ${open ? "open" : ""}`} aria-hidden="true" />
+        <span className="account-group-title">
+          <strong>{group.label}</strong>
+          <small className={changeClass}>
+            {group.monthChange >= 0 ? "↗" : "↘"} {money(String(Math.abs(group.monthChange)))} month change
+          </small>
+        </span>
+        <strong className="account-group-total">{money(String(group.total))}</strong>
+      </button>
+      {open ? (
         <div className="account-review-list">
-          {rows.map((account) => (
+          {group.accounts.map((account) => (
             <AccountReviewRow
               account={account}
               busy={busy}
@@ -1223,8 +2087,8 @@ function AccountsCard({
             />
           ))}
         </div>
-      )}
-    </article>
+      ) : null}
+    </section>
   );
 }
 
@@ -1306,35 +2170,37 @@ function RecurringCard({
       {rows.length === 0 ? (
         <p className="empty-copy">Detect bills to populate recurring candidates.</p>
       ) : (
-        <div className="compact-list">
-          {rows.map((commitment) => (
-            <div className="compact-row" key={commitment.id}>
-              <div>
-                <strong>{commitment.name}</strong>
-                <small>
-                  {commitment.frequency} · next {commitment.next_due_date ?? "unknown"} · {commitment.status}
-                </small>
-              </div>
-              <span className="amount">{money(commitment.expected_amount)}</span>
-              {onCommitmentUpdate && commitment.status === "candidate" ? (
-                <div className="row-actions">
-                  <button
-                    onClick={() => void onCommitmentUpdate(commitment.id, "confirmed")}
-                    type="button"
-                  >
-                    Confirm
-                  </button>
-                  <button
-                    onClick={() => void onCommitmentUpdate(commitment.id, "rejected")}
-                    type="button"
-                  >
-                    Ignore
-                  </button>
+        <CollapsibleBlock meta={`${rows.length} shown`} title="Recurring candidates">
+          <div className="compact-list">
+            {rows.map((commitment) => (
+              <div className="compact-row" key={commitment.id}>
+                <div>
+                  <strong>{commitment.name}</strong>
+                  <small>
+                    {commitment.frequency} · next {commitment.next_due_date ?? "unknown"} · {commitment.status}
+                  </small>
                 </div>
-              ) : null}
-            </div>
-          ))}
-        </div>
+                <span className="amount">{money(commitment.expected_amount)}</span>
+                {onCommitmentUpdate && commitment.status === "candidate" ? (
+                  <div className="row-actions">
+                    <button
+                      onClick={() => void onCommitmentUpdate(commitment.id, "confirmed")}
+                      type="button"
+                    >
+                      Confirm
+                    </button>
+                    <button
+                      onClick={() => void onCommitmentUpdate(commitment.id, "rejected")}
+                      type="button"
+                    >
+                      Ignore
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        </CollapsibleBlock>
       )}
     </article>
   );
@@ -1343,6 +2209,7 @@ function RecurringCard({
 function CashflowCard({
   dashboard,
   forecast,
+  includeCandidates,
   preview,
   transactions,
   transferResult,
@@ -1353,6 +2220,7 @@ function CashflowCard({
 }: {
   dashboard: DashboardSummary | null;
   forecast: ForecastResponse | null;
+  includeCandidates: boolean;
   preview: ImportPreview | null;
   transactions: TransactionsResponse | null;
   transferResult: TransferDetectionResult | null;
@@ -1372,10 +2240,11 @@ function CashflowCard({
       confidence: item.commitment_status,
     })) ??
     [];
+  const candidateMode = includeCandidates ? "Candidate bills included" : "Confirmed bills only";
 
   return (
     <article className="card forecast-card">
-      <CardHeader title="Cash Flow Readiness" subtitle="What is usable for the real dashboard." />
+      <CardHeader title="Cash Flow Readiness" subtitle={`What is usable for the real dashboard · ${candidateMode}`} />
       <div className="readiness-grid">
         <Metric label="Starting cash" value={forecast?.starting_balance ? money(forecast.starting_balance) : "-"} />
         <Metric label="Ending cash" value={forecast?.projected_ending_balance ? money(forecast.projected_ending_balance) : "-"} />
@@ -1396,19 +2265,23 @@ function CashflowCard({
           }
         />
       </div>
-      <div className="forecast-list">
-        {forecastPoints.slice(0, 6).map((point) => (
-          <div className="compact-row" key={`${point.date}-${point.label}`}>
-            <div>
-              <strong>{point.label}</strong>
-              <small>{point.date} · {point.kind} · {point.confidence}</small>
+      <CollapsibleBlock meta={`${forecastPoints.length} points`} title="Forecast timeline">
+        <div className="forecast-list">
+          {forecastPoints.slice(0, 6).map((point) => (
+            <div className="compact-row" key={`${point.date}-${point.label}`}>
+              <div>
+                <strong>{point.label}</strong>
+                <small>{point.date} · {point.kind} · {point.confidence}</small>
+              </div>
+              <span className="amount">{money(point.amount)}</span>
             </div>
-            <span className="amount">{money(point.amount)}</span>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      </CollapsibleBlock>
       <p className="fine-print">
-        Confirmed commitments affect projected balances; candidates are shown separately until reviewed.
+        {includeCandidates
+          ? "Confirmed commitments affect projected balances; candidates are shown separately until reviewed."
+          : "Only confirmed commitments are included; candidate bills are hidden from this planning view."}
         {preview || transactions || transferResult || commitmentResult || commitments ? "" : " Import data to begin."}
       </p>
     </article>
@@ -1517,18 +2390,18 @@ function InsightsCard({
             : "Category groups"
         }
       />
-      <CompactList
-        empty="Insights appear after import."
-        rows={(insights?.category_groups ?? []).slice(0, 5).map((group) => ({
-          title: titleCase(group.group),
-          meta: `${group.transaction_count} transactions · outflow ${money(group.outflow_total)}`,
-          amount: money(group.net_total),
-        }))}
-      />
+      <CollapsibleBlock meta={`${insights?.category_groups.length ?? 0} groups`} title="Category groups">
+        <CompactList
+          empty="Insights appear after import."
+          rows={(insights?.category_groups ?? []).slice(0, 5).map((group) => ({
+            title: titleCase(group.group),
+            meta: `${group.transaction_count} transactions · outflow ${money(group.outflow_total)}`,
+            amount: money(group.net_total),
+          }))}
+        />
+      </CollapsibleBlock>
       {(insights?.top_merchants.length ?? 0) > 0 ? (
-        <>
-          <div className="section-divider" />
-          <CardHeader title="Top Merchants" subtitle="Largest outflows in range" />
+        <CollapsibleBlock meta={`${insights?.top_merchants.length ?? 0} merchants`} title="Top merchants">
           <CompactList
             empty="No merchant spend in range."
             rows={(insights?.top_merchants ?? []).slice(0, 5).map((merchant) => ({
@@ -1537,7 +2410,7 @@ function InsightsCard({
               amount: money(merchant.outflow_total),
             }))}
           />
-        </>
+        </CollapsibleBlock>
       ) : null}
     </article>
   );
@@ -1581,11 +2454,64 @@ function CompactList({
   );
 }
 
+function CollapsibleBlock({
+  children,
+  defaultOpen = true,
+  meta,
+  title,
+}: {
+  children: ReactNode;
+  defaultOpen?: boolean;
+  meta?: string;
+  title: string;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <section className="collapsible-block">
+      <button
+        aria-expanded={open}
+        className="collapsible-block-header"
+        onClick={() => setOpen((current) => !current)}
+        type="button"
+      >
+        <span className={`group-chevron ${open ? "open" : ""}`} aria-hidden="true" />
+        <span className="collapsible-block-title">
+          <strong>{title}</strong>
+          {meta ? <small>{meta}</small> : null}
+        </span>
+      </button>
+      {open ? <div className="collapsible-block-body">{children}</div> : null}
+    </section>
+  );
+}
+
 function Metric({ label, value }: { label: string; value: string | number }) {
   return (
     <div className="metric">
       <span>{label}</span>
       <strong className="metric-value">{value}</strong>
+    </div>
+  );
+}
+
+function CompactLegend({
+  rows,
+  title,
+}: {
+  rows: Array<{ color: string; label: string; value: string }>;
+  title: string;
+}) {
+  return (
+    <div className="compact-legend">
+      <strong>{title}</strong>
+      {rows.length === 0 ? <small>No balances yet</small> : null}
+      {rows.map((row) => (
+        <div className="legend-row" key={row.label}>
+          <span style={{ background: row.color }} />
+          <small>{row.label}</small>
+          <b>{row.value}</b>
+        </div>
+      ))}
     </div>
   );
 }
@@ -1598,9 +2524,66 @@ function hasDecisionType(decisions: DecisionQueueResponse | null, decisionType: 
   return Boolean(decisions?.decisions.some((decision) => decision.decision_type === decisionType));
 }
 
+function getPageTitle(route: RouteId) {
+  if (route !== "dashboard") return pageTitles[route];
+  return {
+    ...pageTitles.dashboard,
+    title: `${timeOfDayGreeting()}, Kiran.`,
+  };
+}
+
+function timeOfDayGreeting() {
+  const hour = Number(
+    new Intl.DateTimeFormat("en-GB", {
+      hour: "numeric",
+      hour12: false,
+      timeZone: "Europe/London",
+    }).format(new Date()),
+  );
+  if (hour < 12) return "Good morning";
+  if (hour < 18) return "Good afternoon";
+  return "Good evening";
+}
+
+function classifyDateWindow(startDate: string, endDate: string): DateWindowKind {
+  const today = todayIso();
+  if (endDate < today) return "past";
+  if (startDate > today) return "future";
+  return "current";
+}
+
+function periodKindForPreset(preset: PeriodPreset, startDate: string, endDate: string): DateWindowKind {
+  if (preset === "last-30") return "past";
+  if (preset === "next-15" || preset === "next-30") return "future";
+  return classifyDateWindow(startDate, endDate);
+}
+
+function billCardTitle(periodKind: DateWindowKind, periodLabel?: string) {
+  if (periodKind === "past") return "Recent Bills";
+  if (periodKind === "future") return "Upcoming Bills";
+  if (periodLabel === "This month") return "Bills This Month";
+  return "Bills";
+}
+
+function billMetricLabel(periodKind: DateWindowKind) {
+  if (periodKind === "past") return "Recent bills";
+  if (periodKind === "future") return "Upcoming";
+  return "Bills";
+}
+
 function currentRoute(): RouteId {
-  const route = window.location.hash.replace(/^#\/?/, "");
-  return navItems.some((item) => item.route === route) ? (route as RouteId) : "dashboard";
+  return parseHashState().route;
+}
+
+function parseHashState(): { params: URLSearchParams; route: RouteId } {
+  const rawHash = window.location.hash.replace(/^#\/?/, "");
+  const [rawRoute, query = ""] = rawHash.split("?");
+  const route = navItems.some((item) => item.route === rawRoute) ? (rawRoute as RouteId) : "dashboard";
+  return { params: new URLSearchParams(query), route };
+}
+
+function candidateToggleApplies(route: RouteId) {
+  return ["dashboard", "cash-flow", "calendar", "recurring", "reports", "monthly-review"].includes(route);
 }
 
 function filterByQuery<T>(rows: T[], query: string, getText: (row: T) => string): T[] {
@@ -1615,6 +2598,453 @@ function countBy<T>(rows: T[], getKey: (row: T) => string) {
     counts[key] = (counts[key] ?? 0) + 1;
     return counts;
   }, {});
+}
+
+function accountNetWorth(accounts: AccountsResponse | null) {
+  return (accounts?.accounts ?? []).reduce((total, account) => {
+    return total + Number(account.current_balance ?? account.net_total);
+  }, 0);
+}
+
+function accountBuckets(accounts: AccountsResponse | null) {
+  const buckets = (accounts?.accounts ?? []).reduce<{
+    assets: Record<string, number>;
+    liabilities: Record<string, number>;
+  }>(
+    (groups, account) => {
+      const value = Number(account.current_balance ?? account.net_total);
+      const label = titleCase(account.account_type === "unknown" ? account.provider : account.account_type);
+      if (["credit_card", "loan", "bnpl"].includes(account.account_type) || value < 0) {
+        groups.liabilities[label] = (groups.liabilities[label] ?? 0) + Math.abs(value);
+      } else {
+        groups.assets[label] = (groups.assets[label] ?? 0) + Math.max(0, value);
+      }
+      return groups;
+    },
+    { assets: {}, liabilities: {} },
+  );
+  return {
+    assets: Object.entries(buckets.assets).map(([label, value]) => ({ label, value })),
+    liabilities: Object.entries(buckets.liabilities).map(([label, value]) => ({ label, value })),
+  };
+}
+
+function accountGroups(accounts: AccountRow[]): AccountGroup[] {
+  const order = ["cash", "investments", "credit", "debt", "other"];
+  const labels: Record<string, string> = {
+    cash: "Cash",
+    credit: "Credit Cards",
+    debt: "Loans & Debt",
+    investments: "Investments",
+    other: "Other Accounts",
+  };
+  const grouped = accounts.reduce<Record<string, AccountRow[]>>((groups, account) => {
+    const key = accountGroupKey(account);
+    groups[key] = [...(groups[key] ?? []), account];
+    return groups;
+  }, {});
+
+  return order
+    .filter((key) => grouped[key]?.length)
+    .map((key) => {
+      const groupAccounts = grouped[key];
+      return {
+        accounts: groupAccounts,
+        defaultOpen: key === "cash" || key === "credit",
+        id: key,
+        label: labels[key],
+        monthChange: groupAccounts.reduce((sum, account) => sum + Number(account.net_total), 0),
+        total: groupAccounts.reduce(
+          (sum, account) => sum + Math.abs(Number(account.current_balance ?? account.net_total)),
+          0,
+        ),
+      };
+    });
+}
+
+function accountGroupKey(account: AccountRow) {
+  if (["current", "savings", "pot"].includes(account.account_type)) return "cash";
+  if (account.account_type === "credit_card") return "credit";
+  if (["loan", "bnpl"].includes(account.account_type)) return "debt";
+  if (/investment|pension|isa|401|brokerage/i.test(`${account.provider} ${account.display_name}`)) {
+    return "investments";
+  }
+  return "other";
+}
+
+type ReportGroup = {
+  color: string;
+  label: string;
+  value: number;
+};
+
+type SankeyNodeModel = {
+  anchor: "end" | "start";
+  color: string;
+  emphasis?: "middle" | "normal";
+  height: number;
+  id: string;
+  label: string;
+  labelX: number;
+  labelY: number;
+  percent: string;
+  value: number;
+  x: number;
+  y: number;
+};
+
+type SankeyFlowModel = {
+  color: string;
+  fromX: number;
+  fromY: number;
+  height: number;
+  id: string;
+  opacity: number;
+  toX: number;
+  toY: number;
+};
+
+function reportGroups(
+  insights: InsightsResponse | null,
+  groupBy: "category" | "merchant",
+  view: "cash-flow" | "income" | "spending",
+): ReportGroup[] {
+  if (view === "income") {
+    const income = (insights?.category_groups ?? []).find((group) => group.group === "income");
+    return [
+      {
+        color: "#159bbd",
+        label: "Paychecks",
+        value: Number(income?.inflow_total ?? 0),
+      },
+    ].filter((group) => group.value > 0);
+  }
+
+  if (groupBy === "merchant") {
+    const topMerchants = (insights?.top_merchants ?? [])
+      .map((merchant, index) => ({
+        color: paletteColor(index),
+        label: merchant.merchant_name,
+        value: Math.abs(Number(merchant.outflow_total)),
+      }))
+      .filter((group) => group.value > 0)
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 5);
+    const shownTotal = topMerchants.reduce((sum, group) => sum + group.value, 0);
+    const otherTotal = reportTotals(insights).expenses - shownTotal;
+    return otherTotal > 1
+      ? [
+          ...topMerchants,
+          {
+            color: "#9aa19a",
+            label: "Other merchants",
+            value: otherTotal,
+          },
+        ]
+      : topMerchants;
+  }
+
+  return (insights?.category_groups ?? [])
+    .filter((group) => !["income", "transfer", "ignored"].includes(group.group))
+    .map((group) => ({
+      color: categoryColor(group.group),
+      label: titleCase(group.group),
+      value: Math.abs(Number(group.outflow_total)),
+    }))
+    .filter((group) => group.value > 0)
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 6);
+}
+
+function buildSankeyGeometry({
+  expenses,
+  groups,
+  income,
+  savings,
+  view,
+}: {
+  expenses: number;
+  groups: ReportGroup[];
+  income: number;
+  savings: number;
+  view: "cash-flow" | "income" | "spending";
+}): { flows: SankeyFlowModel[]; nodes: SankeyNodeModel[] } {
+  const chart = { height: 320, top: 54 };
+  const x = { destination: 792, income: 292, middle: 548, source: 58 };
+  const nodes: SankeyNodeModel[] = [];
+  const flows: SankeyFlowModel[] = [];
+  const destinations =
+    view === "cash-flow" && savings > 0
+      ? [{ color: "#2f7d5c", label: "Savings", value: savings }, ...groups]
+      : groups;
+  const destinationTotal = destinations.reduce((total, group) => total + group.value, 0);
+  const maxTotal = Math.max(income, expenses, destinationTotal, 1);
+  const incomeHeight = scaledHeight(income, maxTotal, chart.height);
+  const sourceY = centeredY(incomeHeight, chart);
+  const destinationStack = stackedItems(destinations, destinationTotal || maxTotal, chart);
+
+  if (view === "spending") {
+    const expenseHeight = scaledHeight(expenses, maxTotal, chart.height);
+    const expenseY = centeredY(expenseHeight, chart);
+    nodes.push(sankeyNode("expenses", "Expenses", expenses, "#b0443b", x.income, expenseY, expenseHeight));
+    const expenseStack = stackedItems(destinations, destinationTotal || maxTotal, {
+      height: expenseHeight,
+      top: expenseY,
+    });
+    for (const item of destinationStack) {
+      const sourceItem = expenseStack.find((stacked) => stacked.label === item.label) ?? item;
+      nodes.push(
+        sankeyNode(
+          item.label,
+          item.label,
+          item.value,
+          item.color,
+          x.destination,
+          item.y,
+          item.height,
+          percentage(item.value, expenses),
+        ),
+      );
+      flows.push({
+        color: item.color,
+        fromX: x.income + 14,
+        fromY: sourceItem.y,
+        height: item.height,
+        id: `expense-${item.label}`,
+        opacity: 0.24,
+        toX: x.destination,
+        toY: item.y,
+      });
+    }
+    return { flows, nodes };
+  }
+
+  nodes.push(sankeyNode("paychecks", "Paychecks", income, "#159bbd", x.source, sourceY, incomeHeight));
+  nodes.push(sankeyNode("income", "Income", income, "#159bbd", x.income, sourceY, incomeHeight));
+  flows.push({
+    color: "url(#sankeyIncome)",
+    fromX: x.source + 14,
+    fromY: sourceY,
+    height: incomeHeight,
+    id: "paychecks-income",
+    opacity: 0.88,
+    toX: x.income,
+    toY: sourceY,
+  });
+
+  if (view === "income") {
+    return { flows, nodes };
+  }
+
+  const middleHeight = scaledHeight(destinationTotal, maxTotal, chart.height);
+  const middleY = centeredY(middleHeight, chart);
+  nodes.push(
+    sankeyNode(
+      "outflow",
+      "Outflows",
+      destinationTotal,
+      "#2f7d5c",
+      x.middle,
+      middleY,
+      middleHeight,
+      "",
+      "middle",
+    ),
+  );
+  const middleStack = stackedItems(destinations, destinationTotal || maxTotal, {
+    height: middleHeight,
+    top: middleY,
+  });
+  flows.push({
+    color: "url(#sankeyIncome)",
+    fromX: x.income + 14,
+    fromY: sourceY,
+    height: Math.max(12, Math.min(incomeHeight, middleHeight || incomeHeight)),
+    id: "income-allocated",
+    opacity: 0.62,
+    toX: x.middle,
+    toY: middleY,
+  });
+
+  for (const item of destinationStack) {
+    const sourceItem = middleStack.find((stacked) => stacked.label === item.label) ?? item;
+    nodes.push(
+      sankeyNode(
+        item.label,
+        item.label,
+        item.value,
+        item.color,
+        x.destination,
+        item.y,
+        item.height,
+        item.label === "Savings"
+          ? percentage(item.value, income || destinationTotal)
+          : percentage(item.value, expenses || destinationTotal),
+      ),
+    );
+    flows.push({
+      color: item.color,
+      fromX: x.middle + 14,
+      fromY: sourceItem.y,
+      height: item.height,
+      id: `allocated-${item.label}`,
+      opacity: item.label === "Savings" ? 0.2 : 0.26,
+      toX: x.destination,
+      toY: item.y,
+    });
+  }
+
+  return { flows, nodes };
+}
+
+function sankeyNode(
+  id: string,
+  label: string,
+  value: number,
+  color: string,
+  x: number,
+  y: number,
+  height: number,
+  percent = "",
+  emphasis: "middle" | "normal" = "normal",
+): SankeyNodeModel {
+  return {
+    anchor: emphasis === "middle" ? "end" : "start",
+    color,
+    emphasis,
+    height,
+    id,
+    label: compactLabel(label),
+    labelX: emphasis === "middle" ? x - 16 : x + 28,
+    labelY: labelYFor(y, height),
+    percent,
+    value,
+    x,
+    y,
+  };
+}
+
+function stackedItems(items: ReportGroup[], total: number, chart: { height: number; top: number }) {
+  if (items.length === 0) return [];
+  const gap = 30;
+  const available = chart.height - gap * (items.length - 1);
+  const raw = items.map((item) => ({
+    ...item,
+    height: Math.max(18, (item.value / Math.max(total, 1)) * available),
+  }));
+  const rawHeight = raw.reduce((sum, item) => sum + item.height, 0) + gap * (raw.length - 1);
+  const scale = rawHeight > chart.height ? chart.height / rawHeight : 1;
+  const stackHeight = raw.reduce((sum, item) => sum + item.height * scale, 0) + gap * (raw.length - 1);
+  let cursor = chart.top + (chart.height - stackHeight) / 2;
+  let sourceCursor = cursor;
+  return raw.map((item) => {
+    const height = item.height * scale;
+    const y = cursor;
+    const sourceY = sourceCursor;
+    cursor += height + gap;
+    sourceCursor += height + gap;
+    return { ...item, height, sourceY, y };
+  });
+}
+
+function scaledHeight(value: number, total: number, maxHeight: number) {
+  return Math.max(24, (value / Math.max(total, 1)) * maxHeight);
+}
+
+function centeredY(height: number, chart: { height: number; top: number }) {
+  return chart.top + (chart.height - height) / 2;
+}
+
+function percentage(value: number, total: number) {
+  if (total <= 0) return "";
+  return `${((value / total) * 100).toFixed(1)}%`;
+}
+
+function sankeyBandPath(
+  fromX: number,
+  fromY: number,
+  fromHeight: number,
+  toX: number,
+  toY: number,
+  toHeight: number,
+) {
+  const curveA = fromX + (toX - fromX) * 0.45;
+  const curveB = fromX + (toX - fromX) * 0.65;
+  return [
+    `M ${fromX} ${fromY}`,
+    `C ${curveA} ${fromY}, ${curveB} ${toY}, ${toX} ${toY}`,
+    `L ${toX} ${toY + toHeight}`,
+    `C ${curveB} ${toY + toHeight}, ${curveA} ${fromY + fromHeight}, ${fromX} ${fromY + fromHeight}`,
+    "Z",
+  ].join(" ");
+}
+
+function labelYFor(y: number, height: number) {
+  return y + Math.max(15, Math.min(height / 2 - 8, 26));
+}
+
+function compactLabel(label: string) {
+  return label.length > 22 ? `${label.slice(0, 20).trim()}…` : label;
+}
+
+function reportTotals(insights: InsightsResponse | null) {
+  return (insights?.category_groups ?? []).reduce(
+    (totals, group) => {
+      const income = Number(group.inflow_total);
+      const outflow = Math.abs(Number(group.outflow_total));
+      if (group.group === "income") totals.income += income;
+      if (!["income", "transfer", "ignored"].includes(group.group)) totals.expenses += outflow;
+      totals.net += Number(group.net_total);
+      return totals;
+    },
+    { expenses: 0, income: 0, net: 0 },
+  );
+}
+
+function performanceSeries(total: number) {
+  const safeTotal = total || 1000;
+  return Array.from({ length: 18 }, (_, index) => {
+    const drift = safeTotal * (0.9 + index * 0.008);
+    const wiggle = Math.sin(index * 1.7) * safeTotal * 0.012;
+    return Math.max(0, drift + wiggle);
+  });
+}
+
+function chartY(value: number, series: number[], height: number) {
+  const max = Math.max(...series);
+  const min = Math.min(...series);
+  const range = max - min || 1;
+  return 24 + (1 - (value - min) / range) * height;
+}
+
+function linePathFromSeries(series: number[], width: number, height: number) {
+  return series
+    .map((value, index) => {
+      const x = 34 + (index / (series.length - 1)) * (width - 54);
+      const y = chartY(value, series, height);
+      return `${index === 0 ? "M" : "L"} ${x.toFixed(1)} ${y.toFixed(1)}`;
+    })
+    .join(" ");
+}
+
+function areaPath(series: number[], width: number, height: number) {
+  const line = linePathFromSeries(series, width, height);
+  return `${line} L ${width - 20} 238 L 34 238 Z`;
+}
+
+function categoryColor(group: string) {
+  const colors: Record<string, string> = {
+    debt: "#d43c95",
+    fixed: "#f5bd22",
+    flexible: "#365bdc",
+    non_monthly: "#ff8f3d",
+    needs_review: "#8d65d8",
+  };
+  return colors[group] ?? "#2aaed1";
+}
+
+function paletteColor(index: number) {
+  return ["#365bdc", "#d43c95", "#ff8f3d", "#8d65d8", "#2aaed1", "#3aa66d"][index % 6];
 }
 
 function buildTransactionFilters(
@@ -1689,7 +3119,11 @@ function getDateWindow(preset: PeriodPreset, customStartDate: string, customEndD
 }
 
 function todayIso() {
-  return new Date().toISOString().slice(0, 10);
+  const date = new Date();
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function addDays(isoDate: string, days: number) {
@@ -1723,7 +3157,7 @@ function money(value: string) {
 
 function titleCase(value: string) {
   return value
-    .replace(/_/g, " ")
+    .replace(/[-_]/g, " ")
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
@@ -1731,6 +3165,21 @@ function decisionTypeLabel(value: string) {
   if (value === "internal_transfer") return "Transfer match";
   if (value === "commitment_candidate") return "Recurring candidate";
   return titleCase(value);
+}
+
+function balanceStatusLabel(value?: string) {
+  if (value === "ready") return "Ready for planning";
+  if (value === "needs_balance_review") return "Needs balance review";
+  if (!value) return "Setup needed";
+  return titleCase(value);
+}
+
+function isReviewFilter(value: string | null): value is TransactionFilterState["reviewed"] {
+  return value === "all" || value === "reviewed" || value === "unreviewed";
+}
+
+function savedFilterHref(filter: { query: string; route: string }) {
+  return filter.query ? `#/${filter.route}?${filter.query}` : `#/${filter.route}`;
 }
 
 function errorMessage(error: unknown): string {

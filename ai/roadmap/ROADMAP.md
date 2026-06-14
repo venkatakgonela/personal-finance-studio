@@ -8,7 +8,7 @@ ai-eos-metadata:
 # Project Roadmap - Personal Finance Studio
 
 **Last reviewed:** 2026-06-14  
-**Current phase:** Phase 1 complete locally; ready to enter Phase 1.5 planning depth.
+**Current phase:** Phase 1.5 complete locally; ready to enter Phase 2 expansion planning.
 
 ## Milestones
 
@@ -16,7 +16,7 @@ ai-eos-metadata:
 |---|---|---|
 | Phase 0 | Planning docs, ADRs, specs, task breakdown | Complete |
 | Phase 1 | Household Snoop import, transactions, transfers, commitments, forecast, dashboard | Complete locally |
-| Phase 1.5 | Goals foundation, monthly review, richer reports, subscription review | Next |
+| Phase 1.5 | Goals foundation, monthly review, richer reports, subscription review | Complete locally |
 | Phase 2 | Business entity imports, Tide/NatWest CSV, local LLM assistant | Not Started |
 | Phase 3 | Optional Open Banking, sync health, advanced planning | Not Started |
 
@@ -46,13 +46,22 @@ ai-eos-metadata:
 
 ## Phase 1.5 - Planning Depth
 
-- Goals screen.
-- Sinking fund manager and non-monthly expense planning.
-- Monthly review workflow.
-- Subscription review and cancellation/renegotiation prompts.
-- Saved/custom report filters.
-- Better filter UI patterns: saved date ranges, URL query persistence, and richer report drilldowns.
-- Import freshness and stale recurring-commitment review UX.
+- [x] Goals screen derived from current balances, confirmed commitments, and review coverage.
+- [x] Sinking fund manager for annual, quarterly, custom, and non-monthly commitments.
+- [x] Monthly review workflow with income, outflows, net position, review counts, decisions, and next actions.
+- [x] Subscription review with cancellation/renegotiation/confirmation prompts.
+- [x] Saved report filters and transaction drilldown links.
+- [x] URL query persistence for saved transaction filter links.
+- [x] Import freshness and stale recurring-commitment review UX.
+- [x] Phase 1.5 backend, frontend, and browser route-health regression tests.
+
+## Phase 1.5 Completion Notes
+
+- Backend planning data is exposed through `GET /api/planning/overview` and remains deterministic from existing accounts, transactions, commitments, decisions, and import logs.
+- Frontend routes now include Goals, Sinking Funds, Monthly Review, and Subscriptions alongside the existing Phase 1 routes.
+- Reports now include saved filters that deep-link into filtered transactions and planning views.
+- The E2E suite checks every primary route for reachability, failed-fetch regressions, dead hash links, unnamed buttons, and horizontal overflow.
+- Remaining caveat: Phase 1.5 planning data is derived locally rather than user-authored persisted goals. Persisted custom goals can be part of Phase 2/3 if desired.
 
 ## Phase 2 - Expansion
 

@@ -19,12 +19,13 @@ ai-eos-metadata:
 - [x] Internal transfer match confidence and unresolved candidates.
 - [x] Forecast assumptions through selected start date, days, candidate inclusion, and confidence fields.
 - [x] E2E health signal for API availability to catch `Failed to fetch`.
+- [x] In-app API health badge and Settings/System Status page for local service diagnostics.
+- [x] Import freshness indicator in the Goals/Planning UI.
+- [x] Stale recurring commitment diagnostics in Sinking Funds and Subscriptions.
 
 ## Still Needed
 
-- Import freshness indicator in the UI.
 - Forecast generated timestamp.
-- Stale recurring commitment diagnostics.
 - Structured application logs beyond Uvicorn/dev-server output.
 
 ## Future Observability

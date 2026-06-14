@@ -11,6 +11,38 @@ const mockedApi = vi.mocked(api);
 describe("App", () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    mockedApi.getHealth.mockResolvedValue({
+      app: "Personal Finance Studio",
+      env: "local",
+      status: "ok",
+    });
+    mockedApi.getPlanningOverview.mockResolvedValue({
+      entity_name: "Household",
+      goals: [],
+      import_freshness: {
+        days_since_latest_transaction: null,
+        latest_import_date: null,
+        latest_transaction_date: null,
+        message: "No imported transactions yet.",
+        status: "no_data",
+      },
+      monthly_review: {
+        decision_count: 0,
+        end_date: "2026-06-14",
+        headline: "Review pending",
+        income_total: "0.00",
+        net_total: "0.00",
+        next_actions: [],
+        outflow_total: "0.00",
+        reviewed_count: 0,
+        start_date: "2026-06-01",
+        unreviewed_count: 0,
+      },
+      saved_filters: [],
+      sinking_funds: [],
+      stale_commitments: [],
+      subscriptions: [],
+    });
   });
 
   it("renders the import-first finance studio shell", () => {
@@ -18,6 +50,7 @@ describe("App", () => {
 
     expect(screen.getByRole("heading", { name: "Good afternoon, Kiran." })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Dashboard" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /API/ })).toBeInTheDocument();
     expect(screen.getByText("Choose file")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Commit" })).toBeDisabled();
     expect(screen.getAllByRole("button", { name: "Detect" })[0]).toBeDisabled();

@@ -16,6 +16,7 @@ from app.services.commitments import (
 from app.services.forecast import get_cashflow_forecast
 from app.services.import_commit import commit_snoop_csv
 from app.services.insights import get_insights
+from app.services.planning import get_planning_overview
 from app.services.transactions import get_transaction_ledger, update_transaction
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -104,3 +105,34 @@ def test_mark_bill_instance_paid_and_insights_exclude_transfers(db_session: Sess
     insights = get_insights(db_session, import_result.entity_id)
     assert insights.internal_transfers_excluded is True
     assert any(group.group in {"fixed", "flexible", "debt"} for group in insights.category_groups)
+
+
+def test_phase_1_5_planning_overview_derives_review_and_saved_filters(
+    db_session: Session,
+) -> None:
+    contents = (FIXTURES / "snoop_recurring.csv").read_bytes()
+    import_result = commit_snoop_csv(contents, source_filename="snoop.csv", session=db_session)
+    account = get_accounts_summary(db_session, import_result.entity_id).accounts[0]
+    update_account(
+        db_session,
+        import_result.entity_id,
+        account.id,
+        AccountUpdate(account_type="current", current_balance="1000.00"),
+    )
+    detection = detect_recurring_commitments(db_session, import_result.entity_id)
+    commitment = detection.commitments[0]
+    update_commitment(
+        db_session,
+        import_result.entity_id,
+        commitment.id,
+        CommitmentUpdate(name="Annual Membership", frequency="annual", status="confirmed"),
+    )
+
+    overview = get_planning_overview(db_session, import_result.entity_id)
+
+    assert overview.goals
+    assert overview.monthly_review.start_date.endswith("-01")
+    assert overview.import_freshness.status == "fresh"
+    assert any(fund.name == "Annual Membership" for fund in overview.sinking_funds)
+    assert any(item.name == "Annual Membership" for item in overview.subscriptions)
+    assert any(saved.route == "transactions" for saved in overview.saved_filters)

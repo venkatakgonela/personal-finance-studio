@@ -54,24 +54,121 @@ const decision = {
   title: "Confirm internal transfer",
 };
 
+const upcomingCandidate = {
+  actual_amount: null,
+  commitment_id: "commitment-1",
+  commitment_name: "Klarna",
+  commitment_status: "candidate",
+  commitment_type: "loan_payment",
+  due_date: "2026-06-10",
+  estimated_amount: "98.31",
+  expected_amount: "98.31",
+  id: "bill-instance-1",
+  status: "planned",
+};
+
+const planningOverview = {
+  entity_name: "Household",
+  goals: [
+    {
+      current_amount: "1000.00",
+      id: "emergency-buffer",
+      monthly_contribution: "166.67",
+      name: "Emergency buffer",
+      next_action: "Keep three months of confirmed bills available before trusting surplus.",
+      progress_percent: 50,
+      status: "needs_funding",
+      target_amount: "2000.00",
+    },
+  ],
+  import_freshness: {
+    days_since_latest_transaction: 0,
+    latest_import_date: "2026-06-14",
+    latest_transaction_date: "2026-06-14",
+    message: "Imports are fresh.",
+    status: "fresh",
+  },
+  monthly_review: {
+    decision_count: 1,
+    end_date: "2026-06-14",
+    headline: "Month is in surplus",
+    income_total: "3250.00",
+    net_total: "3201.01",
+    next_actions: ["Review 1 unreviewed transactions."],
+    outflow_total: "48.99",
+    reviewed_count: 1,
+    start_date: "2026-06-01",
+    unreviewed_count: 1,
+  },
+  saved_filters: [
+    {
+      description: "Transactions filtered to day-to-day spending in the current month.",
+      id: "this-month-flexible",
+      label: "This month flexible spend",
+      query: "range=this-month&group=flexible&type=spending",
+      route: "transactions",
+    },
+  ],
+  sinking_funds: [
+    {
+      due_date: "2026-12-01",
+      frequency: "annual",
+      id: "sinking-1",
+      monthly_set_aside: "12.50",
+      name: "Annual insurance",
+      source_commitment_id: "commitment-2",
+      status: "confirmed",
+      target_amount: "150.00",
+    },
+  ],
+  stale_commitments: [
+    {
+      expected_amount: "12.50",
+      id: "commitment-3",
+      name: "Old membership",
+      next_due_date: "2026-05-01",
+      reason: "Next due date has passed; refresh, mark paid, or reject.",
+      status: "candidate",
+    },
+  ],
+  subscriptions: [
+    {
+      action: "Review in recurring",
+      expected_amount: "9.99",
+      frequency: "monthly",
+      id: "subscription-1",
+      name: "Netflix",
+      next_due_date: "2026-06-20",
+      prompt: "Check whether this still earns its place before the next renewal.",
+      status: "confirmed",
+    },
+  ],
+};
+
 test("real local stack loads dashboard data without fetch errors", async ({ page }) => {
   await page.goto("/");
 
-  await expect(page.getByRole("heading", { name: "Good afternoon, Kiran." })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Good (morning|afternoon|evening), Kiran\./ })).toBeVisible();
   await expect(page.getByText("Failed to fetch")).toHaveCount(0);
-  await expect(page.getByRole("heading", { name: "Available Money" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Balance Readiness" })).toBeVisible();
 });
 
 test("renders the dashboard with the polished visual system", async ({ page }) => {
   await mockAppApis(page);
   await page.goto("/");
 
-  await expect(page.getByRole("heading", { name: "Good afternoon, Kiran." })).toBeVisible();
-  await expect(page.getByRole("navigation", { name: "Primary navigation" }).getByRole("link")).toHaveCount(8);
+  await expect(page.getByRole("heading", { name: /Good (morning|afternoon|evening), Kiran\./ })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Primary navigation" }).getByRole("link")).toHaveCount(13);
   await expect(page.getByLabel("Date range", { exact: true })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Available Money" })).toBeVisible();
+  await expect(page.getByRole("link", { name: /API online|API checking/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Balance Readiness" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Spending Pulse" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Decision Queue" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Bills This Month" })).toBeVisible();
   await expect(page.getByText("Failed to fetch")).toHaveCount(0);
+  const dashboard = page.getByLabel("Personal Finance Studio dashboard");
+  await expect(dashboard.locator(".decision-table-header")).toHaveCount(0);
+  await expect(dashboard.locator(".decision-card-compact .compact-row")).toHaveCount(1);
 
   const visualSystem = await page.evaluate(() => {
     const h1 = getComputedStyle(document.querySelector("h1") as HTMLElement);
@@ -93,6 +190,183 @@ test("renders the dashboard with the polished visual system", async ({ page }) =
   expect(visualSystem.metricFont).toContain("Inter");
   expect(visualSystem.cardRadius).toBe("8px");
   expect(visualSystem.buttonRadius).toBe("8px");
+
+  await page.getByLabel("Date range", { exact: true }).selectOption("last-30");
+  await expect(page.getByRole("heading", { name: "Recent Bills" })).toBeVisible();
+});
+
+test("renders phase 1.5 planning routes and saved filter URLs", async ({ page }) => {
+  const transactionRequests: string[] = [];
+  await mockAppApis(page, {
+    onTransactionsRequest(url) {
+      transactionRequests.push(url.toString());
+    },
+  });
+
+  await page.goto("/#/goals");
+  await expect(page.getByRole("heading", { name: "Goals" })).toBeVisible();
+  await expect(page.getByText("Emergency buffer")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Import Freshness" })).toBeVisible();
+
+  await page.goto("/#/sinking-funds");
+  await expect(page.getByRole("heading", { name: "Sinking Funds" })).toBeVisible();
+  await expect(page.getByText("Annual insurance")).toBeVisible();
+
+  await page.goto("/#/monthly-review");
+  await expect(page.getByRole("heading", { name: "Monthly Review" })).toBeVisible();
+  await expect(page.getByText("Month is in surplus")).toBeVisible();
+
+  await page.getByRole("link", { name: /This month flexible spend/ }).click();
+  await expect(page).toHaveURL(/#\/transactions\?range=this-month&group=flexible&type=spending/);
+  await expect(page.getByLabel("Category group filter")).toHaveValue("flexible");
+  await expect(page.getByLabel("Transaction type filter")).toHaveValue("spending");
+  expect(transactionRequests.some((url) => url.includes("normalized_group=flexible"))).toBe(true);
+
+  await page.goto("/#/subscriptions");
+  await expect(page.getByRole("heading", { name: "Subscriptions" })).toBeVisible();
+  await expect(page.getByText("Netflix")).toBeVisible();
+});
+
+test("renders colorful account and report graphics", async ({ page }) => {
+  await mockAppApis(page);
+
+  await page.goto("/#/accounts");
+  await expect(page.getByRole("heading", { name: "Net Worth Performance" })).toBeVisible();
+  await expect(page.locator(".performance-chart")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Summary" })).toBeVisible();
+  await expect(page.locator(".stacked-bar")).toBeVisible();
+  await expect(page.getByRole("button", { name: /Cash/ })).toHaveAttribute("aria-expanded", "true");
+  const beforeToggle = await accountLayoutMeasurement(page);
+  await page.getByRole("button", { name: /Cash/ }).click();
+  await expect(page.getByRole("button", { name: /Cash/ })).toHaveAttribute("aria-expanded", "false");
+  const afterToggle = await accountLayoutMeasurement(page);
+  expect(afterToggle.headerLeft).toBe(beforeToggle.headerLeft);
+  expect(afterToggle.cardLeft).toBe(beforeToggle.cardLeft);
+  expect(afterToggle.buttonTransform).toBe("none");
+
+  await page.goto("/#/goals");
+  await expect(page.getByRole("button", { name: /Goal progress/ })).toHaveAttribute("aria-expanded", "true");
+  await page.getByRole("button", { name: /Goal progress/ }).click();
+  await expect(page.getByRole("button", { name: /Goal progress/ })).toHaveAttribute("aria-expanded", "false");
+
+  await page.goto("/#/recurring");
+  await expect(page.getByRole("button", { name: /Recurring candidates/ })).toBeVisible();
+
+  await page.goto("/#/reports");
+  await expect(page.getByRole("heading", { name: "Cash Flow" })).toBeVisible();
+  await expect(page.locator(".report-metric")).toHaveCount(4);
+  await expect(page.locator(".sankey-svg")).toBeVisible();
+  expect(await page.locator(".sankey-node").count()).toBeGreaterThan(3);
+  await page.getByRole("tab", { name: "Spending" }).click();
+  await expect(page.getByRole("heading", { name: "Spending", exact: true })).toBeVisible();
+  await page.getByLabel("Report grouping").selectOption("merchant");
+  await expect(page.locator(".sankey-svg").getByText("Morrisons")).toBeVisible();
+});
+
+async function accountLayoutMeasurement(page: Page) {
+  return page.evaluate(() => {
+    const header = document.querySelector(".topbar") as HTMLElement;
+    const card = document.querySelector(".account-group-section") as HTMLElement;
+    const button = document.querySelector(".account-group-header") as HTMLElement;
+    return {
+      buttonTransform: getComputedStyle(button).transform,
+      cardLeft: Math.round(card.getBoundingClientRect().left),
+      headerLeft: Math.round(header.getBoundingClientRect().left),
+    };
+  });
+}
+
+test("all primary routes are reachable without visible UI breakage", async ({ page }) => {
+  await mockAppApis(page);
+  await page.goto("/");
+
+  const routes = [
+    "dashboard",
+    "accounts",
+    "transactions",
+    "cash-flow",
+    "calendar",
+    "recurring",
+    "goals",
+    "sinking-funds",
+    "monthly-review",
+    "subscriptions",
+    "reports",
+    "decision-queue",
+    "settings",
+  ];
+
+  for (const route of routes) {
+    await page.goto(`/#/${route}`);
+    await expect(page.locator("h1")).toBeVisible();
+    await expect(page.getByText("Failed to fetch")).toHaveCount(0);
+
+    const uiHealth = await page.evaluate(() => {
+      const buttons = [...document.querySelectorAll("button")];
+      const links = [...document.querySelectorAll("a[href]")];
+      return {
+        badLinks: links.filter((link) => !link.getAttribute("href") || link.getAttribute("href") === "#").length,
+        horizontalOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+        unnamedButtons: buttons.filter((button) => {
+          return !(button.textContent?.trim() || button.getAttribute("aria-label"));
+        }).length,
+      };
+    });
+
+    expect(uiHealth).toEqual({
+      badLinks: 0,
+      horizontalOverflow: false,
+      unnamedButtons: 0,
+    });
+  }
+});
+
+test("keeps sidebar fixed while page content scrolls", async ({ page }) => {
+  await mockAppApis(page);
+  await page.goto("/#/decision-queue");
+  await expect(page.locator(".sidebar")).toBeVisible();
+  await expect(page.locator(".dashboard-shell")).toBeVisible();
+
+  const before = await page.locator(".sidebar").evaluate((element) => {
+    return Math.round(element.getBoundingClientRect().top);
+  });
+  await page.locator(".dashboard-shell").evaluate((element) => {
+    const spacer = document.createElement("div");
+    spacer.style.height = "1600px";
+    spacer.setAttribute("data-testid", "scroll-spacer");
+    element.appendChild(spacer);
+    element.scrollTop = 700;
+  });
+  const after = await page.locator(".sidebar").evaluate((element) => {
+    return Math.round(element.getBoundingClientRect().top);
+  });
+  const shellScroll = await page.locator(".dashboard-shell").evaluate((element) => element.scrollTop);
+  const windowScroll = await page.evaluate(() => window.scrollY);
+
+  expect(after).toBe(before);
+  expect(shellScroll).toBeGreaterThan(0);
+  expect(windowScroll).toBe(0);
+});
+
+test("shows local service health on the settings page", async ({ page }) => {
+  await mockAppApis(page);
+  await page.goto("/#/settings");
+
+  await expect(page.getByRole("heading", { name: "System Status" })).toBeVisible();
+  await expect(page.getByText("Backend API")).toBeVisible();
+  await expect(page.getByText("Frontend")).toBeVisible();
+  await expect(page.getByText("./scripts/dev-local.sh")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Check API again" })).toBeVisible();
+});
+
+test("explains when the backend API is offline", async ({ page }) => {
+  await page.route("**/health", async (route) => route.abort());
+  await mockAppApis(page);
+  await page.goto("/");
+
+  await expect(page.getByText("Backend API is offline.")).toBeVisible();
+  await expect(page.getByRole("link", { name: "API offline" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Check again" })).toBeVisible();
 });
 
 test("sends transaction filters to the API and updates the table", async ({ page }) => {
@@ -119,6 +393,26 @@ test("sends transaction filters to the API and updates the table", async ({ page
   await expect(page.locator(".transaction-row")).toHaveCount(0);
   await expect(page.getByText("No transactions yet.")).toBeVisible();
   expect(transactionRequests.some((url) => url.includes("transaction_type=spending"))).toBe(true);
+});
+
+test("scopes candidate toggle to planning views and updates upcoming bills", async ({ page }) => {
+  await mockAppApis(page);
+  await page.goto("/#/calendar");
+
+  await expect(page.getByLabel("Include bill candidates")).toBeVisible();
+  await expect(page.getByText(/Candidate bills included/)).toBeVisible();
+  await expect(page.getByText("Klarna")).toBeVisible();
+
+  await page.getByLabel("Include bill candidates").uncheck();
+
+  await expect(page.getByText(/Confirmed bills only/)).toBeVisible();
+  await expect(page.getByText("Klarna")).toHaveCount(0);
+  await expect(page.getByText("No upcoming commitments found.")).toBeVisible();
+
+  await page.goto("/#/decision-queue");
+
+  await expect(page.getByRole("heading", { name: "Decision Queue" })).toBeVisible();
+  await expect(page.getByLabel("Include bill candidates")).toHaveCount(0);
 });
 
 test("renders decision queue as a desktop review table", async ({ page }) => {
@@ -189,21 +483,41 @@ async function mockAppApis(
     });
   });
   await page.route("**/api/calendar/upcoming**", async (route) => {
+    const url = new URL(route.request().url());
+    const includeCandidates = url.searchParams.get("include_candidates") !== "false";
+    const items = includeCandidates ? [upcomingCandidate] : [];
+
     await route.fulfill({
       contentType: "application/json",
       json: {
         end_date: "2026-06-30",
-        expected_total: "340.00",
-        items: [],
+        expected_total: includeCandidates ? "98.31" : "0.00",
+        items,
         start_date: "2026-06-01",
-        total_count: 0,
+        total_count: items.length,
       },
     });
   });
   await page.route("**/api/commitments", async (route) => {
     await route.fulfill({
       contentType: "application/json",
-      json: { commitments: [], entity_name: "Household", total_count: 0 },
+      json: {
+        commitments: [
+          {
+            commitment_type: "subscription",
+            expected_amount: "9.99",
+            frequency: "monthly",
+            id: "commitment-1",
+            instance_count: 1,
+            name: "Netflix",
+            next_due_date: "2026-06-20",
+            source: "detected",
+            status: "candidate",
+          },
+        ],
+        entity_name: "Household",
+        total_count: 1,
+      },
     });
   });
   await page.route("**/api/dashboard", async (route) => {
@@ -241,15 +555,29 @@ async function mockAppApis(
     });
   });
   await page.route("**/api/forecast**", async (route) => {
+    const url = new URL(route.request().url());
+    const includeCandidates = url.searchParams.get("include_candidates") !== "false";
+
     await route.fulfill({
       contentType: "application/json",
       json: {
-        candidate_commitments_total: "340.00",
+        candidate_commitments_total: includeCandidates ? "98.31" : "0.00",
         confidence: "ready",
         confirmed_commitments_total: "0.00",
         end_date: "2026-06-30",
         lowest_projected_balance: "660.00",
-        points: [],
+        points: includeCandidates
+          ? [
+              {
+                amount: "98.31",
+                confidence: "candidate",
+                date: "2026-06-10",
+                kind: "loan_payment",
+                label: "Klarna",
+                projected_balance: "901.69",
+              },
+            ]
+          : [],
         projected_ending_balance: "660.00",
         start_date: "2026-06-01",
         starting_balance: "1000.00",
@@ -262,18 +590,31 @@ async function mockAppApis(
       json: {
         category_groups: [
           {
+            group: "income",
+            inflow_total: "3250.00",
+            net_total: "3250.00",
+            outflow_total: "0.00",
+            transaction_count: 1,
+          },
+          {
             group: "flexible",
             inflow_total: "0.00",
             net_total: "-48.99",
-            outflow_total: "-48.99",
+            outflow_total: "48.99",
             transaction_count: 1,
           },
         ],
         end_date: "2026-06-30",
         internal_transfers_excluded: true,
         start_date: "2026-06-01",
-        top_merchants: [{ merchant_name: "Morrisons", outflow_total: "-48.99", transaction_count: 1 }],
+        top_merchants: [{ merchant_name: "Morrisons", outflow_total: "48.99", transaction_count: 1 }],
       },
+    });
+  });
+  await page.route("**/api/planning/overview", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: planningOverview,
     });
   });
   await page.route("**/api/transactions**", async (route) => {

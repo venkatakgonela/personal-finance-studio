@@ -1,7 +1,7 @@
 # SPEC-002: Screen Plan & Design System
 
 **Author:** Kiran Gonela / Codex  
-**Status:** Implemented locally; Phase 1.5 refinements next  
+**Status:** Phase 1.5 implemented locally  
 **Date:** 2026-06-14
 
 ## 1. Design Direction
@@ -64,8 +64,13 @@ The app uses distinct page routes, not dashboard anchor jumps:
 - `#/cash-flow`
 - `#/calendar`
 - `#/recurring`
+- `#/goals`
+- `#/sinking-funds`
+- `#/monthly-review`
+- `#/subscriptions`
 - `#/reports`
 - `#/decision-queue`
+- `#/settings`
 
 Dashboard cards may preview important data, but clicking primary navigation must change the
 current page and page title. Dedicated pages can show fuller lists and controls than dashboard
@@ -122,6 +127,27 @@ previews.
 - Recurring candidates.
 - Annual/custom/one-off support.
 
+### Goals
+
+- Emergency-buffer and review-coverage goals derived from real local data.
+- Progress bars, current/target/monthly-set-aside metrics, and next action copy.
+- Links into Cash Flow and Monthly Review so goals are not a dead-end screen.
+
+### Sinking Funds
+
+- Annual, quarterly, custom, and non-monthly commitments converted into monthly set-asides.
+- Each fund shows due date, status, target amount, and recurring review action.
+
+### Monthly Review
+
+- Current month income, outflows, net position, reviewed/unreviewed counts, open decisions, and next actions.
+- Saved filter links for common review drilldowns.
+
+### Subscriptions
+
+- Subscription-style recurring commitments with cancellation, renegotiation, or confirmation prompts.
+- Links back into Recurring for the actual commitment review workflow.
+
 ### Accounts
 
 - Provider, account name, type, balance, owner, include/exclude from cash and forecast.
@@ -133,6 +159,12 @@ previews.
 - Each decision should explain why it matters.
 - Actions should train rules or suppress future noise.
 - Current UI uses a desktop review table with summary pills and collapses to mobile-friendly review cards.
+
+### Settings / System Status
+
+- Show backend API health clearly.
+- Explain how to start the local stack when the API is offline.
+- Keep this operational status separate from finance data so users understand service problems quickly.
 
 ### Insights
 
@@ -160,7 +192,8 @@ previews.
 
 ## 8. Current UI Status
 
-- Implemented pages: Dashboard, Accounts, Transactions, Cash Flow, Calendar, Recurring, Reports, Decision Queue.
+- Implemented pages: Dashboard, Accounts, Transactions, Cash Flow, Calendar, Recurring, Goals, Sinking Funds, Monthly Review, Subscriptions, Reports, Decision Queue, Settings.
 - Implemented global controls: search, date range preset/custom controls, include-candidates toggle.
 - Implemented transaction controls: account, group, type, review state, status, and clear filters.
-- Implemented verification: Playwright checks dashboard API availability, transaction filter behavior, Decision Queue desktop layout, and Decision Queue mobile actions.
+- Implemented planning controls: saved report filters with URL query persistence for transaction drilldowns.
+- Implemented verification: Playwright checks dashboard API availability, transaction filter behavior, Phase 1.5 planning routes, all-route UI health, Decision Queue desktop layout, and Decision Queue mobile actions.

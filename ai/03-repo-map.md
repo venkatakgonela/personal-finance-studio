@@ -8,7 +8,7 @@ ai-eos-metadata:
 # Repo Map - Personal Finance Studio
 
 **Last reviewed:** 2026-06-14  
-**Current repository status:** Phase 1 local implementation with backend, frontend, tests, and docs.
+**Current repository status:** Phase 1.5 local implementation with backend, frontend, tests, and docs.
 
 ## Root
 
@@ -27,16 +27,16 @@ ai-eos-metadata:
 - `app/db.py`: SQLAlchemy engine/session setup.
 - `app/models/`: SQLAlchemy entities for Household/Profile, accounts, transactions, import logs, internal transfer matches, commitments, and bill instances.
 - `app/schemas/`: Pydantic response/request schemas for all API surfaces.
-- `app/routes/`: FastAPI routers for imports, accounts, transactions, transfers, commitments, calendar, forecast, dashboard, insights, and decisions.
-- `app/services/`: deterministic finance logic for parsing/imports, category normalization, transfer detection, commitment detection, dashboard math, calendar/upcoming, forecast, insights, transaction review, and Decision Queue actions.
+- `app/routes/`: FastAPI routers for imports, accounts, transactions, transfers, commitments, calendar, forecast, dashboard, insights, planning, and decisions.
+- `app/services/`: deterministic finance logic for parsing/imports, category normalization, transfer detection, commitment detection, dashboard math, calendar/upcoming, forecast, insights, Phase 1.5 planning overview, transaction review, and Decision Queue actions.
 
 ## Frontend
 
-- `frontend/src/App.tsx`: current route shell and Phase 1 UI components.
+- `frontend/src/App.tsx`: current route shell and Phase 1/1.5 UI components.
 - `frontend/src/api.ts`: typed API client for backend routes and query params.
 - `frontend/src/styles.css`: design tokens, layout, tables, filters, and responsive styles.
 - `frontend/src/App.test.tsx`: Vitest/React Testing Library component coverage.
-- `frontend/e2e/app.spec.ts`: Playwright browser coverage for real-stack dashboard smoke, transaction filters, and Decision Queue layout.
+- `frontend/e2e/app.spec.ts`: Playwright browser coverage for real-stack dashboard smoke, transaction filters, Phase 1.5 planning routes, route-health/overflow checks, and Decision Queue layout.
 - `frontend/playwright.config.ts`: starts/checks both FastAPI (`8025`) and Vite (`5175`) for E2E.
 
 ## Tests
@@ -50,7 +50,7 @@ ai-eos-metadata:
 - `tests/test_dashboard_calendar.py`: dashboard and upcoming/calendar coverage.
 - `tests/test_decisions.py`: Decision Queue service/action coverage.
 - `tests/test_api.py`: FastAPI endpoint smoke and filter coverage.
-- `tests/test_phase1_completion.py`: completion-slice regression coverage for transaction review, forecast, bill payment, and insights.
+- `tests/test_phase1_completion.py`: completion-slice regression coverage for transaction review, forecast, bill payment, insights, and Phase 1.5 planning overview.
 
 ## Generated/Ignored Runtime Areas
 

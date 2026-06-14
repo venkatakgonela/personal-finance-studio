@@ -10,8 +10,10 @@ The first release focuses on the Household entity using Snoop CSV imports. It he
 - What bills, credit cards, loans, and BNPL payments are due next?
 - What will balances look like on a selected future date?
 
-Implementation has started from the locked Phase 1 plan. The current slice supports Snoop import,
-account and transaction review, internal transfer candidates, and recurring commitment candidates.
+Implementation has started from the locked Phase 1 plan. The current local slice supports Snoop
+import, account and transaction review, internal transfer candidates, recurring commitment
+candidates, Phase 1.5 planning routes, saved filter drilldowns, import freshness, and local service
+health.
 
 ## Planning Docs
 
@@ -35,12 +37,22 @@ account and transaction review, internal transfer candidates, and recurring comm
 
 ## Local Development
 
-Backend:
+Full local stack:
+
+```bash
+./scripts/dev-local.sh
+```
+
+This starts Docker/Postgres, applies migrations, starts the FastAPI backend on `8025`, and starts
+the Vite frontend on `5175`. The app also shows API health in the top bar and under
+`#/settings`.
+
+Backend only:
 
 ```bash
 uv sync
 uv run alembic upgrade head
-uv run uvicorn app.main:app --reload --port 8025
+uv run uvicorn app.main:app --reload --host 127.0.0.1 --port 8025
 ```
 
 Frontend:
@@ -80,4 +92,5 @@ cd frontend
 npm run lint
 npm run test
 npm run build
+npm run test:e2e
 ```

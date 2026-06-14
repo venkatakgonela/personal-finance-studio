@@ -8,7 +8,7 @@ ai-eos-metadata:
 # Architecture Design - Personal Finance Studio
 
 **Last reviewed:** 2026-06-14  
-**Implementation status:** Phase 1 local implementation exists.
+**Implementation status:** Phase 1.5 local implementation exists.
 
 ## 1. System Overview
 
@@ -24,15 +24,16 @@ Phase 1 currently has one active entity, Household, populated by Snoop CSV impor
 ## 2. Key Components
 
 - **Frontend App**: React, TypeScript, route-based screens, design system, charts, tables, calendar/timeline views.
-- **Frontend App Status**: `frontend/src/App.tsx` currently owns the hash-route shell, topbar date controls, dashboard cards, account review, transaction filters/table, cashflow, calendar/upcoming, recurring, reports, and Decision Queue UI.
-- **Backend API**: FastAPI endpoints for imports, accounts, transactions, transfers, commitments, calendar, forecasts, dashboards, insights, and decisions.
+- **Frontend App Status**: `frontend/src/App.tsx` currently owns the hash-route shell, topbar date controls, dashboard cards, account review, transaction filters/table, cashflow, calendar/upcoming, recurring, goals, sinking funds, monthly review, subscriptions, reports, Decision Queue, and Settings UI.
+- **Backend API**: FastAPI endpoints for imports, accounts, transactions, transfers, commitments, calendar, forecasts, dashboards, insights, planning, and decisions.
 - **Import Service**: Snoop CSV parser, validator, previewer, fingerprinting/upsert engine, import logs.
 - **Classification Service**: account type mapping, category normalization, merchant rules, reviewed/unreviewed state.
 - **Internal Transfer Engine**: same/similar amount matching, opposite-sign reconciliation, description/account pattern detection.
 - **Commitment Engine**: recurring bill detection, subscription candidates, variable bill estimates, BNPL/loan/credit-card obligation modeling.
 - **Forecast Engine**: projected balances, available-after-commitments, flexible spending remaining, low-balance warnings.
 - **Decision Queue**: low-noise human confirmations that improve accuracy; rendered as a compact desktop review table and mobile action cards.
-- **Database**: PostgreSQL tables for entities, profiles, accounts, transactions, rules, bills, instances, imports, goals-ready schema.
+- **Planning Overview Service**: deterministic Phase 1.5 aggregation for goals, sinking funds, monthly review, subscription prompts, saved filters, import freshness, and stale commitments.
+- **Database**: PostgreSQL tables for entities, profiles, accounts, transactions, rules, bills, instances, and imports; Phase 1.5 planning is currently derived rather than persisted.
 
 ## 3. Data Flow
 
@@ -49,7 +50,9 @@ graph TD
     Rules --> Decisions
     Recurring --> Decisions
     DB --> Forecast[Forecast Engine]
+    DB --> Planning[Planning Overview]
     Forecast --> API[FastAPI]
+    Planning --> API
     DB --> API
     API --> UI[React App]
 ```
@@ -76,8 +79,13 @@ Frontend routes:
 - `#/cash-flow`
 - `#/calendar`
 - `#/recurring`
+- `#/goals`
+- `#/sinking-funds`
+- `#/monthly-review`
+- `#/subscriptions`
 - `#/reports`
 - `#/decision-queue`
+- `#/settings`
 
 Backend APIs:
 
@@ -93,6 +101,7 @@ Backend APIs:
 - `GET /api/forecast`
 - `GET /api/dashboard`
 - `GET /api/insights`
+- `GET /api/planning/overview`
 - `GET/POST /api/decisions`
 
 ## 6. Architecture Principles

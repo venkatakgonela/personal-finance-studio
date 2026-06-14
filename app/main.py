@@ -11,6 +11,7 @@ from app.routes import (
     forecast,
     imports,
     insights,
+    planning,
     transactions,
     transfers,
 )
@@ -42,6 +43,7 @@ def create_app() -> FastAPI:
     app.include_router(insights.router, prefix="/api/insights", tags=["insights"])
     app.include_router(accounts.router, prefix="/api/accounts", tags=["accounts"])
     app.include_router(transactions.router, prefix="/api/transactions", tags=["transactions"])
+    app.include_router(planning.router, prefix="/api/planning", tags=["planning"])
     return app
 
 

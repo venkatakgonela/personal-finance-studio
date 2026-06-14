@@ -1,7 +1,7 @@
 # SPEC-003: Testing Strategy
 
 **Author:** Kiran Gonela / Codex  
-**Status:** Implemented locally; expand during Phase 1.5  
+**Status:** Phase 1.5 implemented locally  
 **Date:** 2026-06-14
 
 ## 1. Problem Statement
@@ -17,6 +17,7 @@ Testing is therefore part of the Phase 1 product, not a cleanup activity.
 - Verify internal transfers are paired, excluded from spend/income, and do not create duplicate decisions.
 - Verify dashboard numbers match documented formulas.
 - Verify browser UI flows work end to end.
+- Verify Phase 1.5 planning derivations and route health.
 - Prevent regression in the core money model before visual polish.
 
 ## 3. Non-Goals
@@ -44,6 +45,7 @@ Coverage:
 - Available money formula.
 - Flexible spend remaining formula.
 - Stale recurring commitment detection.
+- Phase 1.5 planning overview derivation from transactions, commitments, decisions, and imports.
 
 ### Backend Integration Tests
 
@@ -83,6 +85,9 @@ Current implemented checks:
 3. Transaction filters send API query params and update the table.
 4. Decision Queue renders as a desktop review table with summary spacing.
 5. Decision Queue remains usable on mobile.
+6. Phase 1.5 planning routes render Goals, Sinking Funds, Monthly Review, and Subscriptions.
+7. Saved filter URLs persist query state into the Transactions filters.
+8. Every primary route is reachable without failed-fetch text, dead hash links, unnamed buttons, or horizontal overflow.
 
 Additional critical flows to add as Phase 1.5/packaging hardens:
 
@@ -102,7 +107,7 @@ Additional critical flows to add as Phase 1.5/packaging hardens:
 Before Phase 1 is considered ready:
 
 - Use the real Snoop sample locally.
-- Browse dashboard, calendar, transactions, accounts, bills, forecast, and decision queue.
+- Browse dashboard, calendar, transactions, accounts, bills, forecast, goals, sinking funds, monthly review, subscriptions, reports, settings, and decision queue.
 - Confirm terminology feels understandable.
 - Confirm Decision Queue is not noisy.
 - Confirm the visual system makes estimates and forecasts obvious.
@@ -150,7 +155,7 @@ This is intentional so the E2E suite catches the common `Failed to fetch` class 
 
 ## 7. Release Criteria
 
-Phase 1 is not ready until:
+Phase 1.5 is not ready until:
 
 - [x] Core backend tests pass.
 - [x] Import idempotency tests pass.
@@ -158,3 +163,5 @@ Phase 1 is not ready until:
 - [x] Forecast formula tests pass.
 - [x] Browser critical flows pass.
 - [x] Manual browser review is completed with no blocking UX issues.
+- [x] Phase 1.5 planning overview tests pass.
+- [x] All-route browser health checks pass.

@@ -1,4 +1,10 @@
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8025";
+export const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8025";
+
+export type HealthResponse = {
+  status: string;
+  app: string;
+  env: string;
+};
 
 export type DetectedAccount = {
   provider: string;
@@ -256,6 +262,88 @@ export type InsightsResponse = {
   internal_transfers_excluded: boolean;
 };
 
+export type PlanningGoal = {
+  id: string;
+  name: string;
+  target_amount: string;
+  current_amount: string;
+  monthly_contribution: string;
+  progress_percent: number;
+  status: string;
+  next_action: string;
+};
+
+export type SinkingFundPlan = {
+  id: string;
+  name: string;
+  due_date: string | null;
+  frequency: string;
+  target_amount: string;
+  monthly_set_aside: string;
+  status: string;
+  source_commitment_id: string | null;
+};
+
+export type MonthlyReviewSummary = {
+  start_date: string;
+  end_date: string;
+  income_total: string;
+  outflow_total: string;
+  net_total: string;
+  reviewed_count: number;
+  unreviewed_count: number;
+  decision_count: number;
+  headline: string;
+  next_actions: string[];
+};
+
+export type SubscriptionReviewItem = {
+  id: string;
+  name: string;
+  expected_amount: string;
+  frequency: string;
+  next_due_date: string | null;
+  status: string;
+  prompt: string;
+  action: string;
+};
+
+export type SavedReportFilter = {
+  id: string;
+  label: string;
+  description: string;
+  route: string;
+  query: string;
+};
+
+export type ImportFreshness = {
+  status: string;
+  message: string;
+  latest_import_date: string | null;
+  latest_transaction_date: string | null;
+  days_since_latest_transaction: number | null;
+};
+
+export type StaleCommitmentReview = {
+  id: string;
+  name: string;
+  expected_amount: string;
+  next_due_date: string | null;
+  status: string;
+  reason: string;
+};
+
+export type PlanningOverview = {
+  entity_name: string;
+  goals: PlanningGoal[];
+  import_freshness: ImportFreshness;
+  monthly_review: MonthlyReviewSummary;
+  saved_filters: SavedReportFilter[];
+  sinking_funds: SinkingFundPlan[];
+  stale_commitments: StaleCommitmentReview[];
+  subscriptions: SubscriptionReviewItem[];
+};
+
 export type UpcomingCommitment = {
   id: string;
   commitment_id: string;
@@ -349,6 +437,10 @@ export async function getDecisions(): Promise<DecisionQueueResponse> {
   return fetchJson<DecisionQueueResponse>("/api/decisions");
 }
 
+export async function getHealth(): Promise<HealthResponse> {
+  return fetchJson<HealthResponse>("/health");
+}
+
 export async function getDashboardSummary(): Promise<DashboardSummary> {
   return fetchJson<DashboardSummary>("/api/dashboard");
 }
@@ -379,6 +471,10 @@ export async function getInsights(params: InsightParams = {}): Promise<InsightsR
     start_date: params.startDate,
   });
   return fetchJson<InsightsResponse>(`/api/insights${query}`);
+}
+
+export async function getPlanningOverview(): Promise<PlanningOverview> {
+  return fetchJson<PlanningOverview>("/api/planning/overview");
 }
 
 export async function confirmDecision(
