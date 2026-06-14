@@ -44,7 +44,9 @@ having to infer what to do next.
 4. **Import Center**
    - Add a visible import/data route.
    - Support choose CSV, preview, commit, detect transfers, and detect recurring bills from one place.
-   - Replace passive `Local data` label with an action/status control that opens the import/data screen.
+  - Replace passive `Local data` label with an action/status control that opens the import/data screen.
+  - Keep Import and Settings accessible from the bottom-left household/profile menu after the
+    primary sidebar is simplified.
 
 5. **Cash Flow**
    - Upgrade the page from readiness metrics to a planning view.
@@ -76,7 +78,7 @@ proves useful.
 - [x] Goals route supports add, edit, delete, and refresh-persistent custom goals.
 - [x] Budget route supports editable plan rows and shows correct planned/actual/remaining totals.
 - [x] Settings route supports CRUD-style interactions for categories, tags, rules, and merchants.
-- [x] Import route exists and is discoverable from nav and the top data action.
+- [x] Import route exists and is discoverable from the household/profile menu.
 - [x] Dashboard and Cash Flow expose more decision value while staying readable at desktop and mobile widths.
 - [x] `Local data` is no longer a passive label.
 - [x] Full validation passes:
@@ -89,12 +91,13 @@ proves useful.
 
 ## Delivered
 
-- Added `#/budget` and `#/import` routes to the primary navigation.
+- Added `#/budget` to the primary navigation and `#/import` to the household/profile menu.
 - Added local-first editable planning preferences for goals, budget rows, categories, tags, rules, and merchant display settings.
 - Added custom goal add/edit/delete with local refresh persistence.
 - Added budget planned/actual/remaining table and summary totals using backend insight actuals.
 - Added Settings workbench sections for Categories, Merchants, Rules, Tags, Data, and System Status.
-- Replaced passive topbar `Local data` label with an `Import data` action.
+- Replaced passive topbar `Local data` label with an `Import data` action, then moved lower-frequency
+  Import and Settings access into the bottom-left Kiran/Household menu to reduce sidebar noise.
 - Added Dashboard Planning Snapshot.
 - Added Cash Flow Plan with projected ending cash, lowest point, cash pressure, and dated events.
 - Added Phase 1.75 E2E coverage.
@@ -103,6 +106,9 @@ proves useful.
   - `System Status` now lives only in Settings.
 - Refined dashboard, settings, goals, and budget layout so Phase 1.75 controls follow the same card,
   form, and navigation rhythm as the rest of the app.
+- Normalized Settings creation buttons (`Create category`, `Create rule`, `New tag`) to the same
+  compact primary action style.
+- Added profile menu chevron state so the bottom-left Kiran/Household control visibly opens and closes.
 
 ## Validation
 

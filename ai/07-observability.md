@@ -7,7 +7,7 @@ ai-eos-metadata:
 
 # Observability - Personal Finance Studio
 
-**Last reviewed:** 2026-06-14
+**Last reviewed:** 2026-06-15
 
 ## Phase 1 Observability
 
@@ -20,7 +20,7 @@ ai-eos-metadata:
 - [x] Forecast assumptions through selected start date, days, candidate inclusion, and confidence fields.
 - [x] E2E health signal for API availability to catch `Failed to fetch`.
 - [x] In-app API health badge and Settings/System Status page for local service diagnostics.
-- [x] Import freshness indicator in the Goals/Planning UI.
+- [x] Import freshness indicator in the Import Center.
 - [x] Stale recurring commitment diagnostics in Sinking Funds and Subscriptions.
 
 ## Still Needed

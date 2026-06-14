@@ -125,7 +125,7 @@ type PlanningControlState = {
   tags: TagSetting[];
 };
 
-const navItems = [
+const routeItems = [
   { label: "Dashboard", route: "dashboard" },
   { label: "Accounts", route: "accounts" },
   { label: "Transactions", route: "transactions" },
@@ -143,7 +143,9 @@ const navItems = [
   { label: "Settings", route: "settings" },
 ] as const;
 
-type RouteId = (typeof navItems)[number]["route"];
+const navItems = routeItems.filter((item) => item.route !== "import" && item.route !== "settings");
+
+type RouteId = (typeof routeItems)[number]["route"];
 
 const pageTitles: Record<RouteId, { eyebrow: string; title: string }> = {
   dashboard: { eyebrow: "Household workspace", title: "Good day, Kiran." },
@@ -609,9 +611,6 @@ export function App() {
               showCandidateToggle={showCandidateToggle}
             />
             <SystemStatusBadge health={apiHealth} />
-            <a className="local-badge data-action-badge" href="#/import">
-              Import data
-            </a>
           </div>
         </header>
 
@@ -664,6 +663,7 @@ export function App() {
 }
 
 function Sidebar({ currentRoute }: { currentRoute: RouteId }) {
+  const [menuOpen, setMenuOpen] = useState(false);
   return (
     <aside className="sidebar">
       <div className="brand-lockup">
@@ -687,12 +687,41 @@ function Sidebar({ currentRoute }: { currentRoute: RouteId }) {
         <strong>Local AI later</strong>
         <p>Phase 1 keeps answers deterministic before we add an assistant.</p>
       </div>
-      <div className="profile-chip">
-        <span>K</span>
-        <div>
-          <strong>Kiran</strong>
-          <small>Household</small>
-        </div>
+      <div className="profile-menu">
+        {menuOpen ? (
+          <div className="profile-menu-popover" role="menu">
+            <a
+              className={currentRoute === "import" ? "active" : ""}
+              href="#/import"
+              onClick={() => setMenuOpen(false)}
+              role="menuitem"
+            >
+              Import data
+            </a>
+            <a
+              className={currentRoute === "settings" ? "active" : ""}
+              href="#/settings"
+              onClick={() => setMenuOpen(false)}
+              role="menuitem"
+            >
+              Settings
+            </a>
+          </div>
+        ) : null}
+        <button
+          aria-expanded={menuOpen}
+          aria-haspopup="menu"
+          className={`profile-chip ${currentRoute === "import" || currentRoute === "settings" ? "active" : ""}`}
+          onClick={() => setMenuOpen((open) => !open)}
+          type="button"
+        >
+          <span>K</span>
+          <div>
+            <strong>Kiran</strong>
+            <small>Household</small>
+          </div>
+          <b className="profile-chevron" aria-hidden="true" />
+        </button>
       </div>
     </aside>
   );
@@ -2179,7 +2208,7 @@ function CategorySettings({
             <option key={item} value={item}>{titleCase(item)}</option>
           ))}
         </select>
-        <button onClick={addCategory} type="button">Create category</button>
+        <button className="settings-primary-action" onClick={addCategory} type="button">Create category</button>
       </div>
       <div className="settings-row-list">
         {controlState.categories.map((category) => (
@@ -2230,7 +2259,7 @@ function TagSettings({
       <div className="control-form inline-control-form">
         <input aria-label="New tag name" onChange={(event) => setName(event.target.value)} placeholder="Tag name" value={name} />
         <input aria-label="Tag color" onChange={(event) => setColor(event.target.value)} type="color" value={color} />
-        <button onClick={addTag} type="button">New tag</button>
+        <button className="settings-primary-action" onClick={addTag} type="button">New tag</button>
       </div>
       <div className="settings-row-list">
         {controlState.tags.map((tag) => (
@@ -2296,7 +2325,7 @@ function RuleSettings({
           ))}
         </select>
         <input aria-label="Rule tag" onChange={(event) => setTag(event.target.value)} placeholder="Tag" value={tag} />
-        <button onClick={addRule} type="button">Create rule</button>
+        <button className="settings-primary-action" onClick={addRule} type="button">Create rule</button>
       </div>
       <div className="settings-row-list">
         {controlState.rules.map((rule) => (
@@ -3722,7 +3751,7 @@ function currentRoute(): RouteId {
 function parseHashState(): { params: URLSearchParams; route: RouteId } {
   const rawHash = window.location.hash.replace(/^#\/?/, "");
   const [rawRoute, query = ""] = rawHash.split("?");
-  const route = navItems.some((item) => item.route === rawRoute) ? (rawRoute as RouteId) : "dashboard";
+  const route = routeItems.some((item) => item.route === rawRoute) ? (rawRoute as RouteId) : "dashboard";
   return { params: new URLSearchParams(query), route };
 }
 

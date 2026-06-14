@@ -8,7 +8,7 @@ ai-eos-metadata:
 # Project Roadmap - Personal Finance Studio
 
 **Last reviewed:** 2026-06-15
-**Current phase:** Phase 1.75 complete locally; ready to review Phase 2 scope.
+**Current phase:** Phase 1.75 complete locally; Phase 2 household expansion scoped.
 
 ## Milestones
 
@@ -18,7 +18,8 @@ ai-eos-metadata:
 | Phase 1 | Household Snoop import, transactions, transfers, commitments, forecast, dashboard | Complete locally |
 | Phase 1.5 | Goals foundation, monthly review, richer reports, subscription review | Complete locally |
 | Phase 1.75 | Editable planning control plane: goals, budgets, taxonomy/rules, import center, richer dashboard/cashflow | Complete locally |
-| Phase 2 | Business entity imports, Tide/NatWest CSV, local LLM assistant | Not Started |
+| Phase 2 | Rule application, merchant cleanup, scenarios, budget modes, spending plan, exports | Scoped |
+| Phase 2.1 | Business entity imports, Tide/NatWest CSV, local LLM assistant | Not Started |
 | Phase 3 | Optional Open Banking, sync health, advanced planning | Not Started |
 
 ## Phase 1 - Household Control Center
@@ -109,6 +110,10 @@ imported transactions, commitments, accounts, or explicit user-entered plan valu
 - Cash Flow now includes a richer Cash Flow Plan card with projected ending cash, lowest point, cash pressure, and dated cash events.
 - Duplicate status cards were removed: data freshness is owned by Import, and system/API status is owned by Settings.
 - Dashboard, Settings, Goals, and Budget received a final UI rhythm pass after Phase 1.75 feature implementation.
+- Import and Settings now live behind the bottom-left Kiran/Household profile menu, reducing primary
+  sidebar noise while keeping operational actions close to the local workspace identity.
+- Settings creation actions now share one compact primary-button style, and the profile-menu chevron
+  rotates on open/close for clear state feedback.
 - Phase 1.75 preferences are local-first and browser-scoped by ADR-014; server-backed persistence remains a Phase 2 candidate.
 
 ## Phase 1.75 Non-Goals
@@ -119,17 +124,20 @@ imported transactions, commitments, accounts, or explicit user-entered plan valu
 - No private raw exports committed to git.
 - No AI assistant actions that mutate finance data.
 
-## Phase 2 - Expansion
+## Phase 2 - Household Expansion
 
-- Business entity active UI, including separate dashboards, categories, tax/reporting labels, and import lanes.
-- Tide CSV parser and NatWest Business CSV parser.
 - Rule engine application workflow: preview rule impact, apply to selected transactions, and undo.
 - Merchant merge/split and merchant aliases.
 - PocketSmith-style cashflow scenario planning: what-if income/outflow changes, long-range projections, and scenario comparison.
 - Monarch-style budget modes: category budgeting, flexible budgeting, rollover handling, and shared household review.
 - Simplifi-style spending plan: income minus bills, subscriptions, savings goals, and left-to-spend.
-- Local LLM assistant using deterministic app queries, read-only at first.
 - Exportable reports and CSV exports for budget, transactions, and monthly review.
+
+## Phase 2.1 - Business And Assistant Expansion
+
+- Business entity active UI, including separate dashboards, categories, tax/reporting labels, and import lanes.
+- Tide CSV parser and NatWest Business CSV parser.
+- Local LLM assistant using deterministic app queries, read-only at first.
 
 ## Phase 3 - Integrations
 

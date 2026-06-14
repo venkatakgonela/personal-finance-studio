@@ -101,7 +101,7 @@ Phase 1.75 checks to add:
 14. Goals page can add, edit, delete, and refresh-persist a custom goal.
 15. Budget page shows planned, actual, and remaining totals that tally against insight data.
 16. Settings workbench can add/edit/delete categories, tags, rules, and merchant preferences.
-17. Import Center is discoverable from nav/topbar and exposes preview/commit/detect actions.
+17. Import Center is discoverable from the household/profile menu and exposes preview/commit/detect actions.
 18. Cash Flow and Dashboard render richer planning cards without horizontal overflow or duplicated
     passive data labels.
 19. Goals does not duplicate Import Freshness, and Import does not duplicate System Status.
@@ -136,6 +136,8 @@ Before Phase 1 is considered ready:
 - Confirm user-authored goals and settings survive browser refresh.
 - Confirm the import/data control is understandable as an action, not decorative chrome.
 - Confirm ownership of status cards is clear: data freshness on Import, API/system status on Settings.
+- Confirm the bottom-left household/profile menu opens Import and Settings, rotates its chevron,
+  and does not leave dead sidebar links behind.
 - Confirm browser refresh preserves the user's current route context and updates values without
   resetting filters or report selections.
 - Confirm terminology feels understandable.

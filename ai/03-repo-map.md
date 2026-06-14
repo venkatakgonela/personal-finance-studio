@@ -8,7 +8,7 @@ ai-eos-metadata:
 # Repo Map - Personal Finance Studio
 
 **Last reviewed:** 2026-06-15
-**Current repository status:** Phase 1.75 editable planning control plane complete locally.
+**Current repository status:** Phase 1.75 editable planning control plane complete locally; Phase 2 household expansion planned.
 
 ## Root
 
@@ -38,7 +38,7 @@ ai-eos-metadata:
 - `frontend/src/api.ts`: typed API client for backend routes, query params, and in-flight GET request de-duplication.
 - `frontend/src/styles.css`: design tokens, layout, tables, filters, and responsive styles.
 - `frontend/src/App.test.tsx`: Vitest/React Testing Library component coverage.
-- `frontend/e2e/app.spec.ts`: Playwright browser coverage for real-stack dashboard smoke, transaction filters, refresh-persisted URL state, Phase 1.5 planning routes, calendar planner behavior, report/account graphics, route-health/overflow checks, and Decision Queue layout.
+- `frontend/e2e/app.spec.ts`: Playwright browser coverage for real-stack dashboard smoke, transaction filters, refresh-persisted URL state, Phase 1.5/1.75 planning routes, profile-menu navigation, calendar planner behavior, report/account graphics, route-health/overflow checks, and Decision Queue layout.
 - `frontend/playwright.config.ts`: starts/checks both FastAPI (`8025`) and Vite (`5175`) for E2E.
 
 ## Tests

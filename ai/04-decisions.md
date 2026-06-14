@@ -25,6 +25,7 @@ ai-eos-metadata:
 | ADR-012 | Persist view state in the hash URL | Accepted | 2026-06-14 |
 | ADR-013 | De-duplicate in-flight frontend GET requests | Accepted | 2026-06-14 |
 | ADR-014 | Use local-first editable planning preferences for Phase 1.75 | Accepted | 2026-06-15 |
+| ADR-015 | Split Phase 2 household expansion from Phase 2.1 business and assistant work | Accepted | 2026-06-15 |
 
 ## ADR-001 - Use Entity-Scoped Household and Business Model
 
@@ -131,3 +132,15 @@ ai-eos-metadata:
   These settings are local to the browser until Phase 2 promotes them to API-backed persistence.
   Budget actuals and report totals must continue to be calculated from imported data, not manually
   entered preference data.
+
+## ADR-015 - Split Phase 2 Household Expansion From Phase 2.1 Business and Assistant Work
+
+- **Status**: Accepted
+- **Context**: The roadmap now contains two different kinds of expansion: household planning depth
+  and separate Business/assistant capabilities. Combining them would make the next milestone too
+  broad and would risk disturbing the now-stable household UI.
+- **Decision**: Phase 2 focuses on household-facing expansion: rule preview/apply/undo, merchant
+  aliases/merge/split, cashflow scenarios, budget modes, spending plan, and exports. Phase 2.1 owns
+  Business entity UI/import lanes and the read-only local assistant.
+- **Consequences**: Household controls can mature first while Business and LLM work remain cleanly
+  isolated. Phase 2 implementation must keep current UI rhythm and avoid cross-entity data mixing.

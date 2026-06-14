@@ -71,12 +71,13 @@ The app uses distinct page routes, not dashboard anchor jumps:
 - `#/subscriptions`
 - `#/reports`
 - `#/decision-queue`
-- `#/import`
-- `#/settings`
 
 Dashboard cards may preview important data, but clicking primary navigation must change the
 current page and page title. Dedicated pages can show fuller lists and controls than dashboard
 previews.
+
+Lower-frequency operational routes, currently `#/import` and `#/settings`, live behind the
+bottom-left household/profile menu. The profile chevron must visibly rotate when the menu opens.
 
 ## 6. Screens
 
@@ -195,6 +196,8 @@ previews.
   categories, merchants, rules, tags, data/import status, and system status.
 - Category, tag, rule, and merchant preference edits can be local-first in Phase 1.75, but should be
   labelled as local planning settings until server persistence exists.
+- Create actions in Settings should use the compact primary-action style so `Create category`,
+  `Create rule`, and `New tag` feel related to the same design system.
 - System status belongs in Settings and should not be repeated in the Import Center.
 
 ### Insights
@@ -229,6 +232,8 @@ previews.
 - Do not over-chart.
 - Make every dashboard card answer a real household decision.
 - Keep finance labels plain English.
+- Keep primary nav for daily work only. Put lower-frequency operational actions such as Import and
+  Settings in the household/profile menu to reduce sidebar noise.
 - Keep page content on a centered, bounded canvas rather than stretching indefinitely on wide
   screens.
 - Use contained row cards for money lists, account review rows, recurring candidates, and decision
@@ -261,7 +266,9 @@ previews.
 - Implemented verification: Playwright checks dashboard API availability, dashboard date-range bill-title behavior, compact dashboard Decision Queue rendering, transaction filter behavior, refresh persistence, Phase 1.5 planning routes, all-route UI health, candidate toggle scope, calendar planner updates, colorful account/report graphics, fixed-sidebar scrolling, Decision Queue desktop layout, and Decision Queue mobile actions.
 - Implemented Phase 1.75 pages: Budget and Import Center.
 - Implemented Phase 1.75 upgrades: editable goals, editable local taxonomy/rules/tags/merchant
-  preferences, richer Cash Flow, richer Dashboard, and a purposeful data/import topbar action.
+  preferences, richer Cash Flow, richer Dashboard, and a purposeful data/import action.
 - Implemented Phase 1.75 UI cleanup: removed duplicated status cards, normalized Settings menu
   styling, made Goals a cleaner full-width planning page, and aligned Budget to the app's row/table
   rhythm.
+- Implemented profile-menu cleanup: Kiran/Household now sits at the bottom-left, opens Import and
+  Settings actions, and uses a rotating chevron for clear expanded/collapsed state.

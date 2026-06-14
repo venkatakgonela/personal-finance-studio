@@ -212,7 +212,7 @@ nav a.active {
 }
 
 .assistant-card {
-  margin-top: var(--space-lg);
+  margin-top: auto;
   flex: 0 0 auto;
   padding: var(--space-sm);
   border: 1px solid var(--line);
@@ -245,12 +245,81 @@ nav a.active {
   background: var(--positive);
 }
 
-.profile-chip {
+.profile-menu {
+  position: relative;
   flex: 0 0 auto;
+}
+
+.profile-chip {
   display: flex;
   align-items: center;
+  width: 100%;
   gap: var(--space-xs);
   padding: var(--space-xs);
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+}
+
+.profile-chip.active,
+.profile-chip[aria-expanded="true"] {
+  border-color: rgba(37, 135, 166, 0.24);
+  background: var(--accent-soft);
+}
+
+.profile-chip div {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.profile-chevron {
+  display: block;
+  width: 9px;
+  height: 9px;
+  margin-right: 2px;
+  border-right: 1.8px solid var(--muted);
+  border-bottom: 1.8px solid var(--muted);
+  transform: rotate(45deg);
+  transform-origin: 58% 58%;
+  transition: transform 160ms ease;
+}
+
+.profile-chip[aria-expanded="true"] .profile-chevron {
+  transform: rotate(225deg);
+}
+
+.profile-menu-popover {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(100% + var(--space-xs));
+  display: grid;
+  gap: var(--space-xxs);
+  padding: var(--space-xs);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background: white;
+  box-shadow: var(--shadow);
+}
+
+.profile-menu-popover a {
+  display: flex;
+  align-items: center;
+  min-height: 34px;
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--radius-control);
+  color: var(--text);
+  font-size: 0.82rem;
+  font-weight: 750;
+  text-decoration: none;
+}
+
+.profile-menu-popover a:hover,
+.profile-menu-popover a.active {
+  background: var(--accent-soft);
+  color: var(--focus);
 }
 
 .profile-chip > span {
@@ -2248,7 +2317,7 @@ button.collapsible-block-header:focus {
 }
 
 .inline-control-form {
-  grid-template-columns: minmax(180px, 1fr) minmax(150px, 220px) auto;
+  grid-template-columns: minmax(220px, 1fr) minmax(150px, 210px) max-content;
 }
 
 .goal-form .form-actions {
@@ -2276,6 +2345,29 @@ button.collapsible-block-header:focus {
   background: white;
   color: var(--text);
   font: inherit;
+}
+
+.settings-primary-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  justify-self: end;
+  min-width: 132px;
+  min-height: 36px;
+  padding: 0 var(--space-md);
+  border: 1px solid rgba(37, 135, 166, 0.28);
+  border-radius: var(--radius-control);
+  background: var(--accent);
+  color: white;
+  font-size: 0.78rem;
+  font-weight: 850;
+  white-space: nowrap;
+  box-shadow: 0 8px 16px rgba(37, 135, 166, 0.12);
+}
+
+.settings-primary-action:not(:disabled):hover {
+  background: #1f7894;
+  box-shadow: 0 10px 20px rgba(37, 135, 166, 0.16);
 }
 
 .form-actions {
@@ -2758,7 +2850,7 @@ button.collapsible-block-header:focus {
   }
 
   .assistant-card,
-  .profile-chip {
+  .profile-menu {
     display: none;
   }
 
@@ -2919,7 +3011,8 @@ button.collapsible-block-header:focus {
 
   .budget-row > span,
   .budget-row input,
-  .budget-row > .status-pill {
+  .budget-row > .status-pill,
+  .settings-primary-action {
     justify-self: stretch;
     text-align: left;
   }

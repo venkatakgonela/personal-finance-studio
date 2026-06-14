@@ -158,10 +158,10 @@ test("renders the dashboard with the polished visual system", async ({ page }) =
   await page.goto("/");
 
   await expect(page.getByRole("heading", { name: /Good (morning|afternoon|evening), Kiran\./ })).toBeVisible();
-  await expect(page.getByRole("navigation", { name: "Primary navigation" }).getByRole("link")).toHaveCount(15);
+  await expect(page.getByRole("navigation", { name: "Primary navigation" }).getByRole("link")).toHaveCount(13);
   await expect(page.getByLabel("Date range", { exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: /API online|API checking/ })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Import data" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Kiran Household/ })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Spending Pulse" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Decision Queue" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Bills This Month" })).toBeVisible();
@@ -274,7 +274,9 @@ test("supports phase 1.75 editable planning controls", async ({ page }) => {
   await page.getByRole("button", { name: "Merchants" }).click();
   await expect(page.getByLabel("Display name for Morrisons")).toBeVisible();
 
-  await page.getByRole("link", { name: "Import data" }).click();
+  await page.getByRole("button", { name: /Kiran Household/ }).click();
+  await expect(page.getByRole("button", { name: /Kiran Household/ })).toHaveAttribute("aria-expanded", "true");
+  await page.getByRole("menuitem", { name: "Import data" }).click();
   await expect(page).toHaveURL(/#\/import/);
   await expect(page.getByRole("heading", { name: "Getting Started" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Import Freshness" })).toBeVisible();

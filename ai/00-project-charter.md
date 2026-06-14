@@ -9,7 +9,7 @@ ai-eos-metadata:
 
 **Owner:** Kiran Gonela  
 **Type:** Local-first finance app
-**Current Status:** Phase 1.5 Planning Depth is implemented locally; Phase 2 expansion planning is next.
+**Current Status:** Phase 1.75 Editable Planning Control Plane is implemented locally; Phase 2 household expansion is next.
 
 ## 1. Mission
 
@@ -34,6 +34,8 @@ The product should answer, clearly and calmly:
 - Detect and confirm recurring commitments, subscriptions, variable bills, loans, credit cards, and BNPL.
 - Support flexible spending as a single useful dashboard number.
 - Keep all Phase 1/1.5 household money views GBP-only.
+- Expand Phase 2 into practical household controls: rule application, merchant cleanup, cashflow scenarios, budget modes, spending plan, and exports.
+- Keep Business entity imports and read-only local assistant work separated into Phase 2.1 so household planning does not wait on business/LLM scope.
 - Show actuals, estimates, forecasts, and pending data with distinct visual language.
 - Keep the experience calm, useful, and low-noise.
 
