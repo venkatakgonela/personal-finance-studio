@@ -1,3 +1,4 @@
+from datetime import date
 from pathlib import Path
 
 from sqlalchemy.orm import Session
@@ -90,3 +91,53 @@ def test_transaction_ledger_can_filter_transfer_candidates(db_session: Session) 
     assert all(
         not transaction.is_transfer_candidate for transaction in filtered_ledger.transactions
     )
+
+
+def test_transaction_ledger_supports_finance_filters(db_session: Session) -> None:
+    contents = (FIXTURES / "snoop_minimal.csv").read_bytes()
+    import_result = commit_snoop_csv(
+        contents,
+        source_filename="snoop_minimal.csv",
+        session=db_session,
+    )
+
+    date_filtered = get_transaction_ledger(
+        db_session,
+        import_result.entity_id,
+        end_date=date(2026, 6, 10),
+        include_transfer_candidates=False,
+        limit=100,
+        offset=0,
+        start_date=date(2026, 6, 9),
+    )
+    search_filtered = get_transaction_ledger(
+        db_session,
+        import_result.entity_id,
+        include_transfer_candidates=False,
+        limit=100,
+        offset=0,
+        search="salary",
+    )
+    group_filtered = get_transaction_ledger(
+        db_session,
+        import_result.entity_id,
+        include_transfer_candidates=False,
+        limit=100,
+        normalized_group="income",
+        offset=0,
+    )
+    spending_type_filtered = get_transaction_ledger(
+        db_session,
+        import_result.entity_id,
+        include_transfer_candidates=False,
+        limit=100,
+        offset=0,
+        transaction_type="expense",
+    )
+
+    assert date_filtered.total_count == 2
+    assert search_filtered.total_count == 1
+    assert group_filtered.total_count == 1
+    assert group_filtered.transactions[0].normalized_group == "income"
+    assert spending_type_filtered.total_count == 1
+    assert spending_type_filtered.transactions[0].transaction_type == "spending"

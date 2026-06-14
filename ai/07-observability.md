@@ -7,15 +7,25 @@ ai-eos-metadata:
 
 # Observability - Personal Finance Studio
 
+**Last reviewed:** 2026-06-14
+
 ## Phase 1 Observability
 
-- Import logs per entity and source file.
-- Row counts: received, imported, skipped, duplicate, invalid.
-- Parser warnings for missing columns or unexpected values.
-- Account balance freshness.
-- Decision Queue counts by decision type.
-- Internal transfer match confidence and unresolved candidates.
-- Forecast generated timestamp and assumptions.
+- [x] Import logs per entity and source file.
+- [x] Row counts: received, imported, skipped, duplicate, invalid.
+- [x] Parser warnings for missing columns or unexpected values.
+- [x] Account balance readiness via dashboard missing-balance counts.
+- [x] Decision Queue total counts and UI summary counts by decision type.
+- [x] Internal transfer match confidence and unresolved candidates.
+- [x] Forecast assumptions through selected start date, days, candidate inclusion, and confidence fields.
+- [x] E2E health signal for API availability to catch `Failed to fetch`.
+
+## Still Needed
+
+- Import freshness indicator in the UI.
+- Forecast generated timestamp.
+- Stale recurring commitment diagnostics.
+- Structured application logs beyond Uvicorn/dev-server output.
 
 ## Future Observability
 

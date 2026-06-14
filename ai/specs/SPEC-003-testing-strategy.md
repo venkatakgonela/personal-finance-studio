@@ -1,7 +1,7 @@
 # SPEC-003: Testing Strategy
 
 **Author:** Kiran Gonela / Codex  
-**Status:** Draft  
+**Status:** Implemented locally; expand during Phase 1.5  
 **Date:** 2026-06-14
 
 ## 1. Problem Statement
@@ -76,7 +76,15 @@ Coverage:
 
 Use Playwright.
 
-Critical flows:
+Current implemented checks:
+
+1. Real local stack loads dashboard data without a `Failed to fetch` banner.
+2. Dashboard renders the polished visual system and primary navigation.
+3. Transaction filters send API query params and update the table.
+4. Decision Queue renders as a desktop review table with summary spacing.
+5. Decision Queue remains usable on mobile.
+
+Additional critical flows to add as Phase 1.5/packaging hardens:
 
 1. Import Snoop CSV preview.
 2. Confirm import and see detected accounts.
@@ -133,7 +141,12 @@ npm run build
 npm run test:e2e
 ```
 
-Exact commands may change once implementation is scaffolded, but equivalent gates must exist.
+Playwright now starts/checks both the backend API and the frontend dev server:
+
+- API: `http://127.0.0.1:8025/health`
+- Frontend: `http://127.0.0.1:5175`
+
+This is intentional so the E2E suite catches the common `Failed to fetch` class of regression.
 
 ## 7. Release Criteria
 

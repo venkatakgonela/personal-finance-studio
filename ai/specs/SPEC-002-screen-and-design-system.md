@@ -1,7 +1,7 @@
 # SPEC-002: Screen Plan & Design System
 
 **Author:** Kiran Gonela / Codex  
-**Status:** Draft  
+**Status:** Implemented locally; Phase 1.5 refinements next  
 **Date:** 2026-06-14
 
 ## 1. Design Direction
@@ -41,9 +41,9 @@ language; warm colours are reserved for warnings or exceptions.
 
 ## 3. Typography
 
-- Headings: Fraunces or similar editorial serif.
-- Body: Source Sans 3 or Manrope.
-- Numbers: Geist Mono or tabular numbers in the body font.
+- Current implementation uses Inter for headings, body, controls, and tabular financial values after the Monarch-inspired typography cleanup.
+- Keep numeric values tabular via `font-variant-numeric: tabular-nums`.
+- Do not reintroduce mismatched editorial/highlight fonts without a full design-system decision.
 
 ## 4. Data Confidence Language
 
@@ -62,7 +62,9 @@ The app uses distinct page routes, not dashboard anchor jumps:
 - `#/accounts`
 - `#/transactions`
 - `#/cash-flow`
+- `#/calendar`
 - `#/recurring`
+- `#/reports`
 - `#/decision-queue`
 
 Dashboard cards may preview important data, but clicking primary navigation must change the
@@ -107,7 +109,7 @@ previews.
 
 ### Transactions
 
-- Ledger with search, filters, category edit, reviewed toggle.
+- Ledger with global search, selected date window, account filter, category group filter, transaction type filter, reviewed/unreviewed filter, posted status filter, amount/date/account/group columns, type edit, and reviewed save action.
 - Mark as internal transfer, debt payment, refund, ignored, or needs review.
 
 ### Bills & Commitments
@@ -130,6 +132,7 @@ previews.
 - High-impact confirmations only.
 - Each decision should explain why it matters.
 - Actions should train rules or suppress future noise.
+- Current UI uses a desktop review table with summary pills and collapses to mobile-friendly review cards.
 
 ### Insights
 
@@ -153,3 +156,11 @@ previews.
   items so actions feel attached to the data they affect.
 - Collapse secondary page grids before controls become cramped; avoid forcing two columns when the
   readable area is too narrow.
+- Leave clear spacing between summary metadata and tables, especially Decision Queue summary pills and review rows.
+
+## 8. Current UI Status
+
+- Implemented pages: Dashboard, Accounts, Transactions, Cash Flow, Calendar, Recurring, Reports, Decision Queue.
+- Implemented global controls: search, date range preset/custom controls, include-candidates toggle.
+- Implemented transaction controls: account, group, type, review state, status, and clear filters.
+- Implemented verification: Playwright checks dashboard API availability, transaction filter behavior, Decision Queue desktop layout, and Decision Queue mobile actions.

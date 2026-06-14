@@ -64,6 +64,9 @@ Daily import gaps should be handled through import freshness rather than special
 13. [x] Implement dashboard.
 14. [x] Implement Decision Queue.
 15. [x] Implement basic Insights.
+16. [x] Implement date windows and transaction/report filters.
+17. [x] Implement Calendar and Reports route surfaces.
+18. [x] Add browser regression tests for API availability, filters, and Decision Queue layout.
 
 ## 6. Available Money Formula
 
@@ -114,3 +117,25 @@ Avoid generic review noise.
 - Confirm bill estimates are visibly distinct from actual paid amounts.
 - Confirm stale recurring commitments appear as a Decision Queue item rather than silently remaining active forever.
 - Confirm a user can answer a Decision Queue item and future similar rows are handled automatically.
+
+## 9. Current Phase 1 Status
+
+Phase 1 is complete locally. The app supports:
+
+- Snoop preview and persisted import.
+- Household-scoped accounts and transactions.
+- Account balance/type review.
+- Internal transfer detection, confirmation, rejection, and transfer-aware reporting.
+- Transaction ledger date windows, search, filters, and review actions.
+- Recurring commitment candidates, bill instances, and paid-instance actions.
+- Dashboard, Calendar, Cash Flow, Recurring, Reports, Transactions, Accounts, and Decision Queue routes.
+- Dashboard readiness, available-after-commitments, flexible spend, forecast, insights, and upcoming commitments.
+- Regression tests across backend services, API routes, frontend unit tests, and Playwright browser checks.
+
+Not included yet:
+
+- Packaged local app distribution.
+- Open Banking or cloud sync.
+- Business imports.
+- Full Goals/sinking-fund UI.
+- Saved report filters and URL-persisted filter state.

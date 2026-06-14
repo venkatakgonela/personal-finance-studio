@@ -19,6 +19,8 @@ ai-eos-metadata:
 | ADR-006 | Reserve Goals and annual sinking-fund support in the data model | Accepted | 2026-06-14 |
 | ADR-007 | Keep LLM assistant out of Phase 1 core | Accepted | 2026-06-14 |
 | ADR-008 | Make testing a first-class Phase 1 deliverable | Accepted | 2026-06-14 |
+| ADR-009 | Keep Phase 1 frontend simple with typed fetch and CSS tokens | Accepted | 2026-06-14 |
+| ADR-010 | E2E tests must check backend API availability | Accepted | 2026-06-14 |
 
 ## ADR-001 - Use Entity-Scoped Household and Business Model
 
@@ -75,3 +77,17 @@ ai-eos-metadata:
 - **Context**: Personal finance software can look correct while producing wrong balances, duplicated transactions, inflated spending, or misleading forecasts.
 - **Decision**: Phase 1 must include backend unit/integration tests, deterministic finance calculation tests, import fixture tests, API tests, and browser end-to-end tests for core user flows.
 - **Consequences**: Slower initial build, but higher trust. Browser testing becomes part of the release gate rather than a final manual check.
+
+## ADR-009 - Keep Phase 1 Frontend Simple With Typed Fetch and CSS Tokens
+
+- **Status**: Accepted
+- **Context**: The Phase 1 app needs fast iteration, clear local behavior, and a compact codebase more than advanced client caching or a large component framework.
+- **Decision**: Use a typed `fetch` client in `frontend/src/api.ts` and CSS variables/hand-authored CSS in `frontend/src/styles.css` for Phase 1.
+- **Consequences**: The app remains easy to inspect and patch. TanStack Query, Tailwind, or charting libraries can be revisited when Phase 1.5 introduces deeper report drilldowns or more complex cached workflows.
+
+## ADR-010 - E2E Tests Must Check Backend API Availability
+
+- **Status**: Accepted
+- **Context**: The UI can render while the backend is down, producing a `Failed to fetch` banner that pure frontend smoke tests miss.
+- **Decision**: Playwright E2E must start/check both FastAPI on `127.0.0.1:8025` and Vite on `127.0.0.1:5175`.
+- **Consequences**: Browser tests catch local-stack failures earlier. Mocked UI tests remain useful for deterministic table/filter/layout behavior, but at least one real-stack smoke test is required.

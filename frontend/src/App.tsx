@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 
 import {
   type AccountsResponse,
@@ -10,6 +10,7 @@ import {
   type ImportCommitResult,
   type ImportPreview,
   type InsightsResponse,
+  type TransactionFilters,
   type TransactionUpdate,
   type TransactionsResponse,
   type TransferDetectionResult,
@@ -35,13 +36,23 @@ import {
 } from "./api";
 
 type LoadState = "idle" | "loading" | "ready" | "error";
+type PeriodPreset = "this-month" | "last-30" | "next-15" | "next-30" | "custom";
+type TransactionFilterState = {
+  accountId: string;
+  normalizedGroup: string;
+  reviewed: "all" | "reviewed" | "unreviewed";
+  status: string;
+  transactionType: string;
+};
 
 const navItems = [
   { label: "Dashboard", route: "dashboard" },
   { label: "Accounts", route: "accounts" },
   { label: "Transactions", route: "transactions" },
   { label: "Cash Flow", route: "cash-flow" },
+  { label: "Calendar", route: "calendar" },
   { label: "Recurring", route: "recurring" },
+  { label: "Reports", route: "reports" },
   { label: "Decision Queue", route: "decision-queue" },
 ] as const;
 
@@ -52,9 +63,31 @@ const pageTitles: Record<RouteId, { eyebrow: string; title: string }> = {
   accounts: { eyebrow: "Accounts", title: "Review balances and account roles." },
   transactions: { eyebrow: "Transactions", title: "Understand where the money moved." },
   "cash-flow": { eyebrow: "Cash flow", title: "See what is coming next." },
+  calendar: { eyebrow: "Calendar", title: "Plan bills by date." },
   recurring: { eyebrow: "Recurring", title: "Confirm bills, subscriptions, and debt payments." },
+  reports: { eyebrow: "Reports", title: "Spot spending patterns." },
   "decision-queue": { eyebrow: "Decision queue", title: "Resolve only the decisions that matter." },
 };
+
+const periodOptions: Array<{ label: string; value: PeriodPreset }> = [
+  { label: "This month", value: "this-month" },
+  { label: "Last 30 days", value: "last-30" },
+  { label: "Next 15 days", value: "next-15" },
+  { label: "Next 30 days", value: "next-30" },
+  { label: "Custom", value: "custom" },
+];
+
+const transactionGroups = ["fixed", "flexible", "non_monthly", "income", "debt", "transfer", "ignored", "needs_review"];
+
+const transactionTypes = [
+  "needs_review",
+  "spending",
+  "income",
+  "debt_payment",
+  "internal_transfer",
+  "refund",
+  "ignored",
+];
 
 export function App() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -71,12 +104,31 @@ export function App() {
   const [forecast, setForecast] = useState<ForecastResponse | null>(null);
   const [insights, setInsights] = useState<InsightsResponse | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [periodPreset, setPeriodPreset] = useState<PeriodPreset>("this-month");
+  const [customStartDate, setCustomStartDate] = useState(todayIso());
+  const [customEndDate, setCustomEndDate] = useState(addDays(todayIso(), 30));
+  const [includeCandidates, setIncludeCandidates] = useState(true);
+  const [transactionFilters, setTransactionFilters] = useState<TransactionFilterState>({
+    accountId: "",
+    normalizedGroup: "",
+    reviewed: "all",
+    status: "",
+    transactionType: "",
+  });
   const [route, setRoute] = useState<RouteId>(currentRoute());
   const [loadState, setLoadState] = useState<LoadState>("idle");
   const [error, setError] = useState<string | null>(null);
 
   const busy = loadState === "loading";
   const pageTitle = pageTitles[route];
+  const dateWindow = useMemo(
+    () => getDateWindow(periodPreset, customStartDate, customEndDate),
+    [customEndDate, customStartDate, periodPreset],
+  );
+  const transactionQuery = useMemo(
+    () => buildTransactionFilters(dateWindow, transactionFilters, searchQuery),
+    [dateWindow, searchQuery, transactionFilters],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -93,13 +145,21 @@ export function App() {
         insightsResult,
       ] = await Promise.allSettled([
         getAccounts(),
-        getTransactions(),
+        getTransactions(transactionQuery),
         getCommitments(),
         getDecisions(),
         getDashboardSummary(),
-        getUpcomingCommitments(),
-        getForecast(),
-        getInsights(),
+        getUpcomingCommitments({
+          days: dateWindow.days,
+          includeCandidates,
+          startDate: dateWindow.startDate,
+        }),
+        getForecast({
+          days: dateWindow.days,
+          includeCandidates,
+          startDate: dateWindow.startDate,
+        }),
+        getInsights({ endDate: dateWindow.endDate, startDate: dateWindow.startDate }),
       ]);
 
       if (cancelled) return;
@@ -118,7 +178,24 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [dateWindow, includeCandidates, transactionQuery]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function refreshFilteredTransactions() {
+      const result = await getTransactions(transactionQuery);
+      if (!cancelled) setTransactions(result);
+    }
+
+    void refreshFilteredTransactions().catch((err: unknown) => {
+      if (!cancelled) setError(errorMessage(err));
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [transactionQuery]);
 
   useEffect(() => {
     function handleHashChange() {
@@ -202,13 +279,21 @@ export function App() {
       insightsResult,
     ] = await Promise.all([
       getAccounts(),
-      getTransactions(),
+      getTransactions(transactionQuery),
       getCommitments(),
       getDecisions(),
       getDashboardSummary(),
-      getUpcomingCommitments(),
-      getForecast(),
-      getInsights(),
+      getUpcomingCommitments({
+        days: dateWindow.days,
+        includeCandidates,
+        startDate: dateWindow.startDate,
+      }),
+      getForecast({
+        days: dateWindow.days,
+        includeCandidates,
+        startDate: dateWindow.startDate,
+      }),
+      getInsights({ endDate: dateWindow.endDate, startDate: dateWindow.startDate }),
     ]);
     setAccounts(accountsResult);
     setTransactions(transactionsResult);
@@ -316,6 +401,16 @@ export function App() {
               placeholder="Search accounts, bills, transactions..."
               value={searchQuery}
             />
+            <PeriodControls
+              customEndDate={customEndDate}
+              customStartDate={customStartDate}
+              includeCandidates={includeCandidates}
+              onCustomEndDateChange={setCustomEndDate}
+              onCustomStartDateChange={setCustomStartDate}
+              onIncludeCandidatesChange={setIncludeCandidates}
+              onPresetChange={setPeriodPreset}
+              preset={periodPreset}
+            />
             <span className="local-badge">Local data</span>
           </div>
         </header>
@@ -345,6 +440,9 @@ export function App() {
           route={route}
           transactions={transactions}
           onTransactionUpdate={runTransactionUpdate}
+          periodLabel={dateWindow.label}
+          setTransactionFilters={setTransactionFilters}
+          transactionFilters={transactionFilters}
           transferResult={transferResult}
           upcoming={upcoming}
         />
@@ -388,6 +486,66 @@ function Sidebar({ currentRoute }: { currentRoute: RouteId }) {
   );
 }
 
+function PeriodControls({
+  customEndDate,
+  customStartDate,
+  includeCandidates,
+  onCustomEndDateChange,
+  onCustomStartDateChange,
+  onIncludeCandidatesChange,
+  onPresetChange,
+  preset,
+}: {
+  customEndDate: string;
+  customStartDate: string;
+  includeCandidates: boolean;
+  onCustomEndDateChange: (value: string) => void;
+  onCustomStartDateChange: (value: string) => void;
+  onIncludeCandidatesChange: (value: boolean) => void;
+  onPresetChange: (value: PeriodPreset) => void;
+  preset: PeriodPreset;
+}) {
+  return (
+    <div className="period-controls" aria-label="Date range controls">
+      <select
+        aria-label="Date range"
+        onChange={(event) => onPresetChange(event.target.value as PeriodPreset)}
+        value={preset}
+      >
+        {periodOptions.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+      {preset === "custom" ? (
+        <>
+          <input
+            aria-label="Start date"
+            onChange={(event) => onCustomStartDateChange(event.target.value)}
+            type="date"
+            value={customStartDate}
+          />
+          <input
+            aria-label="End date"
+            onChange={(event) => onCustomEndDateChange(event.target.value)}
+            type="date"
+            value={customEndDate}
+          />
+        </>
+      ) : null}
+      <label className="candidate-toggle">
+        <input
+          checked={includeCandidates}
+          onChange={(event) => onIncludeCandidatesChange(event.target.checked)}
+          type="checkbox"
+        />
+        Include candidates
+      </label>
+    </div>
+  );
+}
+
 function AppPage({
   accounts,
   busy,
@@ -409,8 +567,11 @@ function AppPage({
   preview,
   query,
   route,
+  periodLabel,
+  setTransactionFilters,
   transactions,
   onTransactionUpdate,
+  transactionFilters,
   transferResult,
   upcoming,
 }: {
@@ -439,11 +600,14 @@ function AppPage({
   onDetectCommitments: () => Promise<void>;
   onDetectTransfers: () => Promise<void>;
   onPreview: (file: File) => Promise<void>;
+  periodLabel: string;
   preview: ImportPreview | null;
   query: string;
   route: RouteId;
+  setTransactionFilters: (filters: TransactionFilterState) => void;
   transactions: TransactionsResponse | null;
   onTransactionUpdate: (transactionId: string, payload: TransactionUpdate) => Promise<void>;
+  transactionFilters: TransactionFilterState;
   transferResult: TransferDetectionResult | null;
   upcoming: UpcomingCommitmentsResponse | null;
 }) {
@@ -466,10 +630,13 @@ function AppPage({
     return (
       <section className="page-grid page-grid-single" aria-label="Transactions page">
         <TransactionsCard
+          accounts={accounts}
           limit={18}
           onTransactionUpdate={onTransactionUpdate}
           query={query}
+          setTransactionFilters={setTransactionFilters}
           transactions={transactions}
+          transactionFilters={transactionFilters}
         />
       </section>
     );
@@ -490,6 +657,20 @@ function AppPage({
           upcoming={upcoming}
         />
         <UpcomingCard limit={12} onBillPaid={onBillPaid} query={query} upcoming={upcoming} />
+      </section>
+    );
+  }
+
+  if (route === "calendar") {
+    return (
+      <section className="page-grid page-grid-single" aria-label="Calendar page">
+        <UpcomingCard
+          limit={30}
+          onBillPaid={onBillPaid}
+          periodLabel={periodLabel}
+          query={query}
+          upcoming={upcoming}
+        />
       </section>
     );
   }
@@ -522,6 +703,25 @@ function AppPage({
     );
   }
 
+  if (route === "reports") {
+    return (
+      <section className="page-grid" aria-label="Reports page">
+        <InsightsCard insights={insights} periodLabel={periodLabel} />
+        <CashflowCard
+          commitmentResult={commitmentResult}
+          commitments={commitments}
+          dashboard={dashboard}
+          decisions={decisions}
+          forecast={forecast}
+          preview={preview}
+          transactions={transactions}
+          transferResult={transferResult}
+          upcoming={upcoming}
+        />
+      </section>
+    );
+  }
+
   return (
     <section className="dashboard-grid" aria-label="Personal Finance Studio dashboard">
       <GettingStartedCard
@@ -541,8 +741,8 @@ function AppPage({
       />
       <SpendingCard preview={preview} />
       <BudgetCard dashboard={dashboard} />
-      <InsightsCard insights={insights} />
-      <UpcomingCard onBillPaid={onBillPaid} query={query} upcoming={upcoming} />
+      <InsightsCard insights={insights} periodLabel={periodLabel} />
+      <UpcomingCard onBillPaid={onBillPaid} periodLabel={periodLabel} query={query} upcoming={upcoming} />
       <DecisionQueueCard
         busy={busy}
         decisions={decisions}
@@ -736,11 +936,13 @@ function BudgetCard({ dashboard }: { dashboard: DashboardSummary | null }) {
 function UpcomingCard({
   limit = 6,
   onBillPaid,
+  periodLabel,
   query,
   upcoming,
 }: {
   limit?: number;
   onBillPaid?: (instanceId: string, amount: string) => Promise<void>;
+  periodLabel?: string;
   query: string;
   upcoming: UpcomingCommitmentsResponse | null;
 }) {
@@ -754,7 +956,7 @@ function UpcomingCard({
         title="Upcoming"
         subtitle={
           upcoming
-            ? `${upcoming.total_count} items · ${money(upcoming.expected_total)}`
+            ? `${periodLabel ?? `${upcoming.start_date} to ${upcoming.end_date}`} · ${upcoming.total_count} items · ${money(upcoming.expected_total)}`
             : "Next 30 days"
         }
       />
@@ -801,13 +1003,29 @@ function DecisionQueueCard({
   const rows = filterByQuery(decisions?.decisions ?? [], query, (decision) =>
     `${decision.title} ${decision.detail} ${decision.amount} ${decision.decision_type}`,
   ).slice(0, limit);
+  const visibleCount = rows.length;
+  const decisionCounts = countBy(decisions?.decisions ?? [], (decision) => decision.decision_type);
 
   return (
-    <article className="card">
+    <article className="card decision-card">
       <CardHeader
         title="Decision Queue"
-        subtitle={decisions ? `${decisions.total_count} needs review` : "High-impact checks"}
+        subtitle={
+          decisions
+            ? `${visibleCount} shown · ${decisions.total_count} open decisions`
+            : "High-impact checks"
+        }
       />
+      {Object.keys(decisionCounts).length > 0 ? (
+        <div className="decision-summary" aria-label="Decision queue summary">
+          {Object.entries(decisionCounts).map(([type, count]) => (
+            <span className="decision-summary-pill" key={type}>
+              <b>{count}</b>
+              {decisionTypeLabel(type)}
+            </span>
+          ))}
+        </div>
+      ) : null}
       {rows.length === 0 ? (
         <p className="empty-copy">
           {decisions?.total_count === 0
@@ -815,16 +1033,26 @@ function DecisionQueueCard({
             : "No decisions match this search."}
         </p>
       ) : (
-        <div className="decision-list">
+        <div className="decision-list" role="table" aria-label="Decision queue review table">
+          <div className="decision-table-header" role="row">
+            <span>Decision</span>
+            <span>Why it matters</span>
+            <span>Amount</span>
+            <span>Actions</span>
+          </div>
           {rows.map((decision) => (
-            <div className="decision-row" key={`${decision.decision_type}-${decision.id}`}>
-              <div>
+            <div className="decision-row" key={`${decision.decision_type}-${decision.id}`} role="row">
+              <div className="decision-main" role="cell">
+                <span className="decision-type">{decisionTypeLabel(decision.decision_type)}</span>
                 <strong>{decision.title}</strong>
                 <small>{decision.detail}</small>
-                <span>{decision.reason}</span>
               </div>
-              <div className="decision-actions">
-                <b className="amount">{money(decision.amount)}</b>
+              <div className="decision-reason" role="cell">
+                <span>{decision.reason}</span>
+                <small>{titleCase(decision.status)}</small>
+              </div>
+              <b className="amount decision-amount" role="cell">{money(decision.amount)}</b>
+              <div className="decision-actions" role="cell">
                 <button
                   disabled={busy}
                   onClick={() => void onDecisionAction("confirm", decision.decision_type, decision.id)}
@@ -849,15 +1077,21 @@ function DecisionQueueCard({
 }
 
 function TransactionsCard({
+  accounts,
   limit = 6,
   onTransactionUpdate,
   query,
+  setTransactionFilters,
   transactions,
+  transactionFilters,
 }: {
+  accounts: AccountsResponse | null;
   limit?: number;
   onTransactionUpdate?: (transactionId: string, payload: TransactionUpdate) => Promise<void>;
   query: string;
+  setTransactionFilters?: (filters: TransactionFilterState) => void;
   transactions: TransactionsResponse | null;
+  transactionFilters?: TransactionFilterState;
 }) {
   const rows = filterByQuery(transactions?.transactions ?? [], query, (transaction) =>
     `${transaction.merchant_name} ${transaction.description} ${transaction.provider} ${transaction.source_category}`,
@@ -868,10 +1102,25 @@ function TransactionsCard({
         title="Transactions"
         subtitle={transactions ? `${transactions.total_count} non-transfer rows` : "Most recent"}
       />
+      {transactionFilters && setTransactionFilters ? (
+        <TransactionFilterBar
+          accounts={accounts}
+          filters={transactionFilters}
+          onChange={setTransactionFilters}
+        />
+      ) : null}
       {rows.length === 0 ? (
         <p className="empty-copy">No transactions yet.</p>
       ) : (
-        <div className="transaction-list">
+        <div className="transaction-table" role="table" aria-label="Transaction ledger">
+          <div className="transaction-table-header" role="row">
+            <span>Merchant</span>
+            <span>Date</span>
+            <span>Account</span>
+            <span>Group</span>
+            <span>Amount</span>
+            <span>Review</span>
+          </div>
           {rows.map((transaction) => (
             <TransactionReviewRow
               key={transaction.id}
@@ -894,23 +1143,27 @@ function TransactionReviewRow({
 }) {
   const [transactionType, setTransactionType] = useState(transaction.transaction_type);
   return (
-    <div className="transaction-row">
-      <div>
+    <div className="transaction-row" role="row">
+      <div className="transaction-merchant" role="cell">
         <strong>{transaction.merchant_name || transaction.description}</strong>
-        <small>
-          {transaction.date} · {transaction.provider} · {transaction.normalized_group}
-        </small>
+        <small>{transaction.description || transaction.source_category}</small>
       </div>
-      <span className="amount">{money(transaction.amount)}</span>
+      <span className="transaction-date" role="cell">{transaction.date}</span>
+      <span className="transaction-account" role="cell">
+        <strong>{transaction.account_name}</strong>
+        <small>{transaction.provider}</small>
+      </span>
+      <span className="transaction-group" role="cell">{titleCase(transaction.normalized_group)}</span>
+      <span className="amount transaction-amount" role="cell">{money(transaction.amount)}</span>
       {onTransactionUpdate ? (
-        <>
+        <div className="transaction-review" role="cell">
           <select
             aria-label={`Review type for ${transaction.merchant_name || transaction.description}`}
             onChange={(event) => setTransactionType(event.target.value)}
             value={transactionType}
           >
             <option value="needs_review">Needs review</option>
-            <option value="expense">Expense</option>
+            <option value="spending">Expense</option>
             <option value="income">Income</option>
             <option value="debt_payment">Debt payment</option>
             <option value="internal_transfer">Internal transfer</option>
@@ -928,7 +1181,7 @@ function TransactionReviewRow({
           >
             Save
           </button>
-        </>
+        </div>
       ) : null}
     </div>
   );
@@ -1162,14 +1415,105 @@ function CashflowCard({
   );
 }
 
-function InsightsCard({ insights }: { insights: InsightsResponse | null }) {
+function TransactionFilterBar({
+  accounts,
+  filters,
+  onChange,
+}: {
+  accounts: AccountsResponse | null;
+  filters: TransactionFilterState;
+  onChange: (filters: TransactionFilterState) => void;
+}) {
+  return (
+    <div className="filter-bar" aria-label="Transaction filters">
+      <select
+        aria-label="Account filter"
+        onChange={(event) => onChange({ ...filters, accountId: event.target.value })}
+        value={filters.accountId}
+      >
+        <option value="">All accounts</option>
+        {(accounts?.accounts ?? []).map((account) => (
+          <option key={account.id} value={account.id}>
+            {account.display_name}
+          </option>
+        ))}
+      </select>
+      <select
+        aria-label="Category group filter"
+        onChange={(event) => onChange({ ...filters, normalizedGroup: event.target.value })}
+        value={filters.normalizedGroup}
+      >
+        <option value="">All groups</option>
+        {transactionGroups.map((group) => (
+          <option key={group} value={group}>
+            {titleCase(group)}
+          </option>
+        ))}
+      </select>
+      <select
+        aria-label="Transaction type filter"
+        onChange={(event) => onChange({ ...filters, transactionType: event.target.value })}
+        value={filters.transactionType}
+      >
+        <option value="">All types</option>
+        {transactionTypes.map((type) => (
+          <option key={type} value={type}>
+            {titleCase(type)}
+          </option>
+        ))}
+      </select>
+      <select
+        aria-label="Review status filter"
+        onChange={(event) =>
+          onChange({ ...filters, reviewed: event.target.value as TransactionFilterState["reviewed"] })
+        }
+        value={filters.reviewed}
+      >
+        <option value="all">All review states</option>
+        <option value="unreviewed">Unreviewed</option>
+        <option value="reviewed">Reviewed</option>
+      </select>
+      <select
+        aria-label="Posted status filter"
+        onChange={(event) => onChange({ ...filters, status: event.target.value })}
+        value={filters.status}
+      >
+        <option value="">All statuses</option>
+        <option value="posted">Posted</option>
+        <option value="pending">Pending</option>
+      </select>
+      <button
+        onClick={() =>
+          onChange({
+            accountId: "",
+            normalizedGroup: "",
+            reviewed: "all",
+            status: "",
+            transactionType: "",
+          })
+        }
+        type="button"
+      >
+        Clear filters
+      </button>
+    </div>
+  );
+}
+
+function InsightsCard({
+  insights,
+  periodLabel,
+}: {
+  insights: InsightsResponse | null;
+  periodLabel?: string;
+}) {
   return (
     <article className="card">
       <CardHeader
         title="Insights"
         subtitle={
           insights?.start_date && insights?.end_date
-            ? `${insights.start_date} to ${insights.end_date}`
+            ? periodLabel ?? `${insights.start_date} to ${insights.end_date}`
             : "Category groups"
         }
       />
@@ -1181,6 +1525,20 @@ function InsightsCard({ insights }: { insights: InsightsResponse | null }) {
           amount: money(group.net_total),
         }))}
       />
+      {(insights?.top_merchants.length ?? 0) > 0 ? (
+        <>
+          <div className="section-divider" />
+          <CardHeader title="Top Merchants" subtitle="Largest outflows in range" />
+          <CompactList
+            empty="No merchant spend in range."
+            rows={(insights?.top_merchants ?? []).slice(0, 5).map((merchant) => ({
+              title: merchant.merchant_name,
+              meta: `${merchant.transaction_count} transactions`,
+              amount: money(merchant.outflow_total),
+            }))}
+          />
+        </>
+      ) : null}
     </article>
   );
 }
@@ -1251,6 +1609,112 @@ function filterByQuery<T>(rows: T[], query: string, getText: (row: T) => string)
   return rows.filter((row) => getText(row).toLowerCase().includes(normalizedQuery));
 }
 
+function countBy<T>(rows: T[], getKey: (row: T) => string) {
+  return rows.reduce<Record<string, number>>((counts, row) => {
+    const key = getKey(row);
+    counts[key] = (counts[key] ?? 0) + 1;
+    return counts;
+  }, {});
+}
+
+function buildTransactionFilters(
+  dateWindow: ReturnType<typeof getDateWindow>,
+  filters: TransactionFilterState,
+  searchQuery: string,
+): TransactionFilters {
+  return {
+    accountId: filters.accountId || undefined,
+    endDate: dateWindow.endDate,
+    includeTransferCandidates: false,
+    limit: 100,
+    normalizedGroup: filters.normalizedGroup || undefined,
+    reviewed:
+      filters.reviewed === "all"
+        ? undefined
+        : filters.reviewed === "reviewed",
+    search: searchQuery.trim() || undefined,
+    startDate: dateWindow.startDate,
+    status: filters.status || undefined,
+    transactionType: filters.transactionType || undefined,
+  };
+}
+
+function getDateWindow(preset: PeriodPreset, customStartDate: string, customEndDate: string) {
+  const today = todayIso();
+  if (preset === "this-month") {
+    const startDate = startOfMonth(today);
+    const endDate = endOfMonth(today);
+    return {
+      days: daysBetween(startDate, endDate),
+      endDate,
+      label: "This month",
+      startDate,
+    };
+  }
+  if (preset === "last-30") {
+    const startDate = addDays(today, -29);
+    return {
+      days: 30,
+      endDate: today,
+      label: "Last 30 days",
+      startDate,
+    };
+  }
+  if (preset === "next-15") {
+    const endDate = addDays(today, 15);
+    return {
+      days: 15,
+      endDate,
+      label: "Next 15 days",
+      startDate: today,
+    };
+  }
+  if (preset === "custom") {
+    const startDate = customStartDate || today;
+    const endDate = customEndDate || startDate;
+    return {
+      days: daysBetween(startDate, endDate),
+      endDate,
+      label: `${startDate} to ${endDate}`,
+      startDate,
+    };
+  }
+  const endDate = addDays(today, 30);
+  return {
+    days: 30,
+    endDate,
+    label: "Next 30 days",
+    startDate: today,
+  };
+}
+
+function todayIso() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function addDays(isoDate: string, days: number) {
+  const date = new Date(`${isoDate}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function startOfMonth(isoDate: string) {
+  return `${isoDate.slice(0, 8)}01`;
+}
+
+function endOfMonth(isoDate: string) {
+  const year = Number(isoDate.slice(0, 4));
+  const monthIndex = Number(isoDate.slice(5, 7)) - 1;
+  return new Date(Date.UTC(year, monthIndex + 1, 0)).toISOString().slice(0, 10);
+}
+
+function daysBetween(startDate: string, endDate: string) {
+  const start = new Date(`${startDate}T00:00:00Z`).getTime();
+  const end = new Date(`${endDate}T00:00:00Z`).getTime();
+  if (Number.isNaN(start) || Number.isNaN(end)) return 30;
+  return Math.max(1, Math.round((end - start) / 86_400_000));
+}
+
 function money(value: string) {
   const parsed = Number(value);
   if (Number.isNaN(parsed)) return value;
@@ -1261,6 +1725,12 @@ function titleCase(value: string) {
   return value
     .replace(/_/g, " ")
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function decisionTypeLabel(value: string) {
+  if (value === "internal_transfer") return "Transfer match";
+  if (value === "commitment_candidate") return "Recurring candidate";
+  return titleCase(value);
 }
 
 function errorMessage(error: unknown): string {

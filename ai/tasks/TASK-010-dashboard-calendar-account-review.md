@@ -1,5 +1,9 @@
 # TASK-010: Dashboard, Calendar, and Account Review
 
+**Status:** Complete  
+**Assigned To:** Codex  
+**Created Date:** 2026-06-14
+
 ## Objective
 
 Move Phase 1 from import-only setup toward a usable household finance dashboard by exposing

@@ -88,6 +88,43 @@ def test_accounts_and_transactions_endpoints(api_client, db_session: Session) ->
     assert transactions_response.json()["total_count"] == 3
 
 
+def test_transactions_endpoint_applies_ledger_filters(api_client, db_session: Session) -> None:
+    client = TestClient(api_client)
+
+    with (FIXTURES / "snoop_minimal.csv").open("rb") as csv_file:
+        client.post(
+            "/api/imports/snoop/commit",
+            files={"file": ("snoop_minimal.csv", csv_file, "text/csv")},
+        )
+
+    income_response = client.get(
+        "/api/transactions"
+        "?include_transfer_candidates=false"
+        "&start_date=2026-06-01"
+        "&end_date=2026-06-30"
+        "&normalized_group=income"
+    )
+    spending_response = client.get(
+        "/api/transactions?include_transfer_candidates=false&transaction_type=expense"
+    )
+    reviewed_response = client.get(
+        "/api/transactions?include_transfer_candidates=false&reviewed=true"
+    )
+
+    assert income_response.status_code == 200
+    income_payload = income_response.json()
+    assert income_payload["total_count"] == 1
+    assert income_payload["transactions"][0]["normalized_group"] == "income"
+
+    assert spending_response.status_code == 200
+    spending_payload = spending_response.json()
+    assert spending_payload["total_count"] == 1
+    assert spending_payload["transactions"][0]["transaction_type"] == "spending"
+
+    assert reviewed_response.status_code == 200
+    assert reviewed_response.json()["total_count"] == 0
+
+
 def test_commitments_endpoints(api_client, db_session: Session) -> None:
     client = TestClient(api_client)
 

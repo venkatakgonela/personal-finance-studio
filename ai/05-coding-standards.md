@@ -32,6 +32,7 @@ uv run pytest
 - Use CSS variables from `SPEC-002` for palette, spacing, and typography.
 - Use tabular numbers for financial values.
 - Do not add charts where a table/timeline gives clearer decisions.
+- Keep Playwright tests deterministic: mock volatile UI data when testing layout/filter behavior, but retain at least one real-stack smoke test for API availability.
 
 Expected commands:
 
@@ -41,6 +42,8 @@ npm run lint
 npm run test
 npm run test:e2e
 ```
+
+`npm run test:e2e` is expected to check both `127.0.0.1:8025/health` and the Vite app.
 
 ## General
 

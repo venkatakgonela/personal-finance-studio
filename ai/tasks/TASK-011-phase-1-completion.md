@@ -27,3 +27,7 @@ forecasting, recurring bills, transaction cleanup, and useful dashboard/route vi
 - [x] Route pages expose Accounts, Transactions, Cash Flow, Recurring, and Decision Queue separately.
 - [x] Backend completion tests cover transaction review, forecast, bill payment, and insights.
 - [x] Frontend lint/test/build and backend ruff/pytest pass.
+
+## Completion Status
+
+Phase 1 is complete locally. Follow-up polish and hardening were captured in `TASK-012`.

@@ -9,6 +9,7 @@ ai-eos-metadata:
 
 **Owner:** Kiran Gonela  
 **Type:** Local-first finance app
+**Current Status:** Phase 1 Household Control Center is implemented locally; Phase 1.5 is next.
 
 ## 1. Mission
 
@@ -46,13 +47,15 @@ The product should answer, clearly and calmly:
 
 ## 4. Success Metrics
 
-- Snoop CSV import processes the sample export without data loss.
-- Imported accounts can be classified and scoped to Household.
-- Internal transfers are detected, linked, and excluded from spend/income reporting.
-- Dashboard shows cash on hand, available after commitments, flexible spend remaining, and upcoming obligations.
-- Calendar shows bills, subscriptions, loans, credit-card payments, BNPL, and income by date range.
-- Forecast can project account balances over today, 7 days, 15 days, 30 days, and custom windows.
-- Decision Queue remains small and high-impact.
+- [x] Snoop CSV import processes the sample export without data loss.
+- [x] Imported accounts can be classified and scoped to Household.
+- [x] Internal transfers are detected, linked, and excluded from spend/income reporting.
+- [x] Dashboard shows cash readiness, available after commitments, flexible spend remaining, upcoming obligations, and review counts.
+- [x] Calendar/upcoming views show bills, subscriptions, loans, credit-card payments, BNPL, income-style commitments, and candidates by selected date window.
+- [x] Forecast can project account balances over selected windows.
+- [x] Transactions can be filtered by date, account, normalized group, type, review state, posted status, and search.
+- [x] Decision Queue stays focused on high-impact transfer and recurring-commitment decisions.
+- [x] Quality gates cover backend logic, API filters, frontend unit tests, and browser E2E checks.
 
 ## 5. Users
 

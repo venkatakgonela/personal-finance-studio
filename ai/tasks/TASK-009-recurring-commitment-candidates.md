@@ -1,5 +1,9 @@
 # TASK-009: Recurring Commitment Candidates
 
+**Status:** Complete  
+**Assigned To:** Codex  
+**Created Date:** 2026-06-14
+
 ## Objective
 
 Detect likely recurring bills, subscriptions, loans, credit-card payments, and annual fees from

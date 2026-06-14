@@ -277,6 +277,32 @@ export type UpcomingCommitmentsResponse = {
   items: UpcomingCommitment[];
 };
 
+export type DateWindowParams = {
+  days?: number;
+  endDate?: string;
+  includeCandidates?: boolean;
+  startDate?: string;
+};
+
+export type InsightParams = {
+  endDate?: string;
+  startDate?: string;
+};
+
+export type TransactionFilters = {
+  accountId?: string;
+  endDate?: string;
+  includeTransferCandidates?: boolean;
+  limit?: number;
+  normalizedGroup?: string;
+  offset?: number;
+  reviewed?: boolean;
+  search?: string;
+  startDate?: string;
+  status?: string;
+  transactionType?: string;
+};
+
 export async function previewSnoopImport(file: File): Promise<ImportPreview> {
   return uploadCsv<ImportPreview>("/api/imports/snoop/preview", file);
 }
@@ -327,16 +353,32 @@ export async function getDashboardSummary(): Promise<DashboardSummary> {
   return fetchJson<DashboardSummary>("/api/dashboard");
 }
 
-export async function getUpcomingCommitments(): Promise<UpcomingCommitmentsResponse> {
-  return fetchJson<UpcomingCommitmentsResponse>("/api/calendar/upcoming?days=30");
+export async function getUpcomingCommitments(
+  params: DateWindowParams = {},
+): Promise<UpcomingCommitmentsResponse> {
+  const query = buildQuery({
+    days: params.days ?? 30,
+    include_candidates: params.includeCandidates,
+    start_date: params.startDate,
+  });
+  return fetchJson<UpcomingCommitmentsResponse>(`/api/calendar/upcoming${query}`);
 }
 
-export async function getForecast(): Promise<ForecastResponse> {
-  return fetchJson<ForecastResponse>("/api/forecast?days=30");
+export async function getForecast(params: DateWindowParams = {}): Promise<ForecastResponse> {
+  const query = buildQuery({
+    days: params.days ?? 30,
+    include_candidates: params.includeCandidates,
+    start_date: params.startDate,
+  });
+  return fetchJson<ForecastResponse>(`/api/forecast${query}`);
 }
 
-export async function getInsights(): Promise<InsightsResponse> {
-  return fetchJson<InsightsResponse>("/api/insights");
+export async function getInsights(params: InsightParams = {}): Promise<InsightsResponse> {
+  const query = buildQuery({
+    end_date: params.endDate,
+    start_date: params.startDate,
+  });
+  return fetchJson<InsightsResponse>(`/api/insights${query}`);
 }
 
 export async function confirmDecision(
@@ -374,8 +416,23 @@ export async function updateAccount(
   });
 }
 
-export async function getTransactions(): Promise<TransactionsResponse> {
-  return fetchJson<TransactionsResponse>("/api/transactions?include_transfer_candidates=false");
+export async function getTransactions(
+  filters: TransactionFilters = {},
+): Promise<TransactionsResponse> {
+  const query = buildQuery({
+    account_id: filters.accountId,
+    end_date: filters.endDate,
+    include_transfer_candidates: filters.includeTransferCandidates ?? false,
+    limit: filters.limit ?? 100,
+    normalized_group: filters.normalizedGroup,
+    offset: filters.offset,
+    reviewed: filters.reviewed,
+    search: filters.search,
+    start_date: filters.startDate,
+    status: filters.status,
+    transaction_type: filters.transactionType,
+  });
+  return fetchJson<TransactionsResponse>(`/api/transactions${query}`);
 }
 
 export async function updateTransaction(
@@ -402,4 +459,14 @@ async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
     throw new Error(errorText || `Request failed with ${response.status}`);
   }
   return response.json() as Promise<T>;
+}
+
+function buildQuery(params: Record<string, boolean | number | string | undefined>): string {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined || value === "") continue;
+    query.set(key, String(value));
+  }
+  const serialized = query.toString();
+  return serialized ? `?${serialized}` : "";
 }

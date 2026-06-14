@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from datetime import date
 from decimal import Decimal
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.models import Account, Entity, InternalTransferMatch, Transaction
@@ -20,9 +21,17 @@ def get_transaction_ledger(
     session: Session,
     entity_id: str,
     *,
+    account_id: str | None = None,
+    end_date: date | None = None,
+    normalized_group: str | None = None,
     include_transfer_candidates: bool,
     limit: int,
     offset: int,
+    reviewed: bool | None = None,
+    search: str | None = None,
+    start_date: date | None = None,
+    status: str | None = None,
+    transaction_type: str | None = None,
 ) -> TransactionLedgerResponse:
     entity = session.get(Entity, entity_id)
     if entity is None:
@@ -30,11 +39,51 @@ def get_transaction_ledger(
 
     base_query = select(Transaction).where(Transaction.entity_id == entity_id)
     count_query = select(func.count(Transaction.id)).where(Transaction.entity_id == entity_id)
+
+    if start_date is not None:
+        base_query = base_query.where(Transaction.transaction_date >= start_date)
+        count_query = count_query.where(Transaction.transaction_date >= start_date)
+    if end_date is not None:
+        base_query = base_query.where(Transaction.transaction_date <= end_date)
+        count_query = count_query.where(Transaction.transaction_date <= end_date)
+    if account_id:
+        base_query = base_query.where(Transaction.account_id == account_id)
+        count_query = count_query.where(Transaction.account_id == account_id)
+    if transaction_type:
+        transaction_types = (
+            ["spending", "expense"] if transaction_type == "expense" else [transaction_type]
+        )
+        base_query = base_query.where(Transaction.transaction_type.in_(transaction_types))
+        count_query = count_query.where(Transaction.transaction_type.in_(transaction_types))
+    if status:
+        base_query = base_query.where(Transaction.status == status)
+        count_query = count_query.where(Transaction.status == status)
+    if reviewed is not None:
+        base_query = base_query.where(Transaction.reviewed.is_(reviewed))
+        count_query = count_query.where(Transaction.reviewed.is_(reviewed))
+    if search:
+        pattern = f"%{search.strip()}%"
+        search_filter = or_(
+            Transaction.merchant_name.ilike(pattern),
+            Transaction.description.ilike(pattern),
+            Transaction.source_category.ilike(pattern),
+            Transaction.notes.ilike(pattern),
+        )
+        base_query = base_query.where(search_filter)
+        count_query = count_query.where(search_filter)
     if not include_transfer_candidates:
         base_query = base_query.where(Transaction.transaction_type.not_in(EXCLUDED_TRANSFER_TYPES))
         count_query = count_query.where(
             Transaction.transaction_type.not_in(EXCLUDED_TRANSFER_TYPES)
         )
+    if normalized_group:
+        matching_ids = [
+            transaction.id
+            for transaction in session.scalars(base_query).all()
+            if normalized_group_for_transaction(transaction) == normalized_group
+        ]
+        base_query = select(Transaction).where(Transaction.id.in_(matching_ids))
+        count_query = select(func.count(Transaction.id)).where(Transaction.id.in_(matching_ids))
 
     transactions = session.scalars(
         base_query.order_by(Transaction.transaction_date.desc(), Transaction.created_at.desc())
