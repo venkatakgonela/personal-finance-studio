@@ -39,7 +39,7 @@ ai-eos-metadata:
 
 ## Phase 1 Completion Notes
 
-- The local app now has React hash routes for Dashboard, Accounts, Transactions, Cash Flow, Calendar, Recurring, Reports, and Decision Queue.
+- The local app now has React hash routes for Dashboard, Accounts, Transactions, Cash Flow, Calendar, Recurring, Goals, Sinking Funds, Monthly Review, Subscriptions, Reports, Decision Queue, and Settings.
 - The backend exposes deterministic APIs for imports, accounts, transactions, transfers, commitments, calendar, forecast, dashboard, insights, and decisions.
 - Playwright E2E starts/checks both the frontend and backend, including a real-stack dashboard smoke test that fails if the API is down and the UI would show `Failed to fetch`.
 - Remaining Phase 1 caveat: this is locally complete, not a packaged release. Data is still local/dev-server oriented and Open Banking/cloud sync remain out of scope.
@@ -60,7 +60,9 @@ ai-eos-metadata:
 - Backend planning data is exposed through `GET /api/planning/overview` and remains deterministic from existing accounts, transactions, commitments, decisions, and import logs.
 - Frontend routes now include Goals, Sinking Funds, Monthly Review, and Subscriptions alongside the existing Phase 1 routes.
 - Reports now include saved filters that deep-link into filtered transactions and planning views.
+- Dashboard now has a time-aware UK greeting, GBP formatting, balance-readiness card, spending pulse, compact Decision Queue preview, and date-aware bill naming (`Recent Bills`, `Bills This Month`, `Upcoming Bills`).
 - The E2E suite checks every primary route for reachability, failed-fetch regressions, dead hash links, unnamed buttons, and horizontal overflow.
+- The E2E suite also protects dashboard API availability, date-range bill-title behavior, compact dashboard Decision Queue rendering, transaction filters, candidate-toggle scope, fixed-sidebar scrolling, and Decision Queue desktop/mobile layouts.
 - Remaining caveat: Phase 1.5 planning data is derived locally rather than user-authored persisted goals. Persisted custom goals can be part of Phase 2/3 if desired.
 
 ## Phase 2 - Expansion

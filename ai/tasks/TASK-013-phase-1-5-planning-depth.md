@@ -32,6 +32,9 @@ freshness, and stale commitment diagnostics.
   subscription prompts, import freshness, and stale commitment reviews.
 - Route-health E2E coverage now checks every primary route for failed-fetch text, dead hash links,
   unnamed buttons, and horizontal overflow.
+- Dashboard polish now includes a UK time-aware greeting, GBP-only money formatting, Balance
+  Readiness setup status, Spending Pulse category bars, compact Decision Queue preview, fixed
+  sidebar scrolling, and date-aware bill titles for historical/current/future ranges.
 
 ## Validation
 
@@ -42,6 +45,14 @@ uv run ruff check app tests
 uv run pytest
 cd frontend && npm run lint
 cd frontend && npm run test
+cd frontend && npm run build
+cd frontend && npm run test:e2e
+```
+
+Latest dashboard-polish verification also passed:
+
+```bash
+cd frontend && npm run lint
 cd frontend && npm run build
 cd frontend && npm run test:e2e
 ```

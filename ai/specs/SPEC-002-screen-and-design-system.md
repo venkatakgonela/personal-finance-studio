@@ -88,18 +88,18 @@ previews.
 
 ### Household Dashboard
 
-- Cash on hand.
-- Available after commitments.
-- Flexible spend remaining this week.
-- Due today / this week / next 15 days.
-- Expected income.
-- Low-balance warnings.
-- Decision Queue preview.
-- Upcoming timeline.
+- Time-aware UK greeting in the page title.
+- Today's household position hero with cash readiness, available after commitments, flexible spend remaining, selected-window bills, Decision Queue count, and data freshness.
+- Balance Readiness card for setup state, known balances, and missing balances.
+- Spending Pulse card with categorized outflow bars and flexible allowance context.
+- Bills card with date-aware naming: `Recent Bills` for historical ranges, `Bills This Month` for current month, and `Upcoming Bills` for future windows.
+- Compact Decision Queue preview; full review table belongs on the Decision Queue page.
+- Cash Flow readiness/forecast card.
 
 ### Calendar
 
 - Today, week, 15-day, month, custom range.
+- Historical ranges should not be labelled as upcoming.
 - Bills, subscriptions, loans, credit cards, BNPL, income.
 - Clear actual/estimated/pending labels.
 
@@ -196,4 +196,5 @@ previews.
 - Implemented global controls: search, date range preset/custom controls, include-candidates toggle.
 - Implemented transaction controls: account, group, type, review state, status, and clear filters.
 - Implemented planning controls: saved report filters with URL query persistence for transaction drilldowns.
-- Implemented verification: Playwright checks dashboard API availability, transaction filter behavior, Phase 1.5 planning routes, all-route UI health, Decision Queue desktop layout, and Decision Queue mobile actions.
+- Implemented dashboard polish: time-aware UK greeting, GBP-only money formatting, date-aware bills terminology, Balance Readiness, Spending Pulse, compact dashboard Decision Queue preview, fixed sidebar, and hidden main scrollbar.
+- Implemented verification: Playwright checks dashboard API availability, dashboard date-range bill-title behavior, compact dashboard Decision Queue rendering, transaction filter behavior, Phase 1.5 planning routes, all-route UI health, candidate toggle scope, fixed-sidebar scrolling, Decision Queue desktop layout, and Decision Queue mobile actions.

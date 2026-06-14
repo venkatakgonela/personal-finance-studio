@@ -10,10 +10,14 @@ The first release focuses on the Household entity using Snoop CSV imports. It he
 - What bills, credit cards, loans, and BNPL payments are due next?
 - What will balances look like on a selected future date?
 
-Implementation has started from the locked Phase 1 plan. The current local slice supports Snoop
-import, account and transaction review, internal transfer candidates, recurring commitment
-candidates, Phase 1.5 planning routes, saved filter drilldowns, import freshness, and local service
-health.
+Implementation has moved through the locked Phase 1 plan and Phase 1.5 planning-depth slice. The
+current local app supports Snoop import, account and transaction review, internal transfer
+candidates, recurring commitment candidates, date-windowed bills, Phase 1.5 planning routes, saved
+filter drilldowns, import freshness, local service health, Monarch-inspired reporting visuals, and a
+dashboard with time-aware greeting, balance-readiness status, spending pulse, and compact Decision
+Queue preview.
+
+All current Household money views are GBP-only.
 
 ## Planning Docs
 

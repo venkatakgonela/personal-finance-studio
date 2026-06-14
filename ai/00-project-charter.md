@@ -9,7 +9,7 @@ ai-eos-metadata:
 
 **Owner:** Kiran Gonela  
 **Type:** Local-first finance app
-**Current Status:** Phase 1 Household Control Center is implemented locally; Phase 1.5 is next.
+**Current Status:** Phase 1.5 Planning Depth is implemented locally; Phase 2 expansion planning is next.
 
 ## 1. Mission
 
@@ -21,6 +21,7 @@ The product should answer, clearly and calmly:
 - What is already committed?
 - What is flexible and safe to spend?
 - What bills are due today, this week, next 15 days, or any selected date?
+- What bills were paid or expected in recent historical ranges?
 - What will account balances look like after planned obligations?
 - Which imported transactions need human decision because they affect future accuracy?
 
@@ -32,6 +33,7 @@ The product should answer, clearly and calmly:
 - Detect internal transfers early so spending, income, and availability are not distorted.
 - Detect and confirm recurring commitments, subscriptions, variable bills, loans, credit cards, and BNPL.
 - Support flexible spending as a single useful dashboard number.
+- Keep all Phase 1/1.5 household money views GBP-only.
 - Show actuals, estimates, forecasts, and pending data with distinct visual language.
 - Keep the experience calm, useful, and low-noise.
 
@@ -42,7 +44,7 @@ The product should answer, clearly and calmly:
 - No mobile app in Phase 1.
 - No investment tracking in Phase 1.
 - No tax/accounting reports in Phase 1.
-- No local LLM assistant as a Phase 1 dependency.
+- No local LLM assistant as a Phase 1 or Phase 1.5 dependency.
 - No automatic personal/business data mixing.
 
 ## 4. Success Metrics
@@ -51,7 +53,8 @@ The product should answer, clearly and calmly:
 - [x] Imported accounts can be classified and scoped to Household.
 - [x] Internal transfers are detected, linked, and excluded from spend/income reporting.
 - [x] Dashboard shows cash readiness, available after commitments, flexible spend remaining, upcoming obligations, and review counts.
-- [x] Calendar/upcoming views show bills, subscriptions, loans, credit-card payments, BNPL, income-style commitments, and candidates by selected date window.
+- [x] Dashboard uses time-aware greeting, balance-readiness setup status, spending pulse, compact Decision Queue preview, and date-aware bill titles.
+- [x] Calendar/bill views show bills, subscriptions, loans, credit-card payments, BNPL, income-style commitments, and candidates by selected date window.
 - [x] Forecast can project account balances over selected windows.
 - [x] Transactions can be filtered by date, account, normalized group, type, review state, posted status, and search.
 - [x] Decision Queue stays focused on high-impact transfer and recurring-commitment decisions.

@@ -81,13 +81,15 @@ Use Playwright.
 Current implemented checks:
 
 1. Real local stack loads dashboard data without a `Failed to fetch` banner.
-2. Dashboard renders the polished visual system and primary navigation.
+2. Dashboard renders the polished visual system, primary navigation, Balance Readiness, Spending Pulse, compact Decision Queue preview, and date-aware bills titles.
 3. Transaction filters send API query params and update the table.
 4. Decision Queue renders as a desktop review table with summary spacing.
 5. Decision Queue remains usable on mobile.
 6. Phase 1.5 planning routes render Goals, Sinking Funds, Monthly Review, and Subscriptions.
 7. Saved filter URLs persist query state into the Transactions filters.
 8. Every primary route is reachable without failed-fetch text, dead hash links, unnamed buttons, or horizontal overflow.
+9. Candidate toggle is scoped to planning views and changes upcoming-bill results.
+10. Sidebar remains fixed while page content scrolls.
 
 Additional critical flows to add as Phase 1.5/packaging hardens:
 
@@ -108,6 +110,8 @@ Before Phase 1 is considered ready:
 
 - Use the real Snoop sample locally.
 - Browse dashboard, calendar, transactions, accounts, bills, forecast, goals, sinking funds, monthly review, subscriptions, reports, settings, and decision queue.
+- Confirm the dashboard greeting follows UK local time and selected bill windows are not mislabeled.
+- Confirm Household money formatting is GBP-only.
 - Confirm terminology feels understandable.
 - Confirm Decision Queue is not noisy.
 - Confirm the visual system makes estimates and forecasts obvious.
