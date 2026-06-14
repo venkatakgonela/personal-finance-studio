@@ -19,6 +19,7 @@ Phase 1 must turn Snoop CSV data into a trustworthy local finance control center
 - Normalize categories into fixed, flexible, non-monthly, income, debt, transfer, and ignored groups.
 - Detect recurring commitments and require confirmation before using them as bills.
 - Support variable bills with expected, estimated, and actual amounts.
+- Flag stale or overdue recurring patterns when the expected cadence is missed, so the user can confirm whether the commitment is still active.
 - Support annual/custom/one-off frequencies for future sinking funds.
 - Show cash on hand, available after commitments, flexible spend remaining, and upcoming obligations.
 - Keep Decision Queue useful and low-noise.
@@ -31,6 +32,7 @@ Phase 1 must turn Snoop CSV data into a trustworthy local finance control center
 - No LLM assistant.
 - No investment tracking.
 - No cloud sync or auth.
+- No multi-currency support in Phase 1; all cash, bills, forecasts, and reports assume GBP.
 
 ## 4. Snoop CSV Shape
 
@@ -42,6 +44,8 @@ Account Provider, Account Name, Status, Sub Type
 ```
 
 The importer must tolerate optional future balance columns if Snoop provides them in newer exports.
+
+Daily import gaps should be handled through import freshness rather than special catch-up logic. If Snoop exports are full-history, the next successful import should upsert any missing records while import freshness still shows that a gap occurred.
 
 ## 5. Build Sequence
 
@@ -91,6 +95,7 @@ Decision Queue should only ask questions that materially improve forecast or rep
 
 - Confirm internal transfer candidate.
 - Confirm recurring commitment candidate.
+- Confirm recurring commitment still active when its expected cadence becomes stale or overdue.
 - Mark matched transaction as paid bill.
 - Update bill estimate after material amount change.
 - Approve category rule that affects future transactions.
@@ -103,6 +108,9 @@ Avoid generic review noise.
 - Import sample Snoop CSV and confirm row count.
 - Confirm duplicate import does not duplicate transactions.
 - Confirm transfer matches are excluded from spend/income reports.
+- Confirm paired internal transfers are linked as one transfer event where possible, not surfaced as two unrelated decisions.
+- Confirm missed daily imports surface as stale import freshness without breaking the next successful full-history import.
 - Confirm dashboard calculations do not include credit-card limits or loans as available cash.
 - Confirm bill estimates are visibly distinct from actual paid amounts.
+- Confirm stale recurring commitments appear as a Decision Queue item rather than silently remaining active forever.
 - Confirm a user can answer a Decision Queue item and future similar rows are handled automatically.
