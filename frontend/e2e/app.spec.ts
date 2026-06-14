@@ -401,13 +401,19 @@ test("scopes candidate toggle to planning views and updates upcoming bills", asy
 
   await expect(page.getByLabel("Include bill candidates")).toBeVisible();
   await expect(page.getByText(/Candidate bills included/)).toBeVisible();
-  await expect(page.getByText("Klarna")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Bills This Month" })).toBeVisible();
+  await expect(page.locator(".calendar-grid")).toBeVisible();
+  await expect(page.locator(".calendar-day.has-plans")).toContainText("Klarna");
+  await expect(page.locator(".calendar-day.has-plans")).toContainText("£98.31");
+  await expect(page.getByRole("button", { name: /Current bills/ })).toHaveAttribute("aria-expanded", "true");
+  await expect(page.getByText("Klarna")).toHaveCount(2);
 
   await page.getByLabel("Include bill candidates").uncheck();
 
   await expect(page.getByText(/Confirmed bills only/)).toBeVisible();
   await expect(page.getByText("Klarna")).toHaveCount(0);
-  await expect(page.getByText("No upcoming commitments found.")).toBeVisible();
+  await expect(page.locator(".calendar-day.has-plans")).toHaveCount(0);
+  await expect(page.getByText("No bills or planned commitments found for this range.")).toBeVisible();
 
   await page.goto("/#/decision-queue");
 

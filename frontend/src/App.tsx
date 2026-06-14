@@ -1,4 +1,10 @@
 import { type ReactNode, useEffect, useMemo, useState } from "react";
+import {
+  sankey as createSankey,
+  sankeyLinkHorizontal,
+  type SankeyGraph,
+  type SankeyNode,
+} from "d3-sankey";
 
 import {
   API_BASE,
@@ -63,6 +69,12 @@ type AccountGroup = {
   id: string;
   label: string;
   monthChange: number;
+  total: number;
+};
+type CalendarDayModel = {
+  date: string;
+  inPeriod: boolean;
+  items: UpcomingCommitmentsResponse["items"];
   total: number;
 };
 
@@ -813,9 +825,8 @@ function AppPage({
   if (route === "calendar") {
     return (
       <section className="page-grid page-grid-single" aria-label="Calendar page">
-        <UpcomingCard
+        <CalendarPlannerCard
           includeCandidates={includeCandidates}
-          limit={30}
           onBillPaid={onBillPaid}
           periodKind={periodKind}
           periodLabel={periodLabel}
@@ -1411,19 +1422,20 @@ function SankeyReportCard({
         </div>
       </div>
       <div className="sankey-stage">
-        <svg className="sankey-svg" viewBox="0 0 1040 430" role="img" aria-label={`${titleCase(reportView)} Sankey report`}>
+        <svg className="sankey-svg" viewBox="0 0 1180 520" role="img" aria-label={`${titleCase(reportView)} Sankey report`}>
           <defs>
             <linearGradient id="sankeyIncome" x1="0" x2="1" y1="0" y2="0">
-              <stop offset="0%" stopColor="#bfeaf4" stopOpacity="0.92" />
-              <stop offset="100%" stopColor="#d7ecd8" stopOpacity="0.92" />
+              <stop offset="0%" stopColor="#bfeaf4" stopOpacity="0.94" />
+              <stop offset="48%" stopColor="#d4eee0" stopOpacity="0.9" />
+              <stop offset="100%" stopColor="#f5efb9" stopOpacity="0.84" />
             </linearGradient>
           </defs>
           {sankey.flows.map((flow) => (
             <path
               className="sankey-flow"
-              d={sankeyBandPath(flow.fromX, flow.fromY, flow.height, flow.toX, flow.toY, flow.height)}
+              d={flow.path}
               key={flow.id}
-              style={{ fill: flow.color, opacity: flow.opacity }}
+              style={{ opacity: flow.opacity, stroke: flow.color, strokeWidth: flow.width }}
             />
           ))}
           {sankey.nodes.map((node) => (
@@ -1432,13 +1444,13 @@ function SankeyReportCard({
                 className="sankey-node"
                 fill={node.color}
                 height={node.height}
-                rx="4"
-                width="14"
+                rx="0"
+                width="18"
                 x={node.x}
                 y={node.y}
               />
               <text
-                className={`sankey-label ${node.emphasis === "middle" ? "sankey-label-middle" : ""}`}
+                className="sankey-label"
                 textAnchor={node.anchor}
                 x={node.labelX}
                 y={node.labelY}
@@ -1446,7 +1458,7 @@ function SankeyReportCard({
                 {node.label}
               </text>
               <text
-                className={`sankey-value ${node.emphasis === "middle" ? "sankey-value-middle" : ""}`}
+                className="sankey-value"
                 textAnchor={node.anchor}
                 x={node.labelX}
                 y={node.labelY + 22}
@@ -1521,6 +1533,107 @@ function UpcomingCard({
               : undefined,
         }))}
       />
+    </article>
+  );
+}
+
+function CalendarPlannerCard({
+  includeCandidates,
+  onBillPaid,
+  periodKind,
+  periodLabel,
+  query,
+  upcoming,
+}: {
+  includeCandidates: boolean;
+  onBillPaid: (instanceId: string, amount: string) => Promise<void>;
+  periodKind: DateWindowKind;
+  periodLabel: string;
+  query: string;
+  upcoming: UpcomingCommitmentsResponse | null;
+}) {
+  const candidateMode = includeCandidates ? "Candidate bills included" : "Confirmed bills only";
+  const title = billCardTitle(periodKind, periodLabel);
+  const rows = filterByQuery(upcoming?.items ?? [], query, (item) =>
+    `${item.commitment_name} ${item.commitment_type} ${item.commitment_status}`,
+  );
+  const calendarDays = buildCalendarDays(upcoming?.start_date, upcoming?.end_date, rows);
+  const daysWithPlans = calendarDays.filter((day) => day.inPeriod && day.items.length > 0).length;
+  const largestDay = calendarDays
+    .filter((day) => day.inPeriod)
+    .reduce<CalendarDayModel>(
+      (largest, day) => (day.total > largest.total ? day : largest),
+      { date: "", inPeriod: false, items: [], total: 0 },
+    );
+
+  return (
+    <article className="card calendar-planner-card">
+      <CardHeader
+        title={title}
+        subtitle={
+          upcoming
+            ? `${periodLabel} · ${candidateMode} · ${upcoming.total_count} items · ${money(upcoming.expected_total)}`
+            : `${periodLabel} · ${candidateMode}`
+        }
+      />
+      <div className="calendar-summary-strip" aria-label="Calendar summary">
+        <Metric label="Planned total" value={upcoming ? money(upcoming.expected_total) : "-"} />
+        <Metric label="Planned days" value={daysWithPlans} />
+        <Metric label="Busiest day" value={largestDay.date ? `${formatShortDay(largestDay.date)} · ${money(String(largestDay.total))}` : "-"} />
+      </div>
+      <div className="calendar-grid-shell">
+        <div className="calendar-weekdays" aria-hidden="true">
+          {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
+            <span key={day}>{day}</span>
+          ))}
+        </div>
+        <div className="calendar-grid" aria-label={`${periodLabel} bill calendar`}>
+          {calendarDays.map((day) => (
+            <div
+              className={`calendar-day ${day.inPeriod ? "" : "calendar-day-muted"} ${day.items.length > 0 ? "has-plans" : ""}`}
+              key={day.date}
+            >
+              <div className="calendar-day-head">
+                <span>{dayNumber(day.date)}</span>
+                {day.total > 0 ? <b>{money(String(day.total))}</b> : null}
+              </div>
+              <div className="calendar-plan-list">
+                {day.items.slice(0, 3).map((item) => (
+                  <span className={`calendar-plan calendar-plan-${calendarPlanTone(item)}`} key={item.id}>
+                    <small>{item.commitment_name}</small>
+                    <b>{money(item.expected_amount)}</b>
+                  </span>
+                ))}
+                {day.items.length > 3 ? <em>+{day.items.length - 3} more</em> : null}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+      <CollapsibleBlock
+        meta={`${rows.length} ${rows.length === 1 ? "item" : "items"} · ${upcoming ? money(upcoming.expected_total) : "-"}`}
+        title={billListTitle(periodKind)}
+      >
+        <CompactList
+          empty="No bills or planned commitments found for this range."
+          rows={rows.map((item) => ({
+            title: item.commitment_name,
+            meta: `${item.due_date} · ${titleCase(item.commitment_type)} · ${titleCase(item.commitment_status)} · ${titleCase(item.status)}`,
+            amount: money(item.expected_amount),
+            action:
+              item.status !== "paid"
+                ? (
+                    <button
+                      onClick={() => void onBillPaid(item.id, item.expected_amount)}
+                      type="button"
+                    >
+                      Paid
+                    </button>
+                  )
+                : undefined,
+          }))}
+        />
+      </CollapsibleBlock>
     </article>
   );
 }
@@ -2571,6 +2684,53 @@ function billMetricLabel(periodKind: DateWindowKind) {
   return "Bills";
 }
 
+function billListTitle(periodKind: DateWindowKind) {
+  if (periodKind === "past") return "Recent bills";
+  if (periodKind === "future") return "Upcoming bills";
+  return "Current bills";
+}
+
+function buildCalendarDays(
+  startDate: string | undefined,
+  endDate: string | undefined,
+  items: UpcomingCommitmentsResponse["items"],
+): CalendarDayModel[] {
+  const start = startDate ?? todayIso();
+  const end = endDate ?? start;
+  const first = startOfWeek(start);
+  const last = endOfWeek(end);
+  const itemsByDate = items.reduce<Record<string, UpcomingCommitmentsResponse["items"]>>((groups, item) => {
+    groups[item.due_date] = [...(groups[item.due_date] ?? []), item];
+    return groups;
+  }, {});
+  const days: CalendarDayModel[] = [];
+  for (let cursor = first; cursor <= last; cursor = addDays(cursor, 1)) {
+    const dayItems = itemsByDate[cursor] ?? [];
+    days.push({
+      date: cursor,
+      inPeriod: cursor >= start && cursor <= end,
+      items: dayItems,
+      total: dayItems.reduce((sum, item) => sum + Math.abs(Number(item.expected_amount)), 0),
+    });
+  }
+  return days;
+}
+
+function calendarPlanTone(item: UpcomingCommitmentsResponse["items"][number]) {
+  if (item.commitment_type.includes("subscription")) return "subscription";
+  if (item.commitment_type.includes("loan") || item.commitment_type.includes("debt")) return "debt";
+  if (item.commitment_type.includes("income")) return "income";
+  return "bill";
+}
+
+function formatShortDay(isoDate: string) {
+  return new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short" }).format(dateFromIso(isoDate));
+}
+
+function dayNumber(isoDate: string) {
+  return new Intl.DateTimeFormat("en-GB", { day: "numeric" }).format(dateFromIso(isoDate));
+}
+
 function currentRoute(): RouteId {
   return parseHashState().route;
 }
@@ -2695,13 +2855,33 @@ type SankeyNodeModel = {
 
 type SankeyFlowModel = {
   color: string;
-  fromX: number;
-  fromY: number;
-  height: number;
   id: string;
+  label: string;
   opacity: number;
-  toX: number;
-  toY: number;
+  path: string;
+  value: number;
+  width: number;
+};
+
+type SankeyD3Node = {
+  color: string;
+  displayValue: number;
+  emphasis?: "middle" | "normal";
+  id: string;
+  label: string;
+  layer: number;
+  percent: string;
+  value: number;
+};
+
+type SankeyD3Link = {
+  color: string;
+  id: string;
+  label: string;
+  opacity: number;
+  source: string;
+  target: string;
+  value: number;
 };
 
 function reportGroups(
@@ -2769,190 +2949,177 @@ function buildSankeyGeometry({
   savings: number;
   view: "cash-flow" | "income" | "spending";
 }): { flows: SankeyFlowModel[]; nodes: SankeyNodeModel[] } {
-  const chart = { height: 320, top: 54 };
-  const x = { destination: 792, income: 292, middle: 548, source: 58 };
-  const nodes: SankeyNodeModel[] = [];
-  const flows: SankeyFlowModel[] = [];
   const destinations =
     view === "cash-flow" && savings > 0
       ? [{ color: "#2f7d5c", label: "Savings", value: savings }, ...groups]
       : groups;
-  const destinationTotal = destinations.reduce((total, group) => total + group.value, 0);
-  const maxTotal = Math.max(income, expenses, destinationTotal, 1);
-  const incomeHeight = scaledHeight(income, maxTotal, chart.height);
-  const sourceY = centeredY(incomeHeight, chart);
-  const destinationStack = stackedItems(destinations, destinationTotal || maxTotal, chart);
+  const graph = buildD3SankeyGraph({ destinations, expenses, income, savings, view });
+  const layout = createSankey<SankeyD3Node, SankeyD3Link>()
+    .nodeId((node) => node.id)
+    .nodeAlign((node) => node.layer)
+    .nodeWidth(20)
+    .nodePadding(destinations.length > 5 ? 30 : 44)
+    .nodeSort((a, b) => (b.value ?? 0) - (a.value ?? 0))
+    .extent([[80, 80], [1010, 448]])
+    .iterations(72);
+  const computed = layout(graph);
+  const linkPath = sankeyLinkHorizontal<SankeyD3Node, SankeyD3Link>();
 
-  if (view === "spending") {
-    const expenseHeight = scaledHeight(expenses, maxTotal, chart.height);
-    const expenseY = centeredY(expenseHeight, chart);
-    nodes.push(sankeyNode("expenses", "Expenses", expenses, "#b0443b", x.income, expenseY, expenseHeight));
-    const expenseStack = stackedItems(destinations, destinationTotal || maxTotal, {
-      height: expenseHeight,
-      top: expenseY,
-    });
-    for (const item of destinationStack) {
-      const sourceItem = expenseStack.find((stacked) => stacked.label === item.label) ?? item;
-      nodes.push(
-        sankeyNode(
-          item.label,
-          item.label,
-          item.value,
-          item.color,
-          x.destination,
-          item.y,
-          item.height,
-          percentage(item.value, expenses),
-        ),
-      );
-      flows.push({
-        color: item.color,
-        fromX: x.income + 14,
-        fromY: sourceItem.y,
-        height: item.height,
-        id: `expense-${item.label}`,
-        opacity: 0.24,
-        toX: x.destination,
-        toY: item.y,
-      });
-    }
-    return { flows, nodes };
-  }
-
-  nodes.push(sankeyNode("paychecks", "Paychecks", income, "#159bbd", x.source, sourceY, incomeHeight));
-  nodes.push(sankeyNode("income", "Income", income, "#159bbd", x.income, sourceY, incomeHeight));
-  flows.push({
-    color: "url(#sankeyIncome)",
-    fromX: x.source + 14,
-    fromY: sourceY,
-    height: incomeHeight,
-    id: "paychecks-income",
-    opacity: 0.88,
-    toX: x.income,
-    toY: sourceY,
-  });
-
-  if (view === "income") {
-    return { flows, nodes };
-  }
-
-  const middleHeight = scaledHeight(destinationTotal, maxTotal, chart.height);
-  const middleY = centeredY(middleHeight, chart);
-  nodes.push(
-    sankeyNode(
-      "outflow",
-      "Outflows",
-      destinationTotal,
-      "#2f7d5c",
-      x.middle,
-      middleY,
-      middleHeight,
-      "",
-      "middle",
-    ),
-  );
-  const middleStack = stackedItems(destinations, destinationTotal || maxTotal, {
-    height: middleHeight,
-    top: middleY,
-  });
-  flows.push({
-    color: "url(#sankeyIncome)",
-    fromX: x.income + 14,
-    fromY: sourceY,
-    height: Math.max(12, Math.min(incomeHeight, middleHeight || incomeHeight)),
-    id: "income-allocated",
-    opacity: 0.62,
-    toX: x.middle,
-    toY: middleY,
-  });
-
-  for (const item of destinationStack) {
-    const sourceItem = middleStack.find((stacked) => stacked.label === item.label) ?? item;
-    nodes.push(
-      sankeyNode(
-        item.label,
-        item.label,
-        item.value,
-        item.color,
-        x.destination,
-        item.y,
-        item.height,
-        item.label === "Savings"
-          ? percentage(item.value, income || destinationTotal)
-          : percentage(item.value, expenses || destinationTotal),
-      ),
-    );
-    flows.push({
-      color: item.color,
-      fromX: x.middle + 14,
-      fromY: sourceItem.y,
-      height: item.height,
-      id: `allocated-${item.label}`,
-      opacity: item.label === "Savings" ? 0.2 : 0.26,
-      toX: x.destination,
-      toY: item.y,
-    });
-  }
-
-  return { flows, nodes };
-}
-
-function sankeyNode(
-  id: string,
-  label: string,
-  value: number,
-  color: string,
-  x: number,
-  y: number,
-  height: number,
-  percent = "",
-  emphasis: "middle" | "normal" = "normal",
-): SankeyNodeModel {
   return {
-    anchor: emphasis === "middle" ? "end" : "start",
-    color,
-    emphasis,
-    height,
-    id,
-    label: compactLabel(label),
-    labelX: emphasis === "middle" ? x - 16 : x + 28,
-    labelY: labelYFor(y, height),
-    percent,
-    value,
-    x,
-    y,
+    flows: computed.links.map((link) => ({
+      color: link.color,
+      id: link.id,
+      label: link.label,
+      opacity: link.opacity,
+      path: linkPath(link) ?? "",
+      value: link.value,
+      width: Math.max(2, link.width ?? 2),
+    })),
+    nodes: computed.nodes.map((node) => d3SankeyNodeToModel(node)),
   };
 }
 
-function stackedItems(items: ReportGroup[], total: number, chart: { height: number; top: number }) {
-  if (items.length === 0) return [];
-  const gap = 30;
-  const available = chart.height - gap * (items.length - 1);
-  const raw = items.map((item) => ({
-    ...item,
-    height: Math.max(18, (item.value / Math.max(total, 1)) * available),
-  }));
-  const rawHeight = raw.reduce((sum, item) => sum + item.height, 0) + gap * (raw.length - 1);
-  const scale = rawHeight > chart.height ? chart.height / rawHeight : 1;
-  const stackHeight = raw.reduce((sum, item) => sum + item.height * scale, 0) + gap * (raw.length - 1);
-  let cursor = chart.top + (chart.height - stackHeight) / 2;
-  let sourceCursor = cursor;
-  return raw.map((item) => {
-    const height = item.height * scale;
-    const y = cursor;
-    const sourceY = sourceCursor;
-    cursor += height + gap;
-    sourceCursor += height + gap;
-    return { ...item, height, sourceY, y };
-  });
-}
+function buildD3SankeyGraph({
+  destinations,
+  expenses,
+  income,
+  savings,
+  view,
+}: {
+  destinations: ReportGroup[];
+  expenses: number;
+  income: number;
+  savings: number;
+  view: "cash-flow" | "income" | "spending";
+}): SankeyGraph<SankeyD3Node, SankeyD3Link> {
+  const destinationTotal = destinations.reduce((total, group) => total + group.value, 0);
 
-function scaledHeight(value: number, total: number, maxHeight: number) {
-  return Math.max(24, (value / Math.max(total, 1)) * maxHeight);
-}
+  if (view === "spending") {
+    return {
+      nodes: [
+        {
+          color: "#2f7d5c",
+          displayValue: expenses,
+          emphasis: "middle",
+          id: "outflow",
+          label: "Outflows",
+          layer: 0,
+          percent: "",
+          value: expenses,
+        },
+        ...destinations.map((group) => ({
+          color: group.color,
+          displayValue: group.value,
+          id: `destination-${group.label}`,
+          layer: 1,
+          label: group.label,
+          percent: percentage(group.value, expenses),
+          value: group.value,
+        })),
+      ],
+      links: destinations.map((group) => ({
+        color: group.color,
+        id: `expense-${group.label}`,
+        label: group.label,
+        opacity: 0.42,
+        source: "outflow",
+        target: `destination-${group.label}`,
+        value: group.value,
+      })),
+    };
+  }
 
-function centeredY(height: number, chart: { height: number; top: number }) {
-  return chart.top + (chart.height - height) / 2;
+  const requiredFunds = Math.max(destinationTotal, income, 1);
+  const fundingGap = Math.max(0, destinationTotal - income);
+  const nodes: SankeyD3Node[] = [
+    { color: "#159bbd", displayValue: income, id: "paychecks", label: "Paychecks", layer: 0, percent: "", value: income },
+    {
+      color: "#2aaed1",
+      displayValue: requiredFunds,
+      id: "available",
+      label: "Available funds",
+      layer: 1,
+      percent: "",
+      value: requiredFunds,
+    },
+  ];
+  const links: SankeyD3Link[] = [
+    {
+      color: "url(#sankeyIncome)",
+      id: "paychecks-available",
+      label: "Paychecks to available funds",
+      opacity: 0.86,
+      source: "paychecks",
+      target: "available",
+      value: income,
+    },
+  ];
+
+  if (fundingGap > 0) {
+    nodes.push({
+      color: "#8fa19a",
+      displayValue: fundingGap,
+      id: "opening-cash",
+      label: "Opening cash used",
+      layer: 0,
+      percent: "",
+      value: fundingGap,
+    });
+    links.push({
+      color: "#9aa19a",
+      id: "opening-cash-available",
+      label: "Opening cash used",
+      opacity: 0.32,
+      source: "opening-cash",
+      target: "available",
+      value: fundingGap,
+    });
+  }
+
+  if (view === "cash-flow") {
+    nodes.push({
+      color: "#2f7d5c",
+      displayValue: expenses,
+      emphasis: "middle",
+      id: "outflow",
+      label: "Outflows",
+      layer: 2,
+      percent: "",
+      value: Math.max(expenses, 1),
+    });
+    links.push({
+      color: "url(#sankeyIncome)",
+      id: "available-outflow",
+      label: "Available funds to outflows",
+      opacity: 0.68,
+      source: "available",
+      target: "outflow",
+      value: Math.max(expenses, 1),
+    });
+    for (const group of destinations) {
+      nodes.push({
+        color: group.color,
+        displayValue: group.value,
+        id: `destination-${group.label}`,
+        layer: 3,
+        label: group.label,
+        percent: group.label === "Savings" ? percentage(group.value, income || savings) : percentage(group.value, expenses),
+        value: group.value,
+      });
+      const isSavings = group.label === "Savings";
+      links.push({
+        color: group.color,
+        id: `allocated-${group.label}`,
+        label: group.label,
+        opacity: isSavings ? 0.32 : 0.42,
+        source: isSavings ? "available" : "outflow",
+        target: `destination-${group.label}`,
+        value: group.value,
+      });
+    }
+  }
+
+  return { links, nodes };
 }
 
 function percentage(value: number, total: number) {
@@ -2960,23 +3127,25 @@ function percentage(value: number, total: number) {
   return `${((value / total) * 100).toFixed(1)}%`;
 }
 
-function sankeyBandPath(
-  fromX: number,
-  fromY: number,
-  fromHeight: number,
-  toX: number,
-  toY: number,
-  toHeight: number,
-) {
-  const curveA = fromX + (toX - fromX) * 0.45;
-  const curveB = fromX + (toX - fromX) * 0.65;
-  return [
-    `M ${fromX} ${fromY}`,
-    `C ${curveA} ${fromY}, ${curveB} ${toY}, ${toX} ${toY}`,
-    `L ${toX} ${toY + toHeight}`,
-    `C ${curveB} ${toY + toHeight}, ${curveA} ${fromY + fromHeight}, ${fromX} ${fromY + fromHeight}`,
-    "Z",
-  ].join(" ");
+function d3SankeyNodeToModel(node: SankeyNode<SankeyD3Node, SankeyD3Link>): SankeyNodeModel {
+  const x = node.x0 ?? 0;
+  const y = node.y0 ?? 0;
+  const height = Math.max(12, (node.y1 ?? y + 12) - y);
+  const isDestination = node.depth === 2 || node.id.startsWith("destination-");
+  return {
+    anchor: node.emphasis === "middle" ? "end" : isDestination ? "end" : "start",
+    color: node.color,
+    emphasis: node.emphasis,
+    height,
+    id: node.id,
+    label: compactLabel(node.label),
+    labelX: node.emphasis === "middle" ? x - 16 : isDestination ? x - 14 : (node.x1 ?? x) + 22,
+    labelY: labelYFor(y, height),
+    percent: node.percent,
+    value: node.displayValue,
+    x,
+    y,
+  };
 }
 
 function labelYFor(y: number, height: number) {
@@ -2984,7 +3153,7 @@ function labelYFor(y: number, height: number) {
 }
 
 function compactLabel(label: string) {
-  return label.length > 22 ? `${label.slice(0, 20).trim()}…` : label;
+  return label.length > 24 ? `${label.slice(0, 22).trim()}…` : label;
 }
 
 function reportTotals(insights: InsightsResponse | null) {
@@ -3130,6 +3299,30 @@ function addDays(isoDate: string, days: number) {
   const date = new Date(`${isoDate}T00:00:00Z`);
   date.setUTCDate(date.getUTCDate() + days);
   return date.toISOString().slice(0, 10);
+}
+
+function dateFromIso(isoDate: string) {
+  const [year, month, day] = isoDate.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+
+function isoFromDate(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function startOfWeek(isoDate: string) {
+  const date = dateFromIso(isoDate);
+  date.setDate(date.getDate() - date.getDay());
+  return isoFromDate(date);
+}
+
+function endOfWeek(isoDate: string) {
+  const date = dateFromIso(isoDate);
+  date.setDate(date.getDate() + (6 - date.getDay()));
+  return isoFromDate(date);
 }
 
 function startOfMonth(isoDate: string) {
