@@ -1,5 +1,7 @@
 export const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8025";
 
+const inFlightGetRequests = new Map<string, Promise<unknown>>();
+
 export type HealthResponse = {
   status: string;
   app: string;
@@ -254,11 +256,23 @@ export type MerchantInsight = {
   outflow_total: string;
 };
 
+export type IncomeSourceInsight = {
+  source_name: string;
+  transaction_count: number;
+  inflow_total: string;
+};
+
+export type MerchantBreakdownInsight = MerchantInsight & {
+  group: string;
+};
+
 export type InsightsResponse = {
   start_date: string | null;
   end_date: string | null;
   category_groups: CategoryInsight[];
+  income_sources: IncomeSourceInsight[];
   top_merchants: MerchantInsight[];
+  merchant_breakdowns: MerchantBreakdownInsight[];
   internal_transfers_excluded: boolean;
 };
 
@@ -549,12 +563,27 @@ async function uploadCsv<T>(path: string, file: File): Promise<T> {
 }
 
 async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`, init);
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(errorText || `Request failed with ${response.status}`);
+  const method = init?.method ?? "GET";
+  const requestUrl = `${API_BASE}${path}`;
+  if (method === "GET") {
+    const existing = inFlightGetRequests.get(requestUrl);
+    if (existing) return existing as Promise<T>;
   }
-  return response.json() as Promise<T>;
+
+  const request = fetch(requestUrl, init).then(async (response) => {
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(errorText || `Request failed with ${response.status}`);
+    }
+    return response.json() as Promise<T>;
+  });
+
+  if (method === "GET") {
+    inFlightGetRequests.set(requestUrl, request);
+    request.finally(() => inFlightGetRequests.delete(requestUrl));
+  }
+
+  return request;
 }
 
 function buildQuery(params: Record<string, boolean | number | string | undefined>): string {

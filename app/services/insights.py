@@ -8,7 +8,13 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import Entity, Transaction
-from app.schemas.insights import CategoryInsight, InsightsResponse, MerchantInsight
+from app.schemas.insights import (
+    CategoryInsight,
+    IncomeSourceInsight,
+    InsightsResponse,
+    MerchantBreakdownInsight,
+    MerchantInsight,
+)
 from app.services.categories import normalized_group_for_transaction
 from app.services.dashboard import latest_transaction_date
 
@@ -51,6 +57,12 @@ def get_insights(
     merchant_totals: dict[str, dict[str, Decimal | int]] = defaultdict(
         lambda: {"count": 0, "outflow": Decimal("0.00")}
     )
+    income_source_totals: dict[str, dict[str, Decimal | int]] = defaultdict(
+        lambda: {"count": 0, "inflow": Decimal("0.00")}
+    )
+    group_merchant_totals: dict[tuple[str, str], dict[str, Decimal | int]] = defaultdict(
+        lambda: {"count": 0, "outflow": Decimal("0.00")}
+    )
 
     for transaction in transactions:
         group = normalized_group_for_transaction(transaction)
@@ -58,11 +70,17 @@ def get_insights(
         grouped[group]["net"] += transaction.amount
         if transaction.amount > 0:
             grouped[group]["inflow"] += transaction.amount
+            if group == "income":
+                source = transaction.merchant_name or transaction.description or "Unknown income"
+                income_source_totals[source]["count"] += 1
+                income_source_totals[source]["inflow"] += transaction.amount
         else:
             grouped[group]["outflow"] += abs(transaction.amount)
             merchant = transaction.merchant_name or transaction.description or "Unknown"
             merchant_totals[merchant]["count"] += 1
             merchant_totals[merchant]["outflow"] += abs(transaction.amount)
+            group_merchant_totals[(group, merchant)]["count"] += 1
+            group_merchant_totals[(group, merchant)]["outflow"] += abs(transaction.amount)
 
     category_groups = [
         CategoryInsight(
@@ -86,6 +104,30 @@ def get_insights(
             reverse=True,
         )[:10]
     ]
+    income_sources = [
+        IncomeSourceInsight(
+            source_name=source,
+            transaction_count=int(values["count"]),
+            inflow_total=format_money(values["inflow"]),
+        )
+        for source, values in sorted(
+            income_source_totals.items(),
+            key=lambda item: item[1]["inflow"],
+            reverse=True,
+        )[:10]
+    ]
+    merchant_breakdowns = [
+        MerchantBreakdownInsight(
+            group=group,
+            merchant_name=merchant,
+            transaction_count=int(values["count"]),
+            outflow_total=format_money(values["outflow"]),
+        )
+        for (group, merchant), values in sorted(
+            group_merchant_totals.items(),
+            key=lambda item: (item[0][0], -item[1]["outflow"]),
+        )
+    ]
 
     return InsightsResponse(
         entity_id=entity.id,
@@ -93,7 +135,9 @@ def get_insights(
         start_date=start_date.isoformat() if start_date else None,
         end_date=end_date.isoformat() if end_date else None,
         category_groups=category_groups,
+        income_sources=income_sources,
         top_merchants=top_merchants,
+        merchant_breakdowns=merchant_breakdowns,
         internal_transfers_excluded=True,
     )
 

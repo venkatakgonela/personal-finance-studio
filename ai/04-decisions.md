@@ -22,6 +22,8 @@ ai-eos-metadata:
 | ADR-009 | Keep Phase 1 frontend simple with typed fetch and CSS tokens | Accepted | 2026-06-14 |
 | ADR-010 | E2E tests must check backend API availability | Accepted | 2026-06-14 |
 | ADR-011 | Use D3 Sankey for finance-flow reports | Accepted | 2026-06-14 |
+| ADR-012 | Persist view state in the hash URL | Accepted | 2026-06-14 |
+| ADR-013 | De-duplicate in-flight frontend GET requests | Accepted | 2026-06-14 |
 
 ## ADR-001 - Use Entity-Scoped Household and Business Model
 
@@ -99,3 +101,17 @@ ai-eos-metadata:
 - **Context**: Hand-drawn SVG bands were fast to iterate but became hard to keep natural, flexible, and collision-free as report tabs and grouping changed.
 - **Decision**: Use `d3-sankey` for Cash Flow, Spending, and Income reports while keeping the surrounding UI in React/CSS.
 - **Consequences**: The report chart can adapt to category/merchant grouping and selected report tabs with a real layout engine. Styling remains application-owned: square node bars, labels inside the chart, and lightweight annotation typography are part of the design system rather than library defaults.
+
+## ADR-012 - Persist View State in the Hash URL
+
+- **Status**: Accepted
+- **Context**: Refreshing the app reset date windows, filters, report selections, and search state, which made the local app feel unreliable during review.
+- **Decision**: Store refresh-worthy UI state in the hash URL: route, date range, custom dates, search, include-candidates, transaction filters, Reports tab, and Reports grouping.
+- **Consequences**: Browser refresh preserves context and reloads values rather than resetting the view. URLs are more shareable/debuggable, but route/query handling must stay synchronized with component state.
+
+## ADR-013 - De-duplicate In-Flight Frontend GET Requests
+
+- **Status**: Accepted
+- **Context**: React dev StrictMode intentionally replays effects, which doubled local API traffic during refresh and made the app feel slower in development.
+- **Decision**: De-duplicate identical in-flight GET requests in `frontend/src/api.ts` while leaving mutating requests untouched.
+- **Consequences**: Local dev refreshes avoid duplicate backend work without disabling StrictMode. This is not a full cache; fresh values still load after each request settles.

@@ -1002,13 +1002,15 @@ h1 {
   color: var(--muted);
   font-size: 0.74rem;
   font-weight: 800;
+  transition: none;
 }
 
 .report-tabs button:last-child {
   border-right: 0;
 }
 
-.report-tabs button.active {
+.report-tabs button.active,
+.report-tabs button[aria-selected="true"] {
   background: #fff0e8;
   color: #db5a24;
 }
@@ -1190,6 +1192,12 @@ h1 {
   overflow: hidden;
 }
 
+.sankey-drilldown-note {
+  margin: calc(var(--space-xs) * -0.25) 0 var(--space-sm);
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
 .sankey-stage {
   overflow-x: auto;
   overflow-y: hidden;
@@ -1208,6 +1216,32 @@ h1 {
 
 .sankey-node {
   filter: drop-shadow(0 4px 6px rgba(31, 41, 36, 0.1));
+}
+
+.sankey-hitbox {
+  fill: transparent;
+  pointer-events: all;
+}
+
+.sankey-node-group.is-clickable {
+  cursor: pointer;
+  outline: none;
+}
+
+.sankey-node-group.is-clickable .sankey-node {
+  stroke: rgba(31, 41, 36, 0.12);
+  stroke-width: 2px;
+}
+
+.sankey-node-group.is-clickable:hover .sankey-node,
+.sankey-node-group.is-clickable:focus-visible .sankey-node {
+  filter: drop-shadow(0 6px 9px rgba(31, 41, 36, 0.18));
+  stroke: var(--focus);
+}
+
+.sankey-node-group.is-selected .sankey-node {
+  stroke: var(--focus);
+  stroke-width: 3px;
 }
 
 .sankey-flow {

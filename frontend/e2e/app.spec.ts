@@ -150,7 +150,7 @@ test("real local stack loads dashboard data without fetch errors", async ({ page
 
   await expect(page.getByRole("heading", { name: /Good (morning|afternoon|evening), Kiran\./ })).toBeVisible();
   await expect(page.getByText("Failed to fetch")).toHaveCount(0);
-  await expect(page.getByRole("heading", { name: "Balance Readiness" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Spending Pulse" })).toBeVisible();
 });
 
 test("renders the dashboard with the polished visual system", async ({ page }) => {
@@ -161,10 +161,10 @@ test("renders the dashboard with the polished visual system", async ({ page }) =
   await expect(page.getByRole("navigation", { name: "Primary navigation" }).getByRole("link")).toHaveCount(13);
   await expect(page.getByLabel("Date range", { exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: /API online|API checking/ })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Balance Readiness" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Spending Pulse" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Decision Queue" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Bills This Month" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Balance Readiness" })).toHaveCount(0);
   await expect(page.getByText("Failed to fetch")).toHaveCount(0);
   const dashboard = page.getByLabel("Personal Finance Studio dashboard");
   await expect(dashboard.locator(".decision-table-header")).toHaveCount(0);
@@ -257,10 +257,50 @@ test("renders colorful account and report graphics", async ({ page }) => {
   await expect(page.locator(".report-metric")).toHaveCount(4);
   await expect(page.locator(".sankey-svg")).toBeVisible();
   expect(await page.locator(".sankey-node").count()).toBeGreaterThan(3);
+  await page.getByRole("button", { name: /Flexible/ }).click();
+  await expect(page.locator(".sankey-svg").getByText("Morrisons")).toBeVisible();
+  await expect(page.getByText(/Flexible expanded into 1 merchant bucket/)).toBeVisible();
   await page.getByRole("tab", { name: "Spending" }).click();
   await expect(page.getByRole("heading", { name: "Spending", exact: true })).toBeVisible();
   await page.getByLabel("Report grouping").selectOption("merchant");
   await expect(page.locator(".sankey-svg").getByText("Morrisons")).toBeVisible();
+  await page.getByRole("tab", { name: "Income" }).click();
+  await expect(page.getByLabel("Report grouping")).toHaveValue("merchant");
+  await expect(page.locator(".sankey-svg").getByText("Payroll")).toBeVisible();
+  await expect(page.locator(".sankey-svg").getByText("Total income")).toBeVisible();
+});
+
+test("preserves filters and report selections across refresh", async ({ page }) => {
+  await mockAppApis(page);
+
+  await page.goto("/#/reports");
+  await page.getByLabel("Date range", { exact: true }).selectOption("last-30");
+  await page.getByLabel("Search").fill("payroll");
+  await page.getByRole("tab", { name: "Income" }).click();
+  await expect(page.getByLabel("Report grouping")).toHaveValue("merchant");
+  await expect(page).toHaveURL(/#\/reports\?/);
+
+  await page.reload();
+
+  await expect(page.getByRole("heading", { name: "Income" })).toBeVisible();
+  await expect(page.getByLabel("Date range", { exact: true })).toHaveValue("last-30");
+  await expect(page.getByLabel("Search")).toHaveValue("payroll");
+  await expect(page.getByRole("tab", { name: "Income" })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByLabel("Report grouping")).toHaveValue("merchant");
+
+  await page.goto("/#/transactions?range=last-30&group=flexible&type=spending&reviewed=unreviewed&search=coffee");
+  await expect(page.getByLabel("Category group filter")).toHaveValue("flexible");
+  await expect(page.getByLabel("Transaction type filter")).toHaveValue("spending");
+  await expect(page.getByLabel("Review status filter")).toHaveValue("unreviewed");
+  await expect(page.getByLabel("Search")).toHaveValue("coffee");
+
+  await page.reload();
+
+  await expect(page.getByLabel("Date range", { exact: true })).toHaveValue("last-30");
+  await expect(page.getByLabel("Category group filter")).toHaveValue("flexible");
+  await expect(page.getByLabel("Transaction type filter")).toHaveValue("spending");
+  await expect(page.getByLabel("Review status filter")).toHaveValue("unreviewed");
+  await expect(page.getByLabel("Search")).toHaveValue("coffee");
 });
 
 async function accountLayoutMeasurement(page: Page) {
@@ -611,7 +651,22 @@ async function mockAppApis(
           },
         ],
         end_date: "2026-06-30",
+        income_sources: [
+          {
+            inflow_total: "3250.00",
+            source_name: "Payroll",
+            transaction_count: 1,
+          },
+        ],
         internal_transfers_excluded: true,
+        merchant_breakdowns: [
+          {
+            group: "flexible",
+            merchant_name: "Morrisons",
+            outflow_total: "48.99",
+            transaction_count: 1,
+          },
+        ],
         start_date: "2026-06-01",
         top_merchants: [{ merchant_name: "Morrisons", outflow_total: "48.99", transaction_count: 1 }],
       },

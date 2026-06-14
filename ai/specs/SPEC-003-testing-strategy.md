@@ -92,6 +92,8 @@ Current implemented checks:
 10. Sidebar remains fixed while page content scrolls.
 11. Calendar planner renders selected-period bill chips and updates when candidates are excluded.
 12. Reports render colorful account/report graphics, including the D3 Sankey chart and grouping controls.
+13. URL-hash state persists date range, search, transaction filters, report tab, and report grouping
+    across browser refresh.
 
 Additional critical flows to add as Phase 1.5/packaging hardens:
 
@@ -117,7 +119,10 @@ Before Phase 1 is considered ready:
 - Confirm Calendar labels historical/current/future bill windows correctly and shows planned amounts on
   the appropriate days.
 - Confirm Reports Sankey labels stay close to the relevant bars, final nodes remain inside the chart,
-  and category/merchant grouping changes the destinations.
+  category/merchant grouping changes the destinations, spending leaves expand on click, and Income
+  defaults to source breakdown.
+- Confirm browser refresh preserves the user's current route context and updates values without
+  resetting filters or report selections.
 - Confirm terminology feels understandable.
 - Confirm Decision Queue is not noisy.
 - Confirm the visual system makes estimates and forecasts obvious.
@@ -162,6 +167,9 @@ Playwright now starts/checks both the backend API and the frontend dev server:
 - Frontend: `http://127.0.0.1:5175`
 
 This is intentional so the E2E suite catches the common `Failed to fetch` class of regression.
+
+The frontend also de-duplicates identical in-flight GET requests. This keeps React dev StrictMode
+from doubling backend traffic during local refresh while preserving StrictMode checks.
 
 ## 7. Release Criteria
 

@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type KeyboardEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import {
   sankey as createSankey,
   sankeyLinkHorizontal,
@@ -47,6 +47,8 @@ import {
 } from "./api";
 
 type LoadState = "idle" | "loading" | "ready" | "error";
+type ReportGroupBy = "category" | "merchant";
+type ReportView = "cash-flow" | "income" | "spending";
 type ApiHealthState = {
   checkedAt: string | null;
   details: HealthResponse | null;
@@ -147,18 +149,14 @@ export function App() {
   const [forecast, setForecast] = useState<ForecastResponse | null>(null);
   const [insights, setInsights] = useState<InsightsResponse | null>(null);
   const [planning, setPlanning] = useState<PlanningOverview | null>(null);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [periodPreset, setPeriodPreset] = useState<PeriodPreset>("this-month");
-  const [customStartDate, setCustomStartDate] = useState(todayIso());
-  const [customEndDate, setCustomEndDate] = useState(addDays(todayIso(), 30));
-  const [includeCandidates, setIncludeCandidates] = useState(true);
-  const [transactionFilters, setTransactionFilters] = useState<TransactionFilterState>({
-    accountId: "",
-    normalizedGroup: "",
-    reviewed: "all",
-    status: "",
-    transactionType: "",
-  });
+  const [searchQuery, setSearchQuery] = useState(() => initialSearchQuery());
+  const [periodPreset, setPeriodPreset] = useState<PeriodPreset>(() => initialPeriodPreset());
+  const [customStartDate, setCustomStartDate] = useState(() => initialCustomStartDate());
+  const [customEndDate, setCustomEndDate] = useState(() => initialCustomEndDate());
+  const [includeCandidates, setIncludeCandidates] = useState(() => initialIncludeCandidates());
+  const [transactionFilters, setTransactionFilters] = useState<TransactionFilterState>(() => initialTransactionFilters());
+  const [reportView, setReportView] = useState<ReportView>(() => initialReportView());
+  const [reportGroupBy, setReportGroupBy] = useState<ReportGroupBy>(() => initialReportGroupBy());
   const [route, setRoute] = useState<RouteId>(currentRoute());
   const [loadState, setLoadState] = useState<LoadState>("idle");
   const [error, setError] = useState<string | null>(null);
@@ -168,6 +166,7 @@ export function App() {
     message: `Checking ${API_BASE}`,
     status: "checking",
   });
+  const lastSyncedHash = useRef("");
 
   const busy = loadState === "loading";
   const pageTitle = getPageTitle(route);
@@ -208,12 +207,38 @@ export function App() {
   }, []);
 
   useEffect(() => {
+    const nextHash = buildHashState({
+      customEndDate,
+      customStartDate,
+      includeCandidates,
+      periodPreset,
+      reportGroupBy,
+      reportView,
+      route,
+      searchQuery,
+      transactionFilters,
+    });
+    if (window.location.hash === nextHash || lastSyncedHash.current === nextHash) return;
+    lastSyncedHash.current = nextHash;
+    window.history.replaceState(null, "", nextHash);
+  }, [
+    customEndDate,
+    customStartDate,
+    includeCandidates,
+    periodPreset,
+    reportGroupBy,
+    reportView,
+    route,
+    searchQuery,
+    transactionFilters,
+  ]);
+
+  useEffect(() => {
     let cancelled = false;
 
     async function hydrateExistingWorkspace() {
       const [
         accountsResult,
-        transactionsResult,
         commitmentsResult,
         decisionsResult,
         dashboardResult,
@@ -223,7 +248,6 @@ export function App() {
         planningResult,
       ] = await Promise.allSettled([
         getAccounts(),
-        getTransactions(transactionQuery),
         getCommitments(),
         getDecisions(),
         getDashboardSummary(),
@@ -243,7 +267,6 @@ export function App() {
 
       if (cancelled) return;
       if (accountsResult.status === "fulfilled") setAccounts(accountsResult.value);
-      if (transactionsResult.status === "fulfilled") setTransactions(transactionsResult.value);
       if (commitmentsResult.status === "fulfilled") setCommitments(commitmentsResult.value);
       if (decisionsResult.status === "fulfilled") setDecisions(decisionsResult.value);
       if (dashboardResult.status === "fulfilled") setDashboard(dashboardResult.value);
@@ -258,7 +281,7 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, [dateWindow, includeCandidates, transactionQuery]);
+  }, [dateWindow, includeCandidates]);
 
   useEffect(() => {
     let cancelled = false;
@@ -281,7 +304,7 @@ export function App() {
     function handleHashChange() {
       const { params, route: nextRoute } = parseHashState();
       setRoute(nextRoute);
-      applyRouteQuery(params);
+      applyRouteQuery(nextRoute, params);
     }
 
     if (!window.location.hash) {
@@ -294,21 +317,38 @@ export function App() {
     return () => window.removeEventListener("hashchange", handleHashChange);
   }, []);
 
-  function applyRouteQuery(params: URLSearchParams) {
+  function applyRouteQuery(nextRoute: RouteId, params: URLSearchParams) {
     const range = params.get("range");
     const reviewed = params.get("reviewed");
+    const include = params.get("includeCandidates");
+    const customStart = params.get("start");
+    const customEnd = params.get("end");
+    const nextReportView = params.get("report");
+    const nextReportGroupBy = params.get("groupBy");
     if (range && periodOptions.some((option) => option.value === range)) {
       setPeriodPreset(range as PeriodPreset);
     }
+    if (customStart && isIsoDate(customStart)) setCustomStartDate(customStart);
+    if (customEnd && isIsoDate(customEnd)) setCustomEndDate(customEnd);
+    if (include !== null) setIncludeCandidates(include !== "false");
+    if (isReportView(nextReportView)) {
+      setReportView(nextReportView);
+      if (!isReportGroupBy(nextReportGroupBy)) {
+        setReportGroupBy(nextReportView === "income" ? "merchant" : "category");
+      }
+    }
+    if (isReportGroupBy(nextReportGroupBy)) setReportGroupBy(nextReportGroupBy);
     const querySearch = params.get("search");
     if (querySearch !== null) setSearchQuery(querySearch);
-    setTransactionFilters((filters) => ({
-      accountId: params.get("account") ?? filters.accountId,
-      normalizedGroup: params.get("group") ?? filters.normalizedGroup,
-      reviewed: isReviewFilter(reviewed) ? reviewed : filters.reviewed,
-      status: params.get("status") ?? filters.status,
-      transactionType: params.get("type") ?? filters.transactionType,
-    }));
+    if (nextRoute === "transactions") {
+      setTransactionFilters({
+        accountId: params.get("account") ?? "",
+        normalizedGroup: params.get("group") ?? "",
+        reviewed: isReviewFilter(reviewed) ? reviewed : "all",
+        status: params.get("status") ?? "",
+        transactionType: params.get("type") ?? "",
+      });
+    }
   }
 
   async function runPreview(file: File) {
@@ -551,7 +591,11 @@ export function App() {
           onTransactionUpdate={runTransactionUpdate}
           periodLabel={dateWindow.label}
           periodKind={dateWindowKind}
+          reportGroupBy={reportGroupBy}
+          reportView={reportView}
           setTransactionFilters={setTransactionFilters}
+          setReportGroupBy={setReportGroupBy}
+          setReportView={setReportView}
           transactionFilters={transactionFilters}
           transferResult={transferResult}
           upcoming={upcoming}
@@ -715,6 +759,10 @@ function AppPage({
   preview,
   query,
   route,
+  reportGroupBy,
+  reportView,
+  setReportGroupBy,
+  setReportView,
   setTransactionFilters,
   transactions,
   onTransactionUpdate,
@@ -756,6 +804,10 @@ function AppPage({
   preview: ImportPreview | null;
   query: string;
   route: RouteId;
+  reportGroupBy: ReportGroupBy;
+  reportView: ReportView;
+  setReportGroupBy: (groupBy: ReportGroupBy) => void;
+  setReportView: (view: ReportView) => void;
   setTransactionFilters: (filters: TransactionFilterState) => void;
   transactions: TransactionsResponse | null;
   onTransactionUpdate: (transactionId: string, payload: TransactionUpdate) => Promise<void>;
@@ -912,7 +964,14 @@ function AppPage({
     return (
       <section className="page-grid page-grid-single" aria-label="Reports page">
         <ReportMetricStrip insights={insights} />
-        <SankeyReportCard insights={insights} periodLabel={periodLabel} />
+        <SankeyReportCard
+          groupBy={reportGroupBy}
+          insights={insights}
+          onGroupByChange={setReportGroupBy}
+          onReportViewChange={setReportView}
+          periodLabel={periodLabel}
+          reportView={reportView}
+        />
         <InsightsCard insights={insights} periodLabel={periodLabel} />
         <SavedFiltersCard planning={planning} />
       </section>
@@ -927,6 +986,8 @@ function AppPage({
     );
   }
 
+  const showSetupCard = !transactions?.total_count || !accounts?.accounts.length || !commitments?.total_count;
+
   return (
     <section className="dashboard-grid" aria-label="Personal Finance Studio dashboard">
       <DashboardHeroCard
@@ -935,7 +996,7 @@ function AppPage({
         planning={planning}
         upcoming={upcoming}
       />
-      <BudgetCard dashboard={dashboard} />
+      <SpendingCard dashboard={dashboard} insights={insights} />
       <UpcomingCard
         includeCandidates={includeCandidates}
         onBillPaid={onBillPaid}
@@ -944,23 +1005,6 @@ function AppPage({
         query={query}
         upcoming={upcoming}
       />
-      <GettingStartedCard
-        accounts={accounts}
-        busy={busy}
-        commitmentResult={commitmentResult}
-        commitments={commitments}
-        commitResult={commitResult}
-        decisions={decisions}
-        onCommit={onCommit}
-        onDetectCommitments={onDetectCommitments}
-        onDetectTransfers={onDetectTransfers}
-        onPreview={onPreview}
-        preview={preview}
-        transactions={transactions}
-        transferResult={transferResult}
-      />
-      <SpendingCard dashboard={dashboard} insights={insights} />
-      <InsightsCard insights={insights} periodLabel={periodLabel} />
       <DecisionQueueCard
         busy={busy}
         compact
@@ -981,6 +1025,23 @@ function AppPage({
         transferResult={transferResult}
         upcoming={upcoming}
       />
+      {showSetupCard ? (
+        <GettingStartedCard
+          accounts={accounts}
+          busy={busy}
+          commitmentResult={commitmentResult}
+          commitments={commitments}
+          commitResult={commitResult}
+          decisions={decisions}
+          onCommit={onCommit}
+          onDetectCommitments={onDetectCommitments}
+          onDetectTransfers={onDetectTransfers}
+          onPreview={onPreview}
+          preview={preview}
+          transactions={transactions}
+          transferResult={transferResult}
+        />
+      ) : null}
     </section>
   );
 }
@@ -1210,36 +1271,6 @@ function DashboardHeroCard({
   );
 }
 
-function BudgetCard({ dashboard }: { dashboard: DashboardSummary | null }) {
-  const knownBalances = dashboard?.cash_balance_account_count ?? 0;
-  const missingBalances = dashboard?.missing_balance_account_count ?? 0;
-  const isReady = dashboard?.confidence === "ready";
-  return (
-    <article className="card tall-card balance-readiness-card">
-      <CardHeader title="Balance Readiness" subtitle={balanceStatusLabel(dashboard?.confidence)} />
-      <div className="money-focus balance-focus">
-        <span>Setup status</span>
-        <strong className="metric-value">{isReady ? "Ready" : "Needs balances"}</strong>
-        <p>
-          {isReady
-            ? "Cash balances are trusted, so available-money planning can use real account totals."
-            : "Enter current balances for cash accounts before trusting available-money calculations."}
-        </p>
-      </div>
-      <div className="split-metrics">
-        <Metric
-          label="Known balances"
-          value={`${knownBalances} ${knownBalances === 1 ? "account" : "accounts"}`}
-        />
-        <Metric label="Missing" value={`${missingBalances} ${missingBalances === 1 ? "account" : "accounts"}`} />
-      </div>
-      <a className="button-link button-link-secondary balance-review-link" href="#/accounts">
-        Review account balances
-      </a>
-    </article>
-  );
-}
-
 function AccountPerformanceCard({
   accounts,
   dashboard,
@@ -1373,24 +1404,57 @@ function ReportMetric({
 }
 
 function SankeyReportCard({
+  groupBy,
   insights,
+  onGroupByChange,
+  onReportViewChange,
   periodLabel,
+  reportView,
 }: {
+  groupBy: ReportGroupBy;
   insights: InsightsResponse | null;
+  onGroupByChange: (groupBy: ReportGroupBy) => void;
+  onReportViewChange: (view: ReportView) => void;
   periodLabel?: string;
+  reportView: ReportView;
 }) {
-  const [reportView, setReportView] = useState<"cash-flow" | "income" | "spending">("cash-flow");
-  const [groupBy, setGroupBy] = useState<"category" | "merchant">("category");
+  const [expandedGroupId, setExpandedGroupId] = useState<string | null>(null);
   const totals = reportTotals(insights);
   const groups = reportGroups(insights, groupBy, reportView);
+  const activeExpandedGroupId = groups.some((group) => group.id === expandedGroupId && group.children.length > 0)
+    ? expandedGroupId
+    : null;
   const savings = Math.max(0, totals.net);
   const sankey = buildSankeyGeometry({
+    expandedGroupId: activeExpandedGroupId,
     expenses: totals.expenses,
     groups,
     income: totals.income,
     savings,
     view: reportView,
   });
+  const expandedGroup = groups.find((group) => group.id === activeExpandedGroupId);
+
+  useEffect(() => {
+    setExpandedGroupId(null);
+  }, [groupBy, reportView, periodLabel]);
+
+  const toggleSankeyNode = (node: SankeyNodeModel) => {
+    if (!node.expandable || !node.groupId) return;
+    const groupId = node.groupId;
+    setExpandedGroupId((current) => (current === groupId ? null : groupId));
+  };
+
+  const handleSankeyNodeKeyDown = (event: KeyboardEvent<SVGGElement>, node: SankeyNodeModel) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    toggleSankeyNode(node);
+  };
+
+  const selectReportView = (view: ReportView) => {
+    onReportViewChange(view);
+    onGroupByChange(view === "income" ? "merchant" : "category");
+  };
 
   return (
     <article className="card sankey-card">
@@ -1403,7 +1467,7 @@ function SankeyReportCard({
                 aria-selected={reportView === view}
                 className={reportView === view ? "active" : ""}
                 key={view}
-                onClick={() => setReportView(view)}
+                onClick={() => selectReportView(view)}
                 role="tab"
                 type="button"
               >
@@ -1413,21 +1477,35 @@ function SankeyReportCard({
           </div>
           <select
             aria-label="Report grouping"
-            onChange={(event) => setGroupBy(event.target.value as "category" | "merchant")}
+            onChange={(event) => onGroupByChange(event.target.value as ReportGroupBy)}
             value={groupBy}
           >
-            <option value="category">By category & group</option>
-            <option value="merchant">By top merchants</option>
+            <option value="category">{reportView === "income" ? "Summary only" : "By category & group"}</option>
+            <option value="merchant">{reportView === "income" ? "By income source" : "By top merchants"}</option>
           </select>
         </div>
       </div>
+      <p className="sankey-drilldown-note">
+        {reportView === "income"
+          ? "Income flows from detected source names into total income and available funds."
+          : groupBy === "category"
+          ? expandedGroup
+            ? `${expandedGroup.label} expanded into ${expandedGroup.children.length} merchant ${expandedGroup.children.length === 1 ? "bucket" : "buckets"}. Click it again to collapse.`
+            : "Click a category bar such as Debt or Flexible to expand its merchant breakdown."
+          : "Switch to category grouping to drill into a spending bucket."}
+      </p>
       <div className="sankey-stage">
-        <svg className="sankey-svg" viewBox="0 0 1180 520" role="img" aria-label={`${titleCase(reportView)} Sankey report`}>
+        <svg className="sankey-svg" viewBox="0 0 1180 610" role="img" aria-label={`${titleCase(reportView)} Sankey report`}>
           <defs>
             <linearGradient id="sankeyIncome" x1="0" x2="1" y1="0" y2="0">
               <stop offset="0%" stopColor="#bfeaf4" stopOpacity="0.94" />
               <stop offset="48%" stopColor="#d4eee0" stopOpacity="0.9" />
               <stop offset="100%" stopColor="#f5efb9" stopOpacity="0.84" />
+            </linearGradient>
+            <linearGradient id="sankeyIncomeAvailable" x1="0" x2="1" y1="0" y2="0">
+              <stop offset="0%" stopColor="#7bd6e4" stopOpacity="0.9" />
+              <stop offset="56%" stopColor="#b8eadb" stopOpacity="0.88" />
+              <stop offset="100%" stopColor="#eef3aa" stopOpacity="0.82" />
             </linearGradient>
           </defs>
           {sankey.flows.map((flow) => (
@@ -1439,7 +1517,25 @@ function SankeyReportCard({
             />
           ))}
           {sankey.nodes.map((node) => (
-            <g key={node.id}>
+            <g
+              aria-label={node.expandable ? `${node.label}, ${node.transactionCount} transactions. Click to ${node.selected ? "collapse" : "expand"}.` : undefined}
+              className={`sankey-node-group ${node.expandable ? "is-clickable" : ""} ${node.selected ? "is-selected" : ""}`}
+              key={node.id}
+              onClick={() => toggleSankeyNode(node)}
+              onKeyDown={(event) => handleSankeyNodeKeyDown(event, node)}
+              role={node.expandable ? "button" : undefined}
+              tabIndex={node.expandable ? 0 : undefined}
+            >
+              {node.expandable ? (
+                <rect
+                  className="sankey-hitbox"
+                  height={Math.max(node.height, 58)}
+                  rx="8"
+                  width={node.anchor === "end" ? Math.abs(node.x - node.labelX) + 168 : Math.abs(node.labelX - node.x) + 168}
+                  x={node.anchor === "end" ? node.labelX - 150 : node.x - 10}
+                  y={Math.min(node.y, node.labelY - 24)}
+                />
+              ) : null}
               <rect
                 className="sankey-node"
                 fill={node.color}
@@ -2742,8 +2838,115 @@ function parseHashState(): { params: URLSearchParams; route: RouteId } {
   return { params: new URLSearchParams(query), route };
 }
 
+function initialSearchQuery() {
+  return parseHashState().params.get("search") ?? "";
+}
+
+function initialPeriodPreset(): PeriodPreset {
+  const range = parseHashState().params.get("range");
+  return isPeriodPreset(range) ? range : "this-month";
+}
+
+function initialCustomStartDate() {
+  const start = parseHashState().params.get("start");
+  return start && isIsoDate(start) ? start : todayIso();
+}
+
+function initialCustomEndDate() {
+  const end = parseHashState().params.get("end");
+  return end && isIsoDate(end) ? end : addDays(todayIso(), 30);
+}
+
+function initialIncludeCandidates() {
+  return parseHashState().params.get("includeCandidates") !== "false";
+}
+
+function initialTransactionFilters(): TransactionFilterState {
+  const params = parseHashState().params;
+  const reviewed = params.get("reviewed");
+  return {
+    accountId: params.get("account") ?? "",
+    normalizedGroup: params.get("group") ?? "",
+    reviewed: isReviewFilter(reviewed) ? reviewed : "all",
+    status: params.get("status") ?? "",
+    transactionType: params.get("type") ?? "",
+  };
+}
+
+function initialReportView(): ReportView {
+  const report = parseHashState().params.get("report");
+  return isReportView(report) ? report : "cash-flow";
+}
+
+function initialReportGroupBy(): ReportGroupBy {
+  const params = parseHashState().params;
+  const groupBy = params.get("groupBy");
+  if (isReportGroupBy(groupBy)) return groupBy;
+  return initialReportView() === "income" ? "merchant" : "category";
+}
+
+function buildHashState({
+  customEndDate,
+  customStartDate,
+  includeCandidates,
+  periodPreset,
+  reportGroupBy,
+  reportView,
+  route,
+  searchQuery,
+  transactionFilters,
+}: {
+  customEndDate: string;
+  customStartDate: string;
+  includeCandidates: boolean;
+  periodPreset: PeriodPreset;
+  reportGroupBy: ReportGroupBy;
+  reportView: ReportView;
+  route: RouteId;
+  searchQuery: string;
+  transactionFilters: TransactionFilterState;
+}) {
+  const params = new URLSearchParams();
+  params.set("range", periodPreset);
+  if (periodPreset === "custom") {
+    params.set("start", customStartDate);
+    params.set("end", customEndDate);
+  }
+  if (candidateToggleApplies(route) && !includeCandidates) params.set("includeCandidates", "false");
+  if (searchQuery.trim()) params.set("search", searchQuery.trim());
+  if (route === "transactions") {
+    if (transactionFilters.accountId) params.set("account", transactionFilters.accountId);
+    if (transactionFilters.normalizedGroup) params.set("group", transactionFilters.normalizedGroup);
+    if (transactionFilters.reviewed !== "all") params.set("reviewed", transactionFilters.reviewed);
+    if (transactionFilters.status) params.set("status", transactionFilters.status);
+    if (transactionFilters.transactionType) params.set("type", transactionFilters.transactionType);
+  }
+  if (route === "reports") {
+    params.set("report", reportView);
+    params.set("groupBy", reportGroupBy);
+  }
+  const query = params.toString();
+  return query ? `#/${route}?${query}` : `#/${route}`;
+}
+
 function candidateToggleApplies(route: RouteId) {
   return ["dashboard", "cash-flow", "calendar", "recurring", "reports", "monthly-review"].includes(route);
+}
+
+function isPeriodPreset(value: string | null): value is PeriodPreset {
+  return periodOptions.some((option) => option.value === value);
+}
+
+function isReportView(value: string | null): value is ReportView {
+  return value === "cash-flow" || value === "income" || value === "spending";
+}
+
+function isReportGroupBy(value: string | null): value is ReportGroupBy {
+  return value === "category" || value === "merchant";
+}
+
+function isIsoDate(value: string) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value);
 }
 
 function filterByQuery<T>(rows: T[], query: string, getText: (row: T) => string): T[] {
@@ -2833,8 +3036,19 @@ function accountGroupKey(account: AccountRow) {
 }
 
 type ReportGroup = {
+  children: ReportGroupChild[];
   color: string;
+  id: string;
   label: string;
+  transactionCount: number;
+  value: number;
+};
+
+type ReportGroupChild = {
+  color: string;
+  id: string;
+  label: string;
+  transactionCount: number;
   value: number;
 };
 
@@ -2842,12 +3056,16 @@ type SankeyNodeModel = {
   anchor: "end" | "start";
   color: string;
   emphasis?: "middle" | "normal";
+  expandable: boolean;
+  groupId?: string;
   height: number;
   id: string;
   label: string;
   labelX: number;
   labelY: number;
   percent: string;
+  selected: boolean;
+  transactionCount: number;
   value: number;
   x: number;
   y: number;
@@ -2867,10 +3085,14 @@ type SankeyD3Node = {
   color: string;
   displayValue: number;
   emphasis?: "middle" | "normal";
+  expandable?: boolean;
+  groupId?: string;
   id: string;
   label: string;
   layer: number;
   percent: string;
+  selected?: boolean;
+  transactionCount?: number;
   value: number;
 };
 
@@ -2891,10 +3113,26 @@ function reportGroups(
 ): ReportGroup[] {
   if (view === "income") {
     const income = (insights?.category_groups ?? []).find((group) => group.group === "income");
+    const incomeSources = (insights?.income_sources ?? [])
+      .map((source, index) => ({
+        children: [],
+        color: paletteColor(index),
+        id: `income-${slugId(source.source_name)}`,
+        label: source.source_name,
+        transactionCount: source.transaction_count,
+        value: Number(source.inflow_total),
+      }))
+      .filter((group) => group.value > 0)
+      .sort((a, b) => b.value - a.value);
+    if (incomeSources.length > 0 && groupBy === "merchant") return incomeSources.slice(0, 6);
+
     return [
       {
+        children: [],
         color: "#159bbd",
+        id: "income",
         label: "Paychecks",
+        transactionCount: income?.transaction_count ?? 0,
         value: Number(income?.inflow_total ?? 0),
       },
     ].filter((group) => group.value > 0);
@@ -2903,8 +3141,11 @@ function reportGroups(
   if (groupBy === "merchant") {
     const topMerchants = (insights?.top_merchants ?? [])
       .map((merchant, index) => ({
+        children: [],
         color: paletteColor(index),
+        id: `merchant-${slugId(merchant.merchant_name)}`,
         label: merchant.merchant_name,
+        transactionCount: merchant.transaction_count,
         value: Math.abs(Number(merchant.outflow_total)),
       }))
       .filter((group) => group.value > 0)
@@ -2916,8 +3157,11 @@ function reportGroups(
       ? [
           ...topMerchants,
           {
+            children: [],
             color: "#9aa19a",
+            id: "merchant-other",
             label: "Other merchants",
+            transactionCount: 0,
             value: otherTotal,
           },
         ]
@@ -2926,41 +3170,91 @@ function reportGroups(
 
   return (insights?.category_groups ?? [])
     .filter((group) => !["income", "transfer", "ignored"].includes(group.group))
-    .map((group) => ({
-      color: categoryColor(group.group),
-      label: titleCase(group.group),
-      value: Math.abs(Number(group.outflow_total)),
-    }))
+    .map((group) => {
+      const children = merchantBreakdownForGroup(insights, group.group);
+      return {
+        children,
+        color: categoryColor(group.group),
+        id: group.group,
+        label: titleCase(group.group),
+        transactionCount: group.transaction_count,
+        value: Math.abs(Number(group.outflow_total)),
+      };
+    })
     .filter((group) => group.value > 0)
     .sort((a, b) => b.value - a.value)
     .slice(0, 6);
 }
 
+function merchantBreakdownForGroup(insights: InsightsResponse | null, groupName: string): ReportGroupChild[] {
+  const merchants = (insights?.merchant_breakdowns ?? [])
+    .filter((merchant) => merchant.group === groupName)
+    .map((merchant, index) => ({
+      color: paletteColor(index),
+      id: `${groupName}-${slugId(merchant.merchant_name)}`,
+      label: merchant.merchant_name,
+      transactionCount: merchant.transaction_count,
+      value: Math.abs(Number(merchant.outflow_total)),
+    }))
+    .filter((merchant) => merchant.value > 0)
+    .sort((a, b) => b.value - a.value);
+  const top = merchants.slice(0, 5);
+  const otherValue = merchants.slice(5).reduce((sum, merchant) => sum + merchant.value, 0);
+  const otherCount = merchants.slice(5).reduce((sum, merchant) => sum + merchant.transactionCount, 0);
+  return otherValue > 1
+    ? [
+        ...top,
+        {
+          color: "#9aa19a",
+          id: `${groupName}-other`,
+          label: "Other merchants",
+          transactionCount: otherCount,
+          value: otherValue,
+        },
+      ]
+    : top;
+}
+
 function buildSankeyGeometry({
+  expandedGroupId,
   expenses,
   groups,
   income,
   savings,
   view,
 }: {
+  expandedGroupId: string | null;
   expenses: number;
   groups: ReportGroup[];
   income: number;
   savings: number;
   view: "cash-flow" | "income" | "spending";
 }): { flows: SankeyFlowModel[]; nodes: SankeyNodeModel[] } {
+  if (view === "income" && groups.length === 0 && income <= 0) {
+    return { flows: [], nodes: [] };
+  }
   const destinations =
     view === "cash-flow" && savings > 0
-      ? [{ color: "#2f7d5c", label: "Savings", value: savings }, ...groups]
+      ? [
+          {
+            children: [],
+            color: "#2f7d5c",
+            id: "savings",
+            label: "Savings",
+            transactionCount: 0,
+            value: savings,
+          },
+          ...groups,
+        ]
       : groups;
-  const graph = buildD3SankeyGraph({ destinations, expenses, income, savings, view });
+  const graph = buildD3SankeyGraph({ destinations, expandedGroupId, expenses, income, savings, view });
   const layout = createSankey<SankeyD3Node, SankeyD3Link>()
     .nodeId((node) => node.id)
     .nodeAlign((node) => node.layer)
     .nodeWidth(20)
-    .nodePadding(destinations.length > 5 ? 30 : 44)
+    .nodePadding(destinationNodeCount(destinations, expandedGroupId) > 8 ? 28 : destinations.length > 5 ? 34 : 46)
     .nodeSort((a, b) => (b.value ?? 0) - (a.value ?? 0))
-    .extent([[80, 80], [1010, 448]])
+    .extent([[80, 76], [1040, 548]])
     .iterations(72);
   const computed = layout(graph);
   const linkPath = sankeyLinkHorizontal<SankeyD3Node, SankeyD3Link>();
@@ -2981,12 +3275,14 @@ function buildSankeyGeometry({
 
 function buildD3SankeyGraph({
   destinations,
+  expandedGroupId,
   expenses,
   income,
   savings,
   view,
 }: {
   destinations: ReportGroup[];
+  expandedGroupId: string | null;
   expenses: number;
   income: number;
   savings: number;
@@ -2994,38 +3290,130 @@ function buildD3SankeyGraph({
 }): SankeyGraph<SankeyD3Node, SankeyD3Link> {
   const destinationTotal = destinations.reduce((total, group) => total + group.value, 0);
 
-  if (view === "spending") {
+  if (view === "income") {
+    const totalIncome = Math.max(income, destinationTotal, 1);
     return {
       nodes: [
-        {
-          color: "#2f7d5c",
-          displayValue: expenses,
-          emphasis: "middle",
-          id: "outflow",
-          label: "Outflows",
-          layer: 0,
-          percent: "",
-          value: expenses,
-        },
         ...destinations.map((group) => ({
           color: group.color,
           displayValue: group.value,
-          id: `destination-${group.label}`,
-          layer: 1,
+          id: `income-source-${group.id}`,
           label: group.label,
-          percent: percentage(group.value, expenses),
+          layer: 0,
+          percent: percentage(group.value, totalIncome),
+          transactionCount: group.transactionCount,
           value: group.value,
         })),
+        {
+          color: "#159bbd",
+          displayValue: totalIncome,
+          emphasis: "middle",
+          id: "income-total",
+          label: "Total income",
+          layer: 1,
+          percent: "",
+          value: totalIncome,
+        },
+        {
+          color: "#2aaed1",
+          displayValue: totalIncome,
+          id: "available",
+          label: "Available funds",
+          layer: 2,
+          percent: "",
+          value: totalIncome,
+        },
       ],
-      links: destinations.map((group) => ({
+      links: [
+        ...destinations.map((group) => ({
+          color: group.color,
+          id: `income-source-${group.id}`,
+          label: group.label,
+          opacity: 0.46,
+          source: `income-source-${group.id}`,
+          target: "income-total",
+          value: group.value,
+        })),
+        {
+          color: "#b8eadb",
+          id: "income-available",
+          label: "Total income to available funds",
+          opacity: 0.72,
+          source: "income-total",
+          target: "available",
+          value: totalIncome,
+        },
+      ],
+    };
+  }
+
+  if (view === "spending") {
+    const nodes: SankeyD3Node[] = [
+      {
+        color: "#2f7d5c",
+        displayValue: expenses,
+        emphasis: "middle",
+        id: "outflow",
+        label: "Outflows",
+        layer: 0,
+        percent: "",
+        value: expenses,
+      },
+    ];
+    const links: SankeyD3Link[] = [];
+    for (const group of destinations) {
+      const destinationId = `destination-${group.id}`;
+      const isExpanded = group.id === expandedGroupId && group.children.length > 0;
+      nodes.push({
         color: group.color,
-        id: `expense-${group.label}`,
+        displayValue: group.value,
+        expandable: group.children.length > 0,
+        groupId: group.id,
+        id: destinationId,
+        layer: 1,
+        label: group.label,
+        percent: percentage(group.value, expenses),
+        selected: isExpanded,
+        transactionCount: group.transactionCount,
+        value: group.value,
+      });
+      links.push({
+        color: group.color,
+        id: `expense-${group.id}`,
         label: group.label,
         opacity: 0.42,
         source: "outflow",
-        target: `destination-${group.label}`,
+        target: destinationId,
         value: group.value,
-      })),
+      });
+      if (isExpanded) {
+        for (const child of group.children) {
+          const childId = `child-${child.id}`;
+          nodes.push({
+            color: child.color,
+            displayValue: child.value,
+            id: childId,
+            layer: 2,
+            label: child.label,
+            percent: percentage(child.value, group.value),
+            transactionCount: child.transactionCount,
+            value: child.value,
+          });
+          links.push({
+            color: child.color,
+            id: `expense-${group.id}-${child.id}`,
+            label: child.label,
+            opacity: 0.48,
+            source: destinationId,
+            target: childId,
+            value: child.value,
+          });
+        }
+      }
+    }
+    return {
+      links,
+      nodes,
     };
   }
 
@@ -3097,25 +3485,55 @@ function buildD3SankeyGraph({
       value: Math.max(expenses, 1),
     });
     for (const group of destinations) {
+      const destinationId = `destination-${group.id}`;
+      const isExpanded = group.id === expandedGroupId && group.children.length > 0;
       nodes.push({
         color: group.color,
         displayValue: group.value,
-        id: `destination-${group.label}`,
+        expandable: group.children.length > 0,
+        groupId: group.id,
+        id: destinationId,
         layer: 3,
         label: group.label,
         percent: group.label === "Savings" ? percentage(group.value, income || savings) : percentage(group.value, expenses),
+        selected: isExpanded,
+        transactionCount: group.transactionCount,
         value: group.value,
       });
       const isSavings = group.label === "Savings";
       links.push({
         color: group.color,
-        id: `allocated-${group.label}`,
+        id: `allocated-${group.id}`,
         label: group.label,
         opacity: isSavings ? 0.32 : 0.42,
         source: isSavings ? "available" : "outflow",
-        target: `destination-${group.label}`,
+        target: destinationId,
         value: group.value,
       });
+      if (isExpanded) {
+        for (const child of group.children) {
+          const childId = `child-${child.id}`;
+          nodes.push({
+            color: child.color,
+            displayValue: child.value,
+            id: childId,
+            layer: 4,
+            label: child.label,
+            percent: percentage(child.value, group.value),
+            transactionCount: child.transactionCount,
+            value: child.value,
+          });
+          links.push({
+            color: child.color,
+            id: `allocated-${group.id}-${child.id}`,
+            label: child.label,
+            opacity: 0.48,
+            source: destinationId,
+            target: childId,
+            value: child.value,
+          });
+        }
+      }
     }
   }
 
@@ -3127,21 +3545,32 @@ function percentage(value: number, total: number) {
   return `${((value / total) * 100).toFixed(1)}%`;
 }
 
+function destinationNodeCount(destinations: ReportGroup[], expandedGroupId: string | null) {
+  return destinations.reduce(
+    (count, group) => count + 1 + (group.id === expandedGroupId ? group.children.length : 0),
+    0,
+  );
+}
+
 function d3SankeyNodeToModel(node: SankeyNode<SankeyD3Node, SankeyD3Link>): SankeyNodeModel {
   const x = node.x0 ?? 0;
   const y = node.y0 ?? 0;
   const height = Math.max(12, (node.y1 ?? y + 12) - y);
-  const isDestination = node.depth === 2 || node.id.startsWith("destination-");
+  const isDestination = (node.depth ?? 0) >= 2 || node.id.startsWith("destination-") || node.id.startsWith("child-");
   return {
     anchor: node.emphasis === "middle" ? "end" : isDestination ? "end" : "start",
     color: node.color,
     emphasis: node.emphasis,
+    expandable: Boolean(node.expandable),
+    groupId: node.groupId,
     height,
     id: node.id,
     label: compactLabel(node.label),
     labelX: node.emphasis === "middle" ? x - 16 : isDestination ? x - 14 : (node.x1 ?? x) + 22,
     labelY: labelYFor(y, height),
     percent: node.percent,
+    selected: Boolean(node.selected),
+    transactionCount: node.transactionCount ?? 0,
     value: node.displayValue,
     x,
     y,
@@ -3154,6 +3583,10 @@ function labelYFor(y: number, height: number) {
 
 function compactLabel(label: string) {
   return label.length > 24 ? `${label.slice(0, 22).trim()}…` : label;
+}
+
+function slugId(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "unknown";
 }
 
 function reportTotals(insights: InsightsResponse | null) {
@@ -3357,13 +3790,6 @@ function titleCase(value: string) {
 function decisionTypeLabel(value: string) {
   if (value === "internal_transfer") return "Transfer match";
   if (value === "commitment_candidate") return "Recurring candidate";
-  return titleCase(value);
-}
-
-function balanceStatusLabel(value?: string) {
-  if (value === "ready") return "Ready for planning";
-  if (value === "needs_balance_review") return "Needs balance review";
-  if (!value) return "Setup needed";
   return titleCase(value);
 }
 

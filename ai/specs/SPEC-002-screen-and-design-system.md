@@ -90,11 +90,12 @@ previews.
 
 - Time-aware UK greeting in the page title.
 - Today's household position hero with cash readiness, available after commitments, flexible spend remaining, selected-window bills, Decision Queue count, and data freshness.
-- Balance Readiness card for setup state, known balances, and missing balances.
 - Spending Pulse card with categorized outflow bars and flexible allowance context.
 - Bills card with date-aware naming: `Recent Bills` for historical ranges, `Bills This Month` for current month, and `Upcoming Bills` for future windows.
 - Compact Decision Queue preview; full review table belongs on the Decision Queue page.
 - Cash Flow readiness/forecast card.
+- Keep the dashboard focused on household decisions. Avoid duplicating the hero's balance-readiness
+  message in a second card; show setup/import guidance only when the workspace is incomplete.
 
 ### Calendar
 
@@ -182,6 +183,10 @@ previews.
 
 - Cash Flow, Spending, and Income report tabs.
 - D3 Sankey cash-flow visualization that adapts to selected grouping and report tab.
+- Category leaves such as Debt and Flexible can expand on click into merchant buckets, with large
+  groups capped to top merchants plus `Other merchants`.
+- Income defaults to income-source grouping, with an optional `Summary only` view that still connects
+  Paychecks, Total income, and Available funds with visible flow color.
 - Final Sankey nodes stay inside the chart; labels sit close to their bars and use lighter,
   annotation-style typography so the flow bands remain dominant.
 - Category/merchant grouping controls should change the rendered destinations without requiring a
@@ -191,6 +196,8 @@ previews.
 ## 7. UI Principles
 
 - Prefer fewer, more useful numbers.
+- Persist user selections in the URL hash wherever a refresh should keep context: date range,
+  custom dates, search, include-candidates, transaction filters, and report tab/grouping.
 - Show formulas or assumptions where trust matters.
 - Do not over-chart.
 - Make every dashboard card answer a real household decision.
@@ -212,10 +219,16 @@ previews.
 - Implemented pages: Dashboard, Accounts, Transactions, Cash Flow, Calendar, Recurring, Goals, Sinking Funds, Monthly Review, Subscriptions, Reports, Decision Queue, Settings.
 - Implemented global controls: search, date range preset/custom controls, include-candidates toggle.
 - Implemented transaction controls: account, group, type, review state, status, and clear filters.
-- Implemented planning controls: saved report filters with URL query persistence for transaction drilldowns.
-- Implemented dashboard polish: time-aware UK greeting, GBP-only money formatting, date-aware bills terminology, Balance Readiness, Spending Pulse, compact dashboard Decision Queue preview, fixed sidebar, and hidden main scrollbar.
+- Implemented planning controls: saved report filters and URL-hash persistence for date range,
+  search, include-candidates, transaction filters, and Reports tab/grouping.
+- Implemented dashboard polish: time-aware UK greeting, GBP-only money formatting, date-aware bills
+  terminology, focused household-position hero, Spending Pulse, compact dashboard Decision Queue
+  preview, setup card only when incomplete, fixed sidebar, and hidden main scrollbar.
 - Implemented calendar polish: selected-period calendar grid, daily planned totals, commitment chips,
   collapsible bill list, and candidate-toggle-aware planning data.
 - Implemented reports polish: D3 Sankey reports, adaptive Cash Flow/Spending/Income tabs, category
-  vs merchant grouping, square node bars, internal destination labels, and softened chart typography.
-- Implemented verification: Playwright checks dashboard API availability, dashboard date-range bill-title behavior, compact dashboard Decision Queue rendering, transaction filter behavior, Phase 1.5 planning routes, all-route UI health, candidate toggle scope, calendar planner updates, colorful account/report graphics, fixed-sidebar scrolling, Decision Queue desktop layout, and Decision Queue mobile actions.
+  vs merchant/source grouping, expandable spending leaves, income-source breakdown, square node bars,
+  internal destination labels, visible summary flows, and softened chart typography.
+- Implemented performance polish: frontend GET de-duplication prevents React dev StrictMode from
+  duplicating identical in-flight API requests during refresh.
+- Implemented verification: Playwright checks dashboard API availability, dashboard date-range bill-title behavior, compact dashboard Decision Queue rendering, transaction filter behavior, refresh persistence, Phase 1.5 planning routes, all-route UI health, candidate toggle scope, calendar planner updates, colorful account/report graphics, fixed-sidebar scrolling, Decision Queue desktop layout, and Decision Queue mobile actions.

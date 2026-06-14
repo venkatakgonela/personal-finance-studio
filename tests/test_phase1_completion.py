@@ -104,7 +104,13 @@ def test_mark_bill_instance_paid_and_insights_exclude_transfers(db_session: Sess
 
     insights = get_insights(db_session, import_result.entity_id)
     assert insights.internal_transfers_excluded is True
+    assert insights.income_sources
     assert any(group.group in {"fixed", "flexible", "debt"} for group in insights.category_groups)
+    assert insights.merchant_breakdowns
+    assert all(
+        item.group not in {"income", "transfer", "ignored"}
+        for item in insights.merchant_breakdowns
+    )
 
 
 def test_phase_1_5_planning_overview_derives_review_and_saved_filters(

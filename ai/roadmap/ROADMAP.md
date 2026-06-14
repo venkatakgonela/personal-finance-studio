@@ -26,6 +26,7 @@ ai-eos-metadata:
 - [x] Account detection, classification, balance review, and include/exclude rules.
 - [x] Transaction ledger with reviewed/unreviewed state.
 - [x] Date-window controls and transaction filters for account, group, type, review state, status, and search.
+- [x] URL-hash persistence for refresh-safe date windows, search, transaction filters, report tab, and report grouping.
 - [x] Internal transfer detection and reconciliation.
 - [x] Category normalization and transaction review actions.
 - [x] Recurring commitment detection.
@@ -37,6 +38,7 @@ ai-eos-metadata:
 - [x] Low-noise Decision Queue with desktop table and mobile review-card layout.
 - [x] Basic Insights and Reports route.
 - [x] D3 Sankey report visualization for Cash Flow, Spending, and Income with category/merchant grouping.
+- [x] Expandable Sankey spending leaves and Income source breakdown.
 - [x] Backend, API, frontend unit, and browser end-to-end tests for critical flows.
 
 ## Phase 1 Completion Notes
@@ -62,13 +64,20 @@ ai-eos-metadata:
 - Backend planning data is exposed through `GET /api/planning/overview` and remains deterministic from existing accounts, transactions, commitments, decisions, and import logs.
 - Frontend routes now include Goals, Sinking Funds, Monthly Review, and Subscriptions alongside the existing Phase 1 routes.
 - Reports now include saved filters that deep-link into filtered transactions and planning views.
+- Main controls now persist in the URL hash so browser refresh keeps date range, search,
+  transaction filters, include-candidates, and Reports tab/grouping instead of resetting context.
 - Calendar now shows a selected-period planner grid with per-day bill/subscription/commitment chips,
   daily totals, busiest-day summary, and collapsible current/recent/upcoming bill rows.
-- Reports now use a D3 Sankey visualization with softer fluid flows, square bars, inside-chart final
-  node labels, and lighter annotation typography.
-- Dashboard now has a time-aware UK greeting, GBP formatting, balance-readiness card, spending pulse, compact Decision Queue preview, and date-aware bill naming (`Recent Bills`, `Bills This Month`, `Upcoming Bills`).
+- Reports now use a D3 Sankey visualization with softer fluid flows, expandable spending leaves,
+  Income source breakdown, square bars, inside-chart final node labels, visible summary flows, and
+  lighter annotation typography.
+- Dashboard now has a time-aware UK greeting, GBP formatting, focused household-position hero,
+  spending pulse, compact Decision Queue preview, setup guidance only when incomplete, and
+  date-aware bill naming (`Recent Bills`, `Bills This Month`, `Upcoming Bills`).
+- Frontend GET requests are de-duplicated while in flight, reducing duplicate local refresh traffic
+  under React dev StrictMode.
 - The E2E suite checks every primary route for reachability, failed-fetch regressions, dead hash links, unnamed buttons, and horizontal overflow.
-- The E2E suite also protects dashboard API availability, date-range bill-title behavior, compact dashboard Decision Queue rendering, transaction filters, candidate-toggle scope, calendar planner behavior, colorful report/account graphics, fixed-sidebar scrolling, and Decision Queue desktop/mobile layouts.
+- The E2E suite also protects dashboard API availability, date-range bill-title behavior, compact dashboard Decision Queue rendering, transaction filters, refresh persistence, candidate-toggle scope, calendar planner behavior, colorful report/account graphics, fixed-sidebar scrolling, and Decision Queue desktop/mobile layouts.
 - Remaining caveat: Phase 1.5 planning data is derived locally rather than user-authored persisted goals. Persisted custom goals can be part of Phase 2/3 if desired.
 
 ## Phase 2 - Expansion
