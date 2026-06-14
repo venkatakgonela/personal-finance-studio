@@ -1,0 +1,28 @@
+# ai-eos-metadata:
+#   purpose: "AI-EOS Project Manifest"
+#   how_to_use: "Read by Genesis-compatible agents; update when structure changes"
+#   generated_by: "Manual Genesis-aligned bootstrap"
+#   ai_eos_version: "1.0"
+
+genesis_version: "0.1.0-compatible"
+created: "2026-06-14"
+project:
+  name: "Personal Finance Studio"
+  type: "local-first-finance-app"
+  owner: "Kiran Gonela"
+  description: "Local-first Household and Business Finance Control Center."
+archetype: "react-fastapi-postgres"
+manifest:
+  - path: AGENTS.md
+  - path: ai/00-project-charter.md
+  - path: ai/01-architecture.md
+  - path: ai/02-domain-model.md
+  - path: ai/03-repo-map.md
+  - path: ai/04-decisions.md
+  - path: ai/05-coding-standards.md
+  - path: ai/06-agentic-sdlc.md
+  - path: ai/07-observability.md
+  - path: ai/08-risk-register.md
+  - path: ai/roadmap/ROADMAP.md
+  - path: ai/specs/SPEC-001-phase-1-household-snoop.md
+  - path: ai/specs/SPEC-002-screen-and-design-system.md
