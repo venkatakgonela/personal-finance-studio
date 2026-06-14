@@ -53,7 +53,7 @@ graph TD
 ## 4. Key Constraints & Tech Stack
 
 - **Frontend**: React + Vite + TypeScript.
-- **Routing**: React Router or TanStack Router.
+- **Routing**: Lightweight hash routes for Phase 1 (`#/dashboard`, `#/accounts`, etc.); upgrade to a router library only when nested flows need it.
 - **Data Fetching**: TanStack Query.
 - **Styling**: Tailwind CSS with project design tokens.
 - **Charts**: Recharts or Visx.

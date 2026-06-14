@@ -10,7 +10,8 @@ The first release focuses on the Household entity using Snoop CSV imports. It he
 - What bills, credit cards, loans, and BNPL payments are due next?
 - What will balances look like on a selected future date?
 
-This repository is currently in planning-first mode. Implementation should start only after the Phase 1 specification and ADRs are reviewed.
+Implementation has started from the locked Phase 1 plan. The current slice supports Snoop import,
+account and transaction review, internal transfer candidates, and recurring commitment candidates.
 
 ## Planning Docs
 
@@ -31,3 +32,52 @@ This repository is currently in planning-first mode. Implementation should start
 - Phase 1 integration: Snoop CSV import
 - Phase 1 entity: Household
 - Future entities/integrations: Business, Tide CSV, NatWest Business CSV, Open Banking, local LLM assistant
+
+## Local Development
+
+Backend:
+
+```bash
+uv sync
+uv run alembic upgrade head
+uv run uvicorn app.main:app --reload --port 8025
+```
+
+Frontend:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Database:
+
+```bash
+docker compose up -d
+```
+
+Default local ports:
+
+- Backend API: `8025`
+- Frontend: `5175`
+- PostgreSQL: `5435`
+
+## Quality Gates
+
+Backend:
+
+```bash
+uv run ruff check .
+uv run pytest
+env DATABASE_URL=sqlite+pysqlite:////private/tmp/pfs_alembic_smoke.db uv run alembic upgrade head
+```
+
+Frontend:
+
+```bash
+cd frontend
+npm run lint
+npm run test
+npm run build
+```

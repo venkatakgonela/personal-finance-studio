@@ -1,7 +1,7 @@
 # SPEC-001: Phase 1 Household Snoop Import & Finance Control Center
 
 **Author:** Kiran Gonela / Codex  
-**Status:** Draft  
+**Status:** Implemented locally  
 **Date:** 2026-06-14
 
 ## 1. Problem Statement
@@ -49,21 +49,21 @@ Daily import gaps should be handled through import freshness rather than special
 
 ## 5. Build Sequence
 
-1. Bootstrap app shell and database.
-2. Implement entity/profile/account schema.
-3. Implement Snoop import preview.
-4. Implement fingerprinting/upsert and import logs.
-5. Implement account classification and balance review.
-6. Implement internal transfer detection and reconciliation.
-7. Implement transaction ledger and reviewed state.
-8. Implement category normalization and rules.
-9. Implement recurring commitment detection.
-10. Implement commitments and bill instances.
-11. Implement calendar.
-12. Implement cashflow forecast.
-13. Implement dashboard.
-14. Implement Decision Queue.
-15. Implement basic Insights.
+1. [x] Bootstrap app shell and database.
+2. [x] Implement entity/profile/account schema.
+3. [x] Implement Snoop import preview.
+4. [x] Implement fingerprinting/upsert and import logs.
+5. [x] Implement account classification and balance review.
+6. [x] Implement internal transfer detection and reconciliation.
+7. [x] Implement transaction ledger and reviewed state.
+8. [x] Implement category normalization and review actions.
+9. [x] Implement recurring commitment detection.
+10. [x] Implement commitments and bill instances.
+11. [x] Implement calendar/upcoming commitments.
+12. [x] Implement cashflow forecast.
+13. [x] Implement dashboard.
+14. [x] Implement Decision Queue.
+15. [x] Implement basic Insights.
 
 ## 6. Available Money Formula
 

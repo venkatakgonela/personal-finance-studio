@@ -7,7 +7,7 @@ ai-eos-metadata:
 
 # Coding Standards - Personal Finance Studio
 
-Implementation has not started. These standards are provisional and become binding once code exists.
+Implementation has started. These standards are binding unless an ADR changes them.
 
 ## Backend
 
@@ -29,7 +29,7 @@ uv run pytest
 
 - React + Vite + TypeScript.
 - Prefer route-level pages and reusable domain components.
-- Use Tailwind design tokens for palette, spacing, and typography.
+- Use CSS variables from `SPEC-002` for palette, spacing, and typography.
 - Use tabular numbers for financial values.
 - Do not add charts where a table/timeline gives clearer decisions.
 

@@ -1,0 +1,32 @@
+[project]
+name = "personal-finance-studio"
+version = "0.1.0"
+description = "Local-first Household and Business Finance Control Center."
+requires-python = ">=3.12"
+dependencies = [
+    "alembic>=1.16.2",
+    "fastapi>=0.115.13",
+    "psycopg[binary]>=3.2.9",
+    "pydantic-settings>=2.9.1",
+    "python-multipart>=0.0.20",
+    "sqlalchemy>=2.0.41",
+    "uvicorn[standard]>=0.34.3",
+]
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "pytest>=8.4.0",
+    "ruff>=0.11.13",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

@@ -139,9 +139,9 @@ Exact commands may change once implementation is scaffolded, but equivalent gate
 
 Phase 1 is not ready until:
 
-- Core backend tests pass.
-- Import idempotency tests pass.
-- Transfer reconciliation tests pass.
-- Forecast formula tests pass.
-- Playwright critical flows pass.
-- Manual browser review is completed with no blocking UX issues.
+- [x] Core backend tests pass.
+- [x] Import idempotency tests pass.
+- [x] Transfer reconciliation tests pass.
+- [x] Forecast formula tests pass.
+- [x] Browser critical flows pass.
+- [x] Manual browser review is completed with no blocking UX issues.
