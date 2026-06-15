@@ -693,6 +693,7 @@ export function App() {
 
 function Sidebar({ currentRoute }: { currentRoute: RouteId }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [entityContext, setEntityContext] = useState<"household" | "business">("household");
   return (
     <aside className="sidebar">
       <div className="brand-lockup">
@@ -719,6 +720,22 @@ function Sidebar({ currentRoute }: { currentRoute: RouteId }) {
       <div className="profile-menu">
         {menuOpen ? (
           <div className="profile-menu-popover" role="menu">
+            <div className="entity-switcher" aria-label="Workspace context">
+              <button
+                aria-pressed={entityContext === "household"}
+                onClick={() => setEntityContext("household")}
+                type="button"
+              >
+                Household
+              </button>
+              <button
+                aria-pressed={entityContext === "business"}
+                onClick={() => setEntityContext("business")}
+                type="button"
+              >
+                Business
+              </button>
+            </div>
             <a
               className={currentRoute === "import" ? "active" : ""}
               href="#/import"
@@ -747,7 +764,7 @@ function Sidebar({ currentRoute }: { currentRoute: RouteId }) {
           <span>K</span>
           <div>
             <strong>Kiran</strong>
-            <small>Household</small>
+            <small>{entityContext === "household" ? "Household" : "Business preview"}</small>
           </div>
           <b className="profile-chevron" aria-hidden="true" />
         </button>
@@ -1173,8 +1190,6 @@ function AppPage({
     );
   }
 
-  const showSetupCard = !transactions?.total_count || !accounts?.accounts.length || !commitments?.total_count;
-
   return (
     <section className="dashboard-grid" aria-label="Personal Finance Studio dashboard">
       <DashboardHeroCard
@@ -1183,7 +1198,6 @@ function AppPage({
         planning={planning}
         upcoming={upcoming}
       />
-      <SpendingCard dashboard={dashboard} insights={insights} />
       <SpendingPlanCard
         controlState={controlState}
         dashboard={dashboard}
@@ -1191,19 +1205,20 @@ function AppPage({
         planning={planning}
         upcoming={upcoming}
       />
-      <PlanningSnapshotCard
-        controlState={controlState}
-        dashboard={dashboard}
-        insights={insights}
-        planning={planning}
-      />
       <UpcomingCard
         includeCandidates={includeCandidates}
+        limit={3}
         onBillPaid={onBillPaid}
         periodKind={periodKind}
         periodLabel={periodLabel}
         query={query}
         upcoming={upcoming}
+      />
+      <SpendingCard dashboard={dashboard} insights={insights} periodLabel={periodLabel} />
+      <PlanningSnapshotCard
+        controlState={controlState}
+        insights={insights}
+        planning={planning}
       />
       <DecisionQueueCard
         busy={busy}
@@ -1212,6 +1227,11 @@ function AppPage({
         limit={3}
         onDecisionAction={onDecisionAction}
         query={query}
+      />
+      <ReviewFocusCard
+        decisions={decisions}
+        planning={planning}
+        transactions={transactions}
       />
       <CashflowCard
         commitmentResult={commitmentResult}
@@ -1225,23 +1245,6 @@ function AppPage({
         transferResult={transferResult}
         upcoming={upcoming}
       />
-      {showSetupCard ? (
-        <GettingStartedCard
-          accounts={accounts}
-          busy={busy}
-          commitmentResult={commitmentResult}
-          commitments={commitments}
-          commitResult={commitResult}
-          decisions={decisions}
-          onCommit={onCommit}
-          onDetectCommitments={onDetectCommitments}
-          onDetectTransfers={onDetectTransfers}
-          onPreview={onPreview}
-          preview={preview}
-          transactions={transactions}
-          transferResult={transferResult}
-        />
-      ) : null}
     </section>
   );
 }
@@ -1283,11 +1286,12 @@ function GettingStartedCard({
       detail: preview ? `${preview.row_count} rows found` : "Check the file before saving it",
       action: (
         <label className="inline-file-action">
-          Choose file
+          {busy ? "Previewing..." : "Choose file"}
           <input
             aria-label="Choose Snoop CSV"
             type="file"
             accept=".csv,text/csv"
+            disabled={busy}
             onChange={(event) => {
               const file = event.target.files?.[0];
               if (file) void onPreview(file);
@@ -1306,7 +1310,7 @@ function GettingStartedCard({
         : "Persist transactions and accounts",
       action: (
         <button disabled={!preview || busy} onClick={() => void onCommit()} type="button">
-          Commit
+          {busy ? "Committing..." : "Commit"}
         </button>
       ),
     },
@@ -1320,7 +1324,7 @@ function GettingStartedCard({
         : "Pair account movements before reporting",
       action: (
         <button disabled={!hasImportedData || busy} onClick={onDetectTransfers} type="button">
-          Detect
+          {busy ? "Detecting..." : "Detect"}
         </button>
       ),
     },
@@ -1334,7 +1338,7 @@ function GettingStartedCard({
         : "Create a useful recurring inbox",
       action: (
         <button disabled={!hasImportedData || busy} onClick={onDetectCommitments} type="button">
-          Detect
+          {busy ? "Detecting..." : "Detect"}
         </button>
       ),
     },
@@ -1365,24 +1369,25 @@ function GettingStartedCard({
 function SpendingCard({
   dashboard,
   insights,
+  periodLabel,
 }: {
   dashboard: DashboardSummary | null;
   insights: InsightsResponse | null;
+  periodLabel: string;
 }) {
   const groups = reportGroups(insights, "category", "spending").slice(0, 4);
   const totalOutflow = groups.reduce((sum, group) => sum + group.value, 0);
-  const safeTotal = totalOutflow || Number(dashboard?.flexible_spend_actual ?? 0);
   const topGroup = groups[0];
 
   return (
     <article className="card spending-pulse-card">
-      <CardHeader title="Spending Pulse" subtitle="This month by category" />
+      <CardHeader title="Spending Pulse" subtitle={`${periodLabel} by category`} />
       <div className="spending-pulse-hero">
         <span>Total outflow</span>
-        <strong>{safeTotal ? money(String(safeTotal)) : "-"}</strong>
+        <strong>{totalOutflow ? money(String(totalOutflow)) : "-"}</strong>
         <small>
-          {dashboard?.flexible_spend_remaining
-            ? `${money(dashboard.flexible_spend_remaining)} flexible left`
+          {topGroup
+            ? `${topGroup.label} is the largest visible category`
             : "Import transactions to unlock trends"}
         </small>
       </div>
@@ -1412,6 +1417,10 @@ function SpendingCard({
           label="Flex allowance"
           value={dashboard?.flexible_spend_allowance ? money(dashboard.flexible_spend_allowance) : "-"}
         />
+      </div>
+      <div className="card-actions">
+        <a className="button-link" href="#/reports?report=spending">Open reports</a>
+        <a className="button-link button-link-secondary" href="#/transactions">Review transactions</a>
       </div>
     </article>
   );
@@ -1447,7 +1456,7 @@ function DashboardHeroCard({
       </div>
       <div className="hero-stat-grid">
         <Metric
-          label="After bills"
+          label="30-day after bills"
           value={dashboard?.available_after_commitments ? money(dashboard.available_after_commitments) : "-"}
         />
         <Metric
@@ -1803,7 +1812,7 @@ function UpcomingCard({
   ).slice(0, limit);
 
   return (
-    <article className="card">
+    <article className="card upcoming-bills-card">
       <CardHeader
         title={title}
         subtitle={
@@ -1831,6 +1840,10 @@ function UpcomingCard({
               : undefined,
         }))}
       />
+      <div className="card-actions">
+        <a className="button-link" href="#/calendar">Open calendar</a>
+        <a className="button-link button-link-secondary" href="#/recurring">Review recurring</a>
+      </div>
     </article>
   );
 }
@@ -1955,9 +1968,12 @@ function DecisionQueueCard({
     decisionId: string,
   ) => Promise<void>;
 }) {
-  const rows = filterByQuery(decisions?.decisions ?? [], query, (decision) =>
+  const [expandedLimit, setExpandedLimit] = useState(limit);
+  const filteredRows = filterByQuery(decisions?.decisions ?? [], query, (decision) =>
     `${decision.title} ${decision.detail} ${decision.amount} ${decision.decision_type}`,
-  ).slice(0, limit);
+  );
+  const rowLimit = compact ? limit : expandedLimit;
+  const rows = filteredRows.slice(0, rowLimit);
   const visibleCount = rows.length;
   const decisionCounts = countBy(decisions?.decisions ?? [], (decision) => decision.decision_type);
   const summary = Object.keys(decisionCounts).length > 0 ? (
@@ -1999,7 +2015,11 @@ function DecisionQueueCard({
           <a className="button-link button-link-secondary compact-card-link" href="#/decision-queue">
             Review all {decisions.total_count} decisions
           </a>
-        ) : null}
+        ) : (
+          <a className="button-link button-link-secondary compact-card-link" href="#/decision-queue">
+            Open decision queue
+          </a>
+        )}
       </article>
     );
   }
@@ -2016,11 +2036,14 @@ function DecisionQueueCard({
       />
       {summary}
       {rows.length === 0 ? (
-        <p className="empty-copy">
-          {decisions?.total_count === 0
-            ? "Nothing needs review right now."
-            : "No decisions match this search."}
-        </p>
+        <div className="empty-panel">
+          <strong>{decisions?.total_count === 0 ? "Decision queue is clear" : "No matching decisions"}</strong>
+          <p>
+            {decisions?.total_count === 0
+              ? "Confirmed transfers and recurring bills will appear here when they need review."
+              : "Try clearing search or filters to see the remaining queue."}
+          </p>
+        </div>
       ) : (
         <div className="decision-list" role="table" aria-label="Decision queue review table">
           <div className="decision-table-header" role="row">
@@ -2061,6 +2084,17 @@ function DecisionQueueCard({
           ))}
         </div>
       )}
+      {!compact && filteredRows.length > visibleCount ? (
+        <div className="card-actions">
+          <button
+            className="button-link button-link-secondary"
+            onClick={() => setExpandedLimit((current) => current + limit)}
+            type="button"
+          >
+            Show {Math.min(limit, filteredRows.length - visibleCount)} more
+          </button>
+        </div>
+      ) : null}
     </article>
   );
 }
@@ -3262,6 +3296,7 @@ function AccountReviewRow({
 }) {
   const [balance, setBalance] = useState(account.current_balance ?? "");
   const [accountType, setAccountType] = useState(account.account_type);
+  const balanceInvalid = !isValidMoneyInput(balance, { allowEmpty: false });
 
   return (
     <div className="account-review-row">
@@ -3286,18 +3321,20 @@ function AccountReviewRow({
       </select>
       <input
         aria-label={`Balance for ${account.display_name}`}
+        aria-invalid={balanceInvalid}
         inputMode="decimal"
         onChange={(event) => setBalance(event.target.value)}
         placeholder="Current balance"
         value={balance}
       />
       <button
-        disabled={busy || !balance.trim()}
+        disabled={busy || balanceInvalid}
         onClick={() => void onAccountBalanceUpdate(account.id, balance, accountType)}
         type="button"
       >
         Save
       </button>
+      {balanceInvalid ? <small className="field-error account-balance-error">Enter a valid balance.</small> : null}
     </div>
   );
 }
@@ -3439,6 +3476,10 @@ function CashflowCard({
           : "Only confirmed commitments are included; candidate bills are hidden from this planning view."}
         {preview || transactions || transferResult || commitmentResult || commitments ? "" : " Import data to begin."}
       </p>
+      <div className="card-actions">
+        <a className="button-link" href="#/cash-flow">Open cash flow</a>
+        <a className="button-link button-link-secondary" href="#/calendar">Open calendar</a>
+      </div>
     </article>
   );
 }
@@ -3468,6 +3509,8 @@ function CashflowPlanningCard({
     notes: "",
     outflowAdjustment: "",
   });
+  const incomeAdjustmentInvalid = !isValidMoneyInput(scenarioForm.incomeAdjustment, { allowEmpty: true });
+  const outflowAdjustmentInvalid = !isValidMoneyInput(scenarioForm.outflowAdjustment, { allowEmpty: true });
   const totals = reportTotals(insights);
   const pressure = Number(dashboard?.flexible_spend_actual ?? 0) + Number(upcoming?.expected_total ?? 0);
   const cash = Number(dashboard?.cash_on_hand ?? 0);
@@ -3477,6 +3520,7 @@ function CashflowPlanningCard({
   const bestScenario = controlState.scenarios[0];
   const addScenario = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (incomeAdjustmentInvalid || outflowAdjustmentInvalid) return;
     onControlStateChange((current) => ({
       ...current,
       scenarios: [
@@ -3538,20 +3582,24 @@ function CashflowPlanningCard({
           <label>
             Income change
             <input
+              aria-invalid={incomeAdjustmentInvalid}
               inputMode="decimal"
               onChange={(event) => setScenarioForm({ ...scenarioForm, incomeAdjustment: event.target.value })}
               placeholder="250"
               value={scenarioForm.incomeAdjustment}
             />
+            {incomeAdjustmentInvalid ? <small className="field-error">Enter a valid number.</small> : null}
           </label>
           <label>
             Outflow change
             <input
+              aria-invalid={outflowAdjustmentInvalid}
               inputMode="decimal"
               onChange={(event) => setScenarioForm({ ...scenarioForm, outflowAdjustment: event.target.value })}
               placeholder="-150"
               value={scenarioForm.outflowAdjustment}
             />
+            {outflowAdjustmentInvalid ? <small className="field-error">Enter a valid number.</small> : null}
           </label>
           <label>
             Notes
@@ -3562,7 +3610,7 @@ function CashflowPlanningCard({
             />
           </label>
           <div className="form-actions">
-            <button type="submit">Add scenario</button>
+            <button disabled={incomeAdjustmentInvalid || outflowAdjustmentInvalid} type="submit">Add scenario</button>
           </div>
         </form>
         <div className="scenario-list">
@@ -3606,12 +3654,10 @@ function CashflowPlanningCard({
 
 function PlanningSnapshotCard({
   controlState,
-  dashboard,
   insights,
   planning,
 }: {
   controlState: PlanningControlState;
-  dashboard: DashboardSummary | null;
   insights: InsightsResponse | null;
   planning: PlanningOverview | null;
 }) {
@@ -3619,27 +3665,51 @@ function PlanningSnapshotCard({
   const totals = budgetTotals(rows, insights);
   const customGoal = controlState.goals[0];
   const derivedGoal = planning?.goals[0];
+  const monthlySetAside =
+    controlState.goals.reduce((sum, goal) => sum + goal.monthlyContribution, 0) +
+    (planning?.goals ?? []).reduce((sum, goal) => sum + Number(goal.monthly_contribution), 0);
+  const goalCount = controlState.goals.length + (planning?.goals.length ?? 0);
+  const budgetUsedPercent = totals.plannedOutflow > 0
+    ? Math.round((totals.actualOutflow / totals.plannedOutflow) * 100)
+    : 0;
   const goalProgressValue = customGoal
     ? goalProgress(customGoal.currentAmount, customGoal.targetAmount)
     : Number(derivedGoal?.progress_percent ?? 0);
   return (
     <article className="card planning-snapshot-card">
-      <CardHeader title="Planning Snapshot" subtitle="Budget, goals, and risk in one glance." />
+      <CardHeader title="Budget & Goals" subtitle="Planned spending and savings progress." />
       <div className="planning-snapshot-grid">
-        <div className="snapshot-tile">
-          <span>Budget remaining</span>
+        <div className="snapshot-row snapshot-row-budget-used">
+          <div>
+            <span>Budget used</span>
+            <small>
+              {totals.plannedOutflow > 0
+                ? `${money(String(totals.actualOutflow))} of ${money(String(totals.plannedOutflow))}`
+                : "Create a budget to track usage"}
+            </small>
+          </div>
+          <strong className={budgetUsedPercent > 100 ? "negative-text" : ""}>{budgetUsedPercent}%</strong>
+        </div>
+        <div className="snapshot-row">
+          <div>
+            <span>Remaining</span>
+            <small>{totals.remaining >= 0 ? "Still available in budget" : "Over planned budget"}</small>
+          </div>
           <strong className={totals.remaining >= 0 ? "positive-text" : "negative-text"}>{money(String(totals.remaining))}</strong>
-          <small>{money(String(totals.actualOutflow))} actual outflow</small>
         </div>
-        <div className="snapshot-tile">
-          <span>Goal progress</span>
+        <div className="snapshot-row">
+          <div>
+            <span>Primary goal</span>
+            <small>{customGoal?.name ?? derivedGoal?.name ?? "Create a savings target"}</small>
+          </div>
           <strong>{goalProgressValue.toFixed(0)}%</strong>
-          <small>{customGoal?.name ?? derivedGoal?.name ?? "Create a savings target"}</small>
         </div>
-        <div className="snapshot-tile">
-          <span>Cash after bills</span>
-          <strong>{dashboard?.available_after_commitments ? money(dashboard.available_after_commitments) : "-"}</strong>
-          <small>{dashboard?.decision_count ?? 0} open decisions</small>
+        <div className="snapshot-row">
+          <div>
+            <span>Monthly set-aside</span>
+            <small>{goalCount} active {goalCount === 1 ? "goal" : "goals"}</small>
+          </div>
+          <strong>{monthlySetAside ? money(String(monthlySetAside)) : "-"}</strong>
         </div>
       </div>
       <div className="card-actions">
@@ -3664,30 +3734,122 @@ function SpendingPlanCard({
   upcoming: UpcomingCommitmentsResponse | null;
 }) {
   const plan = spendingPlanTotals(controlState, insights, upcoming, planning);
+  const planSegments = spendingPlanSegments(plan);
+  const allocated = plan.obligations + plan.goalContributions + plan.flexibleActual;
+  const leftLabel = plan.leftToSpend >= 0 ? "Left to spend" : "Over planned income";
   return (
     <article className="card spending-plan-card">
-      <CardHeader title="Spending Plan" subtitle="Income minus bills, goals, and flexible spend." />
+      <CardHeader title="Left to Spend" subtitle="What remains after committed and tracked spend." />
       <div className="spending-plan-hero">
-        <span>Left to spend</span>
+        <span>{leftLabel}</span>
         <strong className={plan.leftToSpend >= 0 ? "positive-text" : "negative-text"}>{money(String(plan.leftToSpend))}</strong>
-        <small>{dashboard?.confidence === "ready" ? "Balance-backed planning" : "Enter balances for stronger confidence"}</small>
+        {dashboard?.confidence === "ready" ? (
+          <small>Current period estimate from imported income, bills, goals, and flexible spend.</small>
+        ) : (
+          <small>
+            Current period estimate. Add balances in <a href="#/accounts">Accounts</a> to improve confidence.
+          </small>
+        )}
       </div>
-      <div className="spending-plan-stack" aria-label="Spending plan waterfall">
-        <span style={{ background: "#2f7d5c", width: `${planScale(plan.income, plan)}%` }} />
-        <span style={{ background: "#d43c95", width: `${planScale(plan.obligations, plan)}%` }} />
-        <span style={{ background: "#d99a2b", width: `${planScale(plan.goalContributions, plan)}%` }} />
-        <span style={{ background: "#2587a6", width: `${planScale(Math.max(0, plan.leftToSpend), plan)}%` }} />
+      <p className="spending-plan-formula">
+        Imported income funds the plan. The bar shows expected bills/subscriptions, monthly goal
+        set-asides, flexible spend already tracked, and the remaining amount.
+      </p>
+      <div
+        className="spending-plan-stack"
+        aria-label={`Left to spend allocation. Income ${money(String(plan.income))}, bills and subscriptions ${money(String(plan.obligations))}, savings goals ${money(String(plan.goalContributions))}, flexible actual ${money(String(plan.flexibleActual))}, ${leftLabel.toLowerCase()} ${money(String(plan.leftToSpend))}.`}
+      >
+        {planSegments.length > 0 ? (
+          planSegments.map((segment) => (
+            <span
+              className="spending-plan-segment"
+              key={segment.label}
+              style={{ background: segment.color, width: `${segment.percent}%` }}
+              title={`${segment.label}: ${money(String(segment.value))}`}
+            />
+          ))
+        ) : (
+          <span className="spending-plan-segment spending-plan-empty" />
+        )}
+      </div>
+      <div className="spending-plan-legend" aria-label="Spending plan legend">
+        {planSegments.map((segment) => (
+          <span key={segment.label}>
+            <i style={{ background: segment.color }} />
+            {segment.label}
+          </span>
+        ))}
       </div>
       <div className="budget-summary-grid">
-        <Metric label="Income" value={money(String(plan.income))} />
         <Metric label="Bills/subscriptions" value={money(String(plan.obligations))} />
         <Metric label="Savings goals" value={money(String(plan.goalContributions))} />
         <Metric label="Flexible actual" value={money(String(plan.flexibleActual))} />
+        <Metric label="Allocated total" value={money(String(allocated))} />
       </div>
       <div className="card-actions">
         <a className="button-link" href="#/budget">Tune budget</a>
         <a className="button-link button-link-secondary" href="#/cash-flow">Scenario plan</a>
       </div>
+    </article>
+  );
+}
+
+function ReviewFocusCard({
+  decisions,
+  planning,
+  transactions,
+}: {
+  decisions: DecisionQueueResponse | null;
+  planning: PlanningOverview | null;
+  transactions: TransactionsResponse | null;
+}) {
+  const review = planning?.monthly_review;
+  const unreviewed = review?.unreviewed_count ?? 0;
+  const reviewed = review?.reviewed_count ?? 0;
+  const reviewTotal = Math.max(1, reviewed + unreviewed);
+  const reviewPercent = Math.round((reviewed / reviewTotal) * 100);
+  const decisionCount = decisions?.total_count ?? 0;
+  const staleCount = planning?.stale_commitments.length ?? 0;
+  const transactionCount = transactions?.total_count ?? 0;
+  const urgency = decisionCount + staleCount + unreviewed;
+
+  return (
+    <article className="card review-focus-card">
+      <CardHeader
+        title="Review Focus"
+        subtitle={urgency > 0 ? `${urgency} items can improve accuracy` : "Everything important looks tidy"}
+      />
+      <div className="review-focus-hero">
+        <div>
+          <span>Review coverage</span>
+          <strong>{reviewPercent}%</strong>
+          <small>{reviewed} reviewed · {unreviewed} left</small>
+        </div>
+        <div className="review-focus-ring" aria-label={`${reviewPercent}% reviewed`}>
+          <span style={{ width: `${reviewPercent}%` }} />
+        </div>
+      </div>
+      <div className="review-focus-grid">
+        <a href="#/transactions?reviewed=unreviewed">
+          <span>Unreviewed</span>
+          <strong>{unreviewed}</strong>
+        </a>
+        <a href="#/decision-queue">
+          <span>Decisions</span>
+          <strong>{decisionCount}</strong>
+        </a>
+        <a href="#/recurring">
+          <span>Stale bills</span>
+          <strong>{staleCount}</strong>
+        </a>
+        <a href="#/transactions">
+          <span>In view</span>
+          <strong>{transactionCount}</strong>
+        </a>
+      </div>
+      <p className="fine-print">
+        Clear these before trusting reports, budget actuals, and left-to-spend decisions.
+      </p>
     </article>
   );
 }
@@ -4181,6 +4343,12 @@ function numberFromInput(value: string) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function isValidMoneyInput(value: string, { allowEmpty }: { allowEmpty: boolean }) {
+  const normalized = value.replace(/[£,\s]/g, "");
+  if (!normalized) return allowEmpty;
+  return /^-?\d+(\.\d{1,2})?$/.test(normalized);
+}
+
 function goalProgress(currentAmount: number, targetAmount: number) {
   if (targetAmount <= 0) return 0;
   return Math.min(100, (Math.max(0, currentAmount) / targetAmount) * 100);
@@ -4249,9 +4417,22 @@ function spendingPlanTotals(
   };
 }
 
-function planScale(value: number, plan: ReturnType<typeof spendingPlanTotals>) {
-  const max = Math.max(plan.income, plan.obligations, plan.goalContributions, Math.abs(plan.leftToSpend), 1);
-  return Math.max(6, Math.min(100, (Math.abs(value) / max) * 100));
+function spendingPlanSegments(plan: ReturnType<typeof spendingPlanTotals>) {
+  const allocated = plan.obligations + plan.goalContributions + plan.flexibleActual;
+  const denominator = Math.max(plan.income, allocated, 1);
+  const rawSegments = [
+    { color: "#d43c95", label: "Bills/subscriptions", value: plan.obligations },
+    { color: "#d99a2b", label: "Savings goals", value: plan.goalContributions },
+    { color: "#2587a6", label: "Flexible actual", value: plan.flexibleActual },
+    plan.leftToSpend >= 0
+      ? { color: "#2f7d5c", label: "Left to spend", value: plan.leftToSpend }
+      : { color: "#b85c5c", label: "Over planned income", value: Math.abs(plan.leftToSpend) },
+  ].filter((segment) => segment.value > 0.005);
+
+  return rawSegments.map((segment) => ({
+    ...segment,
+    percent: Math.max(4, (segment.value / denominator) * 100),
+  }));
 }
 
 function ruleMatches(rule: RuleSetting, transactions: TransactionsResponse["transactions"]) {

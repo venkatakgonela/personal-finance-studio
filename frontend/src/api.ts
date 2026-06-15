@@ -447,8 +447,8 @@ export async function markBillInstancePaid(
   });
 }
 
-export async function getDecisions(): Promise<DecisionQueueResponse> {
-  return fetchJson<DecisionQueueResponse>("/api/decisions");
+export async function getDecisions(limit = 100): Promise<DecisionQueueResponse> {
+  return fetchJson<DecisionQueueResponse>(`/api/decisions?limit=${limit}`);
 }
 
 export async function getHealth(): Promise<HealthResponse> {

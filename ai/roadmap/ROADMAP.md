@@ -142,11 +142,16 @@ imported transactions, commitments, accounts, or explicit user-entered plan valu
   text.
 - Cash Flow now includes what-if scenarios with income/outflow adjustments and baseline comparison.
 - Budget now supports category, flexible, and rollover modes with visible planned/actual/remaining
-  formulas.
+  formulas, responsive row spacing, and no hidden/clipped values on narrower dashboard widths.
 - Dashboard includes a Spending Plan card that explains left-to-spend as income minus obligations,
   savings goals, and flexible actuals.
 - Reports include CSV export controls for transactions, budget, monthly review, and category reports.
-- Phase 2.1 remains the boundary for Business entity UI/imports and read-only local assistant work.
+- Phase 2 QA hardening added dashboard/import spacing fixes, visible import busy states, strict
+  numeric validation for cashflow scenarios and account balances, compact decision-queue paging,
+  calendar/report overflow protections, and restored heading/number typography tokens.
+- The profile menu now exposes a Household/Business context switcher shell. Full Business entity
+  backend scoping/import lanes remain Phase 2.1.
+- Phase 2.1 remains the boundary for Business entity data isolation/imports and read-only local assistant work.
 
 ## Phase 2.1 - Business And Assistant Expansion
 

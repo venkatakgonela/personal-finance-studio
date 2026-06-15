@@ -12,6 +12,7 @@ describe("App", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     window.localStorage?.clear();
+    window.location.hash = "#/import";
     mockedApi.getHealth.mockResolvedValue({
       app: "Personal Finance Studio",
       env: "local",
@@ -49,7 +50,7 @@ describe("App", () => {
   it("renders the import-first finance studio shell", () => {
     render(<App />);
 
-    expect(screen.getByRole("heading", { name: /Good (morning|afternoon|evening), Kiran\./ })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Bring fresh data into the plan." })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Dashboard" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /API/ })).toBeInTheDocument();
     expect(screen.getByText("Choose file")).toBeInTheDocument();

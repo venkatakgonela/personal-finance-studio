@@ -169,7 +169,7 @@ test("renders the dashboard with the polished visual system", async ({ page }) =
   await expect(page.getByText("Failed to fetch")).toHaveCount(0);
   const dashboard = page.getByLabel("Personal Finance Studio dashboard");
   await expect(dashboard.locator(".decision-table-header")).toHaveCount(0);
-  await expect(dashboard.locator(".decision-card-compact .compact-row")).toHaveCount(1);
+  await expect(dashboard.locator(".decision-card-compact .compact-row")).toHaveCount(3);
 
   const visualSystem = await page.evaluate(() => {
     const h1 = getComputedStyle(document.querySelector("h1") as HTMLElement);
@@ -186,9 +186,9 @@ test("renders the dashboard with the polished visual system", async ({ page }) =
     };
   });
 
-  expect(visualSystem.h1Font).toContain("Inter");
-  expect(visualSystem.h1Weight).toBe("700");
-  expect(visualSystem.metricFont).toContain("Inter");
+  expect(visualSystem.h1Font).toContain("Fraunces");
+  expect(visualSystem.h1Weight).toBe("760");
+  expect(visualSystem.metricFont).toContain("Geist Mono");
   expect(visualSystem.cardRadius).toBe("8px");
   expect(visualSystem.buttonRadius).toBe("8px");
 

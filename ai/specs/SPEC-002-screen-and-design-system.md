@@ -41,9 +41,10 @@ language; warm colours are reserved for warnings or exceptions.
 
 ## 3. Typography
 
-- Current implementation uses Inter for headings, body, controls, and tabular financial values after the Monarch-inspired typography cleanup.
+- Current implementation uses Inter for body/controls, Fraunces for page/card headings and brand
+  lockup, and Geist Mono for financial values.
 - Keep numeric values tabular via `font-variant-numeric: tabular-nums`.
-- Do not reintroduce mismatched editorial/highlight fonts without a full design-system decision.
+- Do not introduce one-off highlight fonts; typography changes must update the shared CSS tokens.
 
 ## 4. Data Confidence Language
 
@@ -78,6 +79,8 @@ previews.
 
 Lower-frequency operational routes, currently `#/import` and `#/settings`, live behind the
 bottom-left household/profile menu. The profile chevron must visibly rotate when the menu opens.
+The profile menu also hosts the Household/Business context switcher shell. Phase 2 exposes the UI
+affordance; Phase 2.1 owns backend entity scoping, separate ledgers, and business imports.
 
 ## 6. Screens
 
@@ -91,11 +94,16 @@ bottom-left household/profile menu. The profile chevron must visibly rotate when
 - Phase 1.75 adds a dedicated Import Center route so fresh data entry is discoverable after initial setup.
 - The global data affordance should be an action/status control, not a passive `Local data` label.
 - Import freshness/status belongs on the Import Center and should not be duplicated on Goals.
+- Import actions should show visible busy labels while preview, commit, transfer detection, or
+  commitment detection is running.
 
 ### Household Dashboard
 
 - Time-aware UK greeting in the page title.
 - Today's household position hero with cash readiness, available after commitments, flexible spend remaining, selected-window bills, Decision Queue count, and data freshness.
+- Backend `available_after_commitments` currently represents the 30-day after-bills summary; labels
+  must not imply it changes with the selected date window until backend range-aware dashboard
+  summaries are implemented.
 - Spending Pulse card with categorized outflow bars and flexible allowance context.
 - Bills card with date-aware naming: `Recent Bills` for historical ranges, `Bills This Month` for current month, and `Upcoming Bills` for future windows.
 - Compact Decision Queue preview; full review table belongs on the Decision Queue page.
@@ -114,6 +122,7 @@ bottom-left household/profile menu. The profile chevron must visibly rotate when
 - Current implementation includes a selected-period calendar grid with daily planned totals,
   commitment chips, a busiest-day summary, and a collapsible bill list whose title changes between
   `Recent bills`, `Current bills`, and `Upcoming bills`.
+- Calendar chips must clamp/ellipsis text on narrow screens instead of overflowing day cells.
 
 ### Cashflow Forecast
 
@@ -130,6 +139,7 @@ bottom-left household/profile menu. The profile chevron must visibly rotate when
 
 - Ledger with global search, selected date window, account filter, category group filter, transaction type filter, reviewed/unreviewed filter, posted status filter, amount/date/account/group columns, type edit, and reviewed save action.
 - Mark as internal transfer, debt payment, refund, ignored, or needs review.
+- Header and row columns must share the same grid template so resizing does not create column wobble.
 
 ### Bills & Commitments
 
@@ -140,6 +150,7 @@ bottom-left household/profile menu. The profile chevron must visibly rotate when
 - BNPL.
 - Recurring candidates.
 - Annual/custom/one-off support.
+- Candidate action buttons should use the same primary/secondary button language as the rest of the app.
 
 ### Goals
 
@@ -161,6 +172,8 @@ bottom-left household/profile menu. The profile chevron must visibly rotate when
   transaction/insight data.
 - Phase 2 adds category, flexible, and rollover budget modes. Rollover rows must show the rollover
   input directly beside planned/actual/remaining so the formula remains auditable.
+- Budget rows must preserve every value column. On constrained widths, the budget table should
+  horizontally scroll before hiding planned, actual, rollover, remaining, or status values.
 
 ### Sinking Funds
 
@@ -178,6 +191,8 @@ bottom-left household/profile menu. The profile chevron must visibly rotate when
 - Links back into Recurring for the actual commitment review workflow.
 
 ### Accounts
+
+- Balance inputs must validate decimal money values on the client before calling the API.
 
 - Provider, account name, type, balance, owner, include/exclude from cash and forecast.
 - Account freshness and source.

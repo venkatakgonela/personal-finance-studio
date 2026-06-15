@@ -83,6 +83,15 @@ Business entity imports and the local assistant are intentionally Phase 2.1, not
 - Added Cash Flow what-if scenarios with income/outflow adjustments and baseline comparison.
 - Added Reports export controls for transactions, budget, monthly review, and category reports.
 - Added backend normalization coverage so rule-applied group labels map to expected finance groups.
+- Applied QA hardening after the route audit:
+  - Import Center actions now show visible busy labels and the file picker matches button spacing.
+  - Account balance and cashflow scenario inputs reject invalid money values before submission.
+  - Dashboard hero labels distinguish the 30-day after-bills backend summary from selected-window bills.
+  - Budget table columns preserve planned/actual/rollover/remaining/status values with safe
+    horizontal overflow instead of clipping.
+  - Decision Queue has a structured empty state and client-side "show more" paging.
+  - Calendar chips, transaction rows, recurring candidate buttons, and report legends have overflow/spacing safeguards.
+  - Sidebar profile menu now includes a Household/Business context switcher shell ahead of Phase 2.1 backend scoping.
 
 ## Validation
 
@@ -96,11 +105,20 @@ cd frontend && npm run build
 cd frontend && npm run test:e2e -- --grep "phase 2 household|all primary routes"
 ```
 
+Additional QA audit validation:
+
+```bash
+cd frontend && npm run lint
+cd frontend && npm run build
+cd frontend && npm run test -- --run
+cd frontend && npm run test:e2e -- --grep "dashboard|all primary routes"
+```
+
 ## Phase 2.1 Boundary
 
 Not included in this task:
 
-- Business entity active UI.
+- Business entity backend scoping, separate ledgers, and real Business import lanes.
 - Tide CSV parser.
 - NatWest Business CSV parser.
 - Local LLM assistant.

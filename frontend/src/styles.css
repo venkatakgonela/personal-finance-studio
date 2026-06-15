@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,650;9..144,760&family=Geist+Mono:wght@500;650;750&family=Inter:wght@400;500;600;700;800&display=swap");
 
 :root {
   color: #20231f;
@@ -33,7 +33,8 @@
   --shadow: 0 12px 34px rgba(38, 41, 35, 0.07);
   --content-max: 1320px;
   --font-body: "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --font-number: var(--font-body);
+  --font-heading: "Fraunces", ui-serif, Georgia, serif;
+  --font-number: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --space-xxs: 4px;
   --space-xs: 8px;
   --space-sm: 12px;
@@ -159,8 +160,9 @@ nav a:focus-visible {
 
 .brand-lockup strong {
   color: var(--ink);
+  font-family: var(--font-heading);
   font-size: 0.82rem;
-  font-weight: 700;
+  font-weight: 760;
   letter-spacing: 0;
   line-height: 1.15;
 }
@@ -322,6 +324,33 @@ nav a.active {
   color: var(--focus);
 }
 
+.entity-switcher {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  margin-bottom: var(--space-xs);
+  padding: 4px;
+  border-radius: var(--radius-control);
+  background: var(--card-muted);
+}
+
+.entity-switcher button {
+  min-height: 30px;
+  padding: 0 var(--space-xs);
+  border: 0;
+  border-radius: calc(var(--radius-control) - 2px);
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 850;
+}
+
+.entity-switcher button[aria-pressed="true"] {
+  background: white;
+  color: var(--focus);
+  box-shadow: 0 6px 16px rgba(38, 41, 35, 0.08);
+}
+
 .profile-chip > span {
   display: grid;
   width: 30px;
@@ -376,11 +405,17 @@ strong {
 
 h1 {
   color: var(--ink);
-  font-family: var(--font-body);
+  font-family: var(--font-heading);
   font-size: clamp(1.15rem, 1.6vw, 1.35rem);
-  font-weight: 700;
+  font-weight: 760;
   letter-spacing: 0;
   line-height: 1.2;
+}
+
+h2,
+h3 {
+  font-family: var(--font-heading);
+  font-weight: 760;
 }
 
 .topbar-actions {
@@ -565,7 +600,14 @@ h1 {
   display: grid;
   grid-template-columns: minmax(360px, 1fr) minmax(360px, 1fr);
   gap: var(--space-sm);
-  align-items: start;
+  align-items: stretch;
+  grid-auto-flow: row dense;
+}
+
+.dashboard-grid > .card:not(.dashboard-hero-card) {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
 }
 
 .page-grid {
@@ -682,12 +724,14 @@ h1 {
 }
 
 .dashboard-hero-copy > strong {
+  max-width: 100%;
+  overflow-wrap: anywhere;
   color: var(--ink);
   font-family: var(--font-number);
-  font-size: clamp(2rem, 4vw, 3.3rem);
+  font-size: clamp(1.9rem, 3vw, 2.65rem);
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.04em;
-  line-height: 0.95;
+  letter-spacing: -0.03em;
+  line-height: 1;
 }
 
 .dashboard-hero-copy p {
@@ -708,17 +752,44 @@ h1 {
   position: relative;
   z-index: 1;
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-xs);
   align-content: center;
 }
 
 .dashboard-hero-card .metric {
-  min-height: 88px;
+  min-height: 82px;
+  overflow: hidden;
   border-color: rgba(255, 255, 255, 0.72);
   background: rgba(255, 255, 255, 0.72);
   box-shadow: 0 10px 24px rgba(38, 41, 35, 0.06);
   backdrop-filter: blur(12px);
+}
+
+.dashboard-grid .metric,
+.dashboard-grid .snapshot-tile,
+.dashboard-grid .cashflow-plan-hero,
+.dashboard-grid .spending-pulse-hero,
+.dashboard-grid .spending-plan-hero {
+  min-width: 0;
+}
+
+.dashboard-hero-card .metric span,
+.dashboard-grid .metric span {
+  font-size: 0.66rem;
+  letter-spacing: 0.04em;
+  line-height: 1.15;
+}
+
+.dashboard-hero-card .metric strong,
+.dashboard-grid .metric strong {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  font-family: var(--font-number);
+  font-size: clamp(0.94rem, 1.2vw, 1.08rem);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  line-height: 1.08;
 }
 
 .hero-freshness {
@@ -818,7 +889,22 @@ h1 {
   position: relative;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: var(--space-xs) var(--space-sm);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-control);
+  background: white;
+  color: var(--text);
+  font-size: 0.74rem;
+  font-weight: 600;
   overflow: hidden;
+}
+
+.inline-file-action:has(input:disabled) {
+  color: var(--soft);
+  background: var(--card-muted);
+  cursor: not-allowed;
 }
 
 .inline-file-action input {
@@ -858,6 +944,22 @@ h1 {
     linear-gradient(135deg, #ffffff 0%, #f7fbfb 100%);
 }
 
+.upcoming-bills-card {
+  border-color: rgba(181, 118, 43, 0.16);
+  background:
+    radial-gradient(circle at 12% 10%, rgba(245, 189, 34, 0.12), transparent 28%),
+    linear-gradient(135deg, #ffffff 0%, #fffaf0 100%);
+}
+
+.upcoming-bills-card .compact-list {
+  gap: 6px;
+}
+
+.upcoming-bills-card .compact-row {
+  min-height: 50px;
+  padding: 8px var(--space-sm);
+}
+
 .spending-pulse-hero {
   display: grid;
   gap: 4px;
@@ -880,24 +982,29 @@ h1 {
 }
 
 .spending-pulse-hero strong {
+  max-width: 100%;
+  overflow-wrap: anywhere;
   color: var(--ink);
   font-family: var(--font-number);
-  font-size: clamp(1.7rem, 3vw, 2.45rem);
+  font-size: clamp(1.18rem, 1.9vw, 1.42rem);
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.01em;
+  line-height: 1.08;
 }
 
 .spending-bar-list {
   display: grid;
   gap: var(--space-sm);
   margin-top: var(--space-md);
+  min-width: 0;
 }
 
 .spending-bar-row {
   display: grid;
-  grid-template-columns: minmax(108px, 0.45fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 0.45fr) minmax(120px, 1fr);
   align-items: center;
   gap: var(--space-sm);
+  min-width: 0;
 }
 
 .spending-bar-row strong,
@@ -906,9 +1013,12 @@ h1 {
 }
 
 .spending-bar-row strong {
+  overflow: hidden;
   color: var(--text);
   font-size: 0.84rem;
   line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .spending-bar-row small {
@@ -1206,6 +1316,7 @@ h1 {
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--space-xs);
+  min-width: 0;
 }
 
 .legend-row span {
@@ -1215,15 +1326,19 @@ h1 {
 }
 
 .legend-row small {
+  overflow: hidden;
   color: var(--muted);
-  font-size: 0.78rem;
+  font-size: clamp(0.68rem, 0.9vw, 0.78rem);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .legend-row b {
   color: var(--ink);
   font-family: var(--font-number);
-  font-size: 0.78rem;
+  font-size: clamp(0.68rem, 0.9vw, 0.78rem);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .report-metric-strip {
@@ -1498,6 +1613,7 @@ h1 {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 5px;
+  min-width: 0;
   padding: 5px 6px;
   border-radius: 7px;
   background: var(--accent-soft);
@@ -1514,6 +1630,7 @@ h1 {
 }
 
 .calendar-plan b {
+  min-width: max-content;
   color: inherit;
   font-family: var(--font-number);
   font-size: 0.66rem;
@@ -1528,6 +1645,24 @@ h1 {
 .calendar-plan-debt {
   background: #fff0d8;
   color: #8e5f13;
+}
+
+.field-error {
+  display: block;
+  margin-top: 4px;
+  color: var(--danger);
+  font-size: 0.72rem;
+  font-weight: 750;
+}
+
+.account-balance-error {
+  grid-column: 3 / -1;
+  margin-top: calc(-1 * var(--space-xs));
+}
+
+input[aria-invalid="true"] {
+  border-color: rgba(184, 92, 92, 0.65);
+  background: #fff5f5;
 }
 
 .calendar-plan-income {
@@ -1545,6 +1680,7 @@ h1 {
 .compact-list {
   display: grid;
   gap: var(--space-xs);
+  min-width: 0;
 }
 
 .decision-list {
@@ -1722,6 +1858,13 @@ h1 {
   color: var(--positive);
 }
 
+.row-actions button:first-child {
+  border-color: rgba(47, 125, 92, 0.28);
+  background: var(--positive-soft);
+  color: var(--positive);
+  font-weight: 800;
+}
+
 .decision-actions button:disabled {
   color: var(--soft);
   background: var(--card-muted);
@@ -1738,6 +1881,10 @@ h1 {
   background: linear-gradient(135deg, #ffffff 0%, #f7f5f0 100%);
 }
 
+.compact-row > div:first-child {
+  min-width: 0;
+}
+
 .compact-row:hover {
   border-color: var(--line-strong);
   background: var(--card-muted);
@@ -1745,30 +1892,39 @@ h1 {
 
 .compact-row strong {
   display: block;
+  overflow: hidden;
   color: var(--text);
   font-size: 0.9rem;
   line-height: 1.25;
+  text-overflow: ellipsis;
 }
 
 .compact-row small {
   display: block;
   margin-top: var(--space-xxs);
+  overflow: hidden;
   color: var(--muted);
   font-size: 0.76rem;
   line-height: 1.35;
+  text-overflow: ellipsis;
 }
 
 .compact-row span {
   justify-self: end;
+  min-width: max-content;
   color: var(--ink);
+  font-family: var(--font-number);
   font-size: 0.86rem;
   font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .row-actions {
   display: flex;
   flex: 0 0 auto;
   gap: var(--space-xs);
+  justify-self: end;
 }
 
 .row-actions button,
@@ -1825,8 +1981,9 @@ h1 {
 
 .transaction-table-header,
 .transaction-row {
+  --transaction-grid: minmax(180px, 1.4fr) 104px minmax(140px, 0.95fr) 108px 106px minmax(210px, 0.85fr);
   display: grid;
-  grid-template-columns: minmax(180px, 1.4fr) 104px minmax(140px, 0.95fr) 108px 106px minmax(210px, 0.85fr);
+  grid-template-columns: var(--transaction-grid);
   align-items: center;
   gap: var(--space-md);
 }
@@ -2112,6 +2269,7 @@ button.collapsible-block-header:focus {
 }
 
 .empty-state,
+.empty-panel,
 .empty-copy {
   display: grid;
   min-height: 150px;
@@ -2120,16 +2278,28 @@ button.collapsible-block-header:focus {
   text-align: center;
 }
 
-.empty-state {
+.empty-state,
+.empty-panel {
   align-content: center;
   gap: var(--space-xs);
 }
 
-.empty-state strong {
+.empty-panel {
+  padding: var(--space-xl);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background:
+    radial-gradient(circle at 50% 0%, rgba(42, 174, 209, 0.1), transparent 34%),
+    white;
+}
+
+.empty-state strong,
+.empty-panel strong {
   color: var(--text);
 }
 
 .empty-state p,
+.empty-panel p,
 .empty-copy,
 .fine-print {
   margin: 0;
@@ -2498,6 +2668,7 @@ button.collapsible-block-header:focus {
 
 .planning-snapshot-grid {
   grid-template-columns: 1fr;
+  gap: var(--space-xs);
 }
 
 .budget-toolbar {
@@ -2513,17 +2684,20 @@ button.collapsible-block-header:focus {
   display: grid;
   gap: 0;
   margin-top: var(--space-md);
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
   border: 1px solid var(--line);
   border-radius: var(--radius-card);
   background: white;
+  scrollbar-width: thin;
 }
 
 .budget-row {
   display: grid;
-  grid-template-columns: minmax(220px, 1.4fr) minmax(140px, 0.8fr) minmax(120px, 0.7fr) minmax(120px, 0.7fr) minmax(92px, auto);
+  grid-template-columns: minmax(190px, 1.45fr) minmax(128px, 0.72fr) minmax(128px, 0.72fr) minmax(128px, 0.72fr) minmax(108px, max-content);
   gap: var(--space-sm);
   align-items: center;
+  min-width: 760px;
   min-height: 62px;
   padding: var(--space-sm) var(--space-md);
   border: 0;
@@ -2533,7 +2707,8 @@ button.collapsible-block-header:focus {
 }
 
 .budget-row:has(input[aria-label^="Rollover"]) {
-  grid-template-columns: minmax(190px, 1.4fr) minmax(120px, 0.75fr) minmax(110px, 0.65fr) minmax(120px, 0.75fr) minmax(110px, 0.65fr) minmax(92px, auto);
+  grid-template-columns: minmax(180px, 1.35fr) minmax(126px, 0.68fr) minmax(126px, 0.68fr) minmax(126px, 0.68fr) minmax(126px, 0.68fr) minmax(108px, max-content);
+  min-width: 900px;
 }
 
 .budget-row:last-child {
@@ -2552,21 +2727,40 @@ button.collapsible-block-header:focus {
 
 .budget-row small {
   display: block;
+  overflow: hidden;
   color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .budget-row > span,
 .budget-row input {
   justify-self: end;
+  min-width: 0;
+  max-width: 100%;
   text-align: right;
+}
+
+.budget-row input {
+  width: 100%;
+}
+
+.budget-row > span:not(.status-pill) {
+  overflow: hidden;
+  font-family: var(--font-number);
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .budget-row > .status-pill {
   justify-self: end;
+  white-space: nowrap;
 }
 
 .cashflow-planner-card,
 .spending-plan-card,
+.review-focus-card,
 .planning-snapshot-card,
 .budget-page-card {
   background:
@@ -2601,7 +2795,17 @@ button.collapsible-block-header:focus {
   display: block;
   margin-top: 4px;
   color: var(--ink);
-  font-size: 1.45rem;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  font-family: var(--font-number);
+  font-size: clamp(1.12rem, 1.65vw, 1.32rem);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  line-height: 1.08;
+}
+
+.spending-plan-hero strong {
+  font-size: clamp(1.18rem, 1.8vw, 1.38rem);
 }
 
 .spending-plan-hero {
@@ -2618,20 +2822,162 @@ button.collapsible-block-header:focus {
   color: var(--muted);
 }
 
-.spending-plan-stack {
+.spending-plan-hero small a {
+  color: var(--focus);
+  font-weight: 850;
+  text-decoration: none;
+}
+
+.spending-plan-hero small a:hover {
+  text-decoration: underline;
+}
+
+.spending-plan-formula {
+  margin: 0 0 var(--space-sm);
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.spending-plan-card .budget-summary-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.spending-plan-card .card-actions {
+  padding-top: var(--space-sm);
+}
+
+.dashboard-grid .card-actions,
+.dashboard-grid .split-metrics {
+  margin-top: auto;
+}
+
+.review-focus-card {
+  border-color: rgba(47, 125, 92, 0.14);
+}
+
+.review-focus-hero {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 3px;
+  gap: var(--space-sm);
+  padding: var(--space-md);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-row);
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.review-focus-hero span,
+.review-focus-grid span {
+  color: var(--muted);
+  font-size: 0.66rem;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.review-focus-hero strong,
+.review-focus-grid strong {
+  display: block;
+  color: var(--ink);
+  font-family: var(--font-number);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  line-height: 1.08;
+}
+
+.review-focus-hero strong {
+  margin-top: 4px;
+  font-size: clamp(1.18rem, 1.8vw, 1.38rem);
+}
+
+.review-focus-hero small {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+}
+
+.review-focus-ring {
   height: 12px;
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: rgba(203, 196, 184, 0.35);
+}
+
+.review-focus-ring span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--positive), var(--accent));
+}
+
+.review-focus-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-xs);
+  margin-top: var(--space-sm);
+}
+
+.review-focus-grid a {
+  min-width: 0;
+  padding: var(--space-sm);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-row);
+  background: rgba(255, 255, 255, 0.82);
+  color: var(--text);
+  text-decoration: none;
+}
+
+.review-focus-grid a:hover {
+  border-color: rgba(37, 135, 166, 0.32);
+  background: var(--accent-soft);
+}
+
+.review-focus-grid strong {
+  margin-top: 4px;
+  font-size: clamp(0.94rem, 1.2vw, 1.08rem);
+}
+
+.spending-plan-stack {
+  display: flex;
+  gap: 2px;
+  height: 14px;
   margin-bottom: var(--space-sm);
   overflow: hidden;
   border-radius: var(--radius-pill);
   background: rgba(203, 196, 184, 0.35);
 }
 
-.spending-plan-stack span {
-  min-width: 0;
+.spending-plan-segment {
+  min-width: 4px;
   height: 100%;
+  transition: width 180ms ease;
+}
+
+.spending-plan-empty {
+  width: 100%;
+  background: rgba(203, 196, 184, 0.45);
+}
+
+.spending-plan-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  margin: calc(-1 * var(--space-xxs)) 0 var(--space-sm);
+}
+
+.spending-plan-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 0.66rem;
+  font-weight: 800;
+}
+
+.spending-plan-legend i {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
 }
 
 .scenario-form {
@@ -2695,6 +3041,82 @@ button.collapsible-block-header:focus {
   border: 1px solid var(--line);
   border-radius: var(--radius-row);
   background: rgba(255, 255, 255, 0.82);
+}
+
+.snapshot-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: space-between;
+  gap: var(--space-sm);
+  min-height: 74px;
+  padding: var(--space-sm) var(--space-md);
+  border: 0;
+  border-right: 1px solid rgba(203, 196, 184, 0.5);
+  border-radius: 0;
+  background: transparent;
+}
+
+.snapshot-row::before {
+  position: absolute;
+  top: var(--space-sm);
+  left: var(--space-md);
+  width: 26px;
+  height: 3px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  content: "";
+}
+
+.snapshot-row:nth-child(2)::before {
+  background: var(--positive);
+}
+
+.snapshot-row:nth-child(3)::before {
+  background: var(--amber);
+}
+
+.snapshot-row:nth-child(4)::before {
+  background: #d43c95;
+}
+
+.snapshot-row:last-child {
+  border-right: 0;
+}
+
+.snapshot-row div {
+  min-width: 0;
+}
+
+.snapshot-row span {
+  display: block;
+  margin-top: 9px;
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.snapshot-row strong {
+  justify-self: start;
+  color: var(--ink);
+  font-family: var(--font-number);
+  font-size: clamp(0.98rem, 1.25vw, 1.12rem);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  line-height: 1.08;
+  white-space: nowrap;
+}
+
+.snapshot-row small {
+  display: block;
+  max-width: 100%;
+  margin-top: 3px;
+  overflow: hidden;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .snapshot-tile small {
@@ -2943,6 +3365,58 @@ button.collapsible-block-header:focus {
   margin-top: var(--space-sm);
 }
 
+.dashboard-grid .card-actions {
+  width: 100%;
+  padding-top: var(--space-sm);
+  border-top: 1px solid rgba(203, 196, 184, 0.42);
+}
+
+.dashboard-grid .compact-list,
+.dashboard-grid .spending-bar-list,
+.dashboard-grid .budget-summary-grid,
+.dashboard-grid .planning-snapshot-grid,
+.dashboard-grid .review-focus-grid {
+  margin-bottom: var(--space-sm);
+}
+
+.dashboard-grid .compact-row small {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.dashboard-grid .compact-row:has(.row-actions) {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.dashboard-grid .compact-row:has(.row-actions) .row-actions {
+  grid-column: 1 / -1;
+  justify-content: flex-end;
+}
+
+.dashboard-grid .upcoming-bills-card .compact-row:has(.row-actions) {
+  grid-template-columns: minmax(0, 1fr) max-content max-content;
+}
+
+.dashboard-grid .upcoming-bills-card .compact-row:has(.row-actions) .row-actions {
+  grid-column: auto;
+  justify-content: flex-end;
+}
+
+.dashboard-grid .upcoming-bills-card .row-actions button {
+  min-height: 30px;
+  padding: 6px 10px;
+}
+
+.dashboard-grid .planning-snapshot-card .planning-snapshot-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-row);
+  background: rgba(255, 255, 255, 0.82);
+}
+
 .amount,
 .metric-value,
 .money-focus .metric-value {
@@ -3151,6 +3625,11 @@ button.collapsible-block-header:focus {
     text-align: left;
   }
 
+  .budget-row,
+  .budget-row:has(input[aria-label^="Rollover"]) {
+    min-width: 0;
+  }
+
   .api-offline-banner {
     display: grid;
   }
@@ -3241,6 +3720,18 @@ button.collapsible-block-header:focus {
 
   .compact-row .row-actions button {
     min-width: 92px;
+  }
+
+  .dashboard-grid .upcoming-bills-card .compact-row:has(.row-actions) {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .dashboard-grid .upcoming-bills-card .compact-row:has(.row-actions) .row-actions {
+    grid-column: 1 / -1;
+  }
+
+  .dashboard-grid .planning-snapshot-card .planning-snapshot-grid {
+    grid-template-columns: 1fr;
   }
 
   .split-metrics,
