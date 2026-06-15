@@ -19,6 +19,7 @@ advanced reliability controls after the local-first household and business found
 ## 2. Included Features
 
 - [ ] [FEATURE-009: Open Banking And Sync Evaluation](file:///ai/features/FEATURE-009-open-banking-and-sync-evaluation.md)
+- [ ] [FEATURE-010: FreeAgent Bank Data Fetch](file:///ai/features/FEATURE-010-freeagent-bank-data-fetch.md)
 
 ## 3. Source Artifacts
 
@@ -26,9 +27,11 @@ advanced reliability controls after the local-first household and business found
 - [Observability](file:///ai/07-observability.md)
 - [Risk Register](file:///ai/08-risk-register.md)
 - [Testing Strategy](file:///ai/specs/SPEC-003-testing-strategy.md)
+- [SPEC-004: FreeAgent Bank Data Fetch](file:///ai/specs/SPEC-004-freeagent-bank-data-fetch.md)
 
 ## 4. Guardrails
 
 - Keep Open Banking optional and explicitly approved.
+- Keep FreeAgent integration read-only until explicit import/commit approval.
 - Preserve local-first privacy defaults.
 - Add observability and auditability before expanding automated data flows.

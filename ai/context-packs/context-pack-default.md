@@ -49,3 +49,4 @@ Use these instead of loading all `ai/` files when the work is focused:
 - [Frontend UI](file:///ai/context-packs/context-pack-frontend-ui.md) — React routes, CSS, product workflows, reports, forms, and browser tests.
 - [Product Planning](file:///ai/context-packs/context-pack-product-planning.md) — roadmap, epics, features, ADRs, backlog, and scope decisions.
 - [Phase 2.1](file:///ai/context-packs/context-pack-phase-2-1.md) — Business entity isolation, server-backed preferences, and read-only local assistant work.
+- [FreeAgent API](file:///ai/context-packs/context-pack-freeagent-api.md) — planned FreeAgent OAuth, bank account balance, and bank transaction fetching.

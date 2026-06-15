@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.models import Account, BillInstance, Commitment, Entity, Transaction
 from app.schemas.dashboard import DashboardSummary
+from app.services.account_balances import available_for_bills, is_cash_availability_account
 from app.services.categories import normalized_group_for_transaction
 from app.services.decisions import count_decisions
 
@@ -34,14 +35,13 @@ def get_dashboard_summary(
     cash_accounts = [
         account
         for account in accounts
-        if account.include_in_cash_on_hand
-        and account.account_type not in {"credit_card", "loan", "bnpl"}
+        if is_cash_availability_account(account)
     ]
     accounts_with_balances = [
         account for account in cash_accounts if account.current_balance is not None
     ]
     cash_on_hand = sum(
-        (account.current_balance for account in accounts_with_balances),
+        (available_for_bills(account) or Decimal("0.00") for account in accounts_with_balances),
         Decimal("0.00"),
     )
 

@@ -5,6 +5,7 @@ description = "Local-first Household and Business Finance Control Center."
 requires-python = ">=3.12"
 dependencies = [
     "alembic>=1.16.2",
+    "cryptography>=42.0.0",
     "fastapi>=0.115.13",
     "psycopg[binary]>=3.2.9",
     "pydantic-settings>=2.9.1",

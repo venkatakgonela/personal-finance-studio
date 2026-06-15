@@ -1,0 +1,290 @@
+{
+  "info": {
+    "_postman_id": "ba2d5642-5c94-4af1-bce1-freeagent-readonly",
+    "name": "FreeAgent Read-Only Banking",
+    "description": "Read-only FreeAgent API checks for OAuth, company, bank accounts, balances, and transactions. Do not add mutating requests to this collection.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "oauth2",
+    "oauth2": [
+      {
+        "key": "addTokenTo",
+        "value": "header",
+        "type": "string"
+      },
+      {
+        "key": "accessTokenUrl",
+        "value": "{{token_url}}",
+        "type": "string"
+      },
+      {
+        "key": "authUrl",
+        "value": "{{auth_url}}",
+        "type": "string"
+      },
+      {
+        "key": "clientId",
+        "value": "{{client_id}}",
+        "type": "string"
+      },
+      {
+        "key": "clientSecret",
+        "value": "{{client_secret}}",
+        "type": "string"
+      },
+      {
+        "key": "redirect_uri",
+        "value": "{{redirect_uri}}",
+        "type": "string"
+      },
+      {
+        "key": "scope",
+        "value": "all",
+        "type": "string"
+      },
+      {
+        "key": "grant_type",
+        "value": "authorization_code",
+        "type": "string"
+      },
+      {
+        "key": "tokenName",
+        "value": "FreeAgent OAuth Token",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "01 - Get Company",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/v2/company",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "v2",
+            "company"
+          ]
+        },
+        "description": "Smoke test the token and confirm which FreeAgent company/account it belongs to."
+      },
+      "response": []
+    },
+    {
+      "name": "02 - List Bank Accounts",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/v2/bank_accounts",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "v2",
+            "bank_accounts"
+          ]
+        },
+        "description": "List FreeAgent bank accounts. Copy the desired bank_accounts[n].url into the bank_account_url environment variable."
+      },
+      "response": []
+    },
+    {
+      "name": "03 - List Standard Bank Accounts",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/v2/bank_accounts?view=standard_bank_accounts",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "v2",
+            "bank_accounts"
+          ],
+          "query": [
+            {
+              "key": "view",
+              "value": "standard_bank_accounts"
+            }
+          ]
+        },
+        "description": "Optional filtered account list for StandardBankAccount accounts."
+      },
+      "response": []
+    },
+    {
+      "name": "04 - Get Bank Account By ID",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/v2/bank_accounts/{{bank_account_id}}",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "v2",
+            "bank_accounts",
+            "{{bank_account_id}}"
+          ]
+        },
+        "description": "Fetch one bank account when you know the numeric ID from its FreeAgent URL. The response includes current_balance."
+      },
+      "response": []
+    },
+    {
+      "name": "05 - List Bank Transactions For Selected Account",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/v2/bank_transactions?bank_account={{bank_account_url}}&from_date={{from_date}}&to_date={{to_date}}&view={{view}}",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "v2",
+            "bank_transactions"
+          ],
+          "query": [
+            {
+              "key": "bank_account",
+              "value": "{{bank_account_url}}",
+              "description": "Full FreeAgent bank account URL copied from List Bank Accounts."
+            },
+            {
+              "key": "from_date",
+              "value": "{{from_date}}",
+              "description": "Optional YYYY-MM-DD."
+            },
+            {
+              "key": "to_date",
+              "value": "{{to_date}}",
+              "description": "Optional YYYY-MM-DD."
+            },
+            {
+              "key": "view",
+              "value": "{{view}}",
+              "description": "all, unexplained, explained, manual, imported, or marked_for_review."
+            }
+          ]
+        },
+        "description": "Fetch transactions for the selected FreeAgent bank account and optional date range."
+      },
+      "response": []
+    },
+    {
+      "name": "06 - List Bank Transactions Updated Since",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/v2/bank_transactions?bank_account={{bank_account_url}}&updated_since={{updated_since}}",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "v2",
+            "bank_transactions"
+          ],
+          "query": [
+            {
+              "key": "bank_account",
+              "value": "{{bank_account_url}}"
+            },
+            {
+              "key": "updated_since",
+              "value": "{{updated_since}}",
+              "description": "Optional ISO timestamp, e.g. 2026-06-15T09:00:00.000Z."
+            }
+          ]
+        },
+        "description": "Incremental transaction fetch pattern for future sync design."
+      },
+      "response": []
+    },
+    {
+      "name": "07 - Last Uploaded Bank Transactions",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/v2/bank_transactions?bank_account={{bank_account_url}}&last_uploaded={{last_uploaded}}",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "v2",
+            "bank_transactions"
+          ],
+          "query": [
+            {
+              "key": "bank_account",
+              "value": "{{bank_account_url}}"
+            },
+            {
+              "key": "last_uploaded",
+              "value": "{{last_uploaded}}",
+              "description": "Set to true to inspect latest uploaded statement transactions."
+            }
+          ]
+        },
+        "description": "Optional diagnostic for latest uploaded statement transactions."
+      },
+      "response": []
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Keep this collection read-only. Do not add mutating requests here."
+        ]
+      }
+    }
+  ]
+}

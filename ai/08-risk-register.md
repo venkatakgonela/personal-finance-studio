@@ -21,3 +21,5 @@ ai-eos-metadata:
 | LLM gives incorrect finance answer | Bad decisions | Keep LLM out of Phase 1; future LLM uses deterministic query results | Mitigated by deferral |
 | Frontend runs while backend is down | User sees `Failed to fetch` and tests miss it | E2E checks FastAPI health before UI tests | Mitigated in Playwright config |
 | Filters silently stop working | Ledger/reporting becomes misleading | Backend API filter tests and Playwright filter tests | Mitigated for current transaction filters |
+| FreeAgent OAuth tokens leak | External finance data exposed | Store tokens only in approved local secret storage, never log tokens or Authorization headers, and keep sandbox-first development | Planned for Phase 3 |
+| FreeAgent Business data mixes into Household views | Reporting and privacy errors | Entity-scope all FreeAgent records to Business and keep preview-only until Business scoping is confirmed | Planned for Phase 3 |

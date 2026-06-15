@@ -27,6 +27,7 @@ class Account(Base):
     source_account_name: Mapped[str] = mapped_column(String(180), nullable=False)
     account_type: Mapped[str] = mapped_column(String(40), nullable=False, default="unknown")
     current_balance: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
+    overdraft_limit: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
     balance_as_of: Mapped[date | None] = mapped_column(Date(), nullable=True)
     include_in_cash_on_hand: Mapped[bool] = mapped_column(Boolean(), nullable=False, default=True)
     include_in_forecast: Mapped[bool] = mapped_column(Boolean(), nullable=False, default=True)

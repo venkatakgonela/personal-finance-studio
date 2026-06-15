@@ -169,6 +169,7 @@ imported transactions, commitments, accounts, or explicit user-entered plan valu
 
 ## Phase 3 - Integrations
 
+- FreeAgent API read-only bank account balance and transaction fetch evaluation.
 - Open Banking provider evaluation.
 - Connection freshness dashboard.
 - Optional cross-device/cloud strategy if explicitly approved.

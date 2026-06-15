@@ -7,6 +7,8 @@ class Settings(BaseSettings):
     app_name: str = "Personal Finance Studio"
     app_env: str = "local"
     database_url: str = "postgresql+psycopg://pfs:pfs_local@localhost:5435/personal_finance_studio"
+    pfs_secret_key: str | None = None
+    pfs_secret_key_file: str = "data/.pfs_secret.key"
     cors_origins: str = (
         "http://localhost:5173,http://127.0.0.1:5173,"
         "http://localhost:5174,http://127.0.0.1:5174,"

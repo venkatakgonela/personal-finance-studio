@@ -46,6 +46,37 @@ def test_dashboard_summary_requires_balances_then_calculates_cash(
     assert updated.confidence == "ready"
 
 
+def test_overdraft_limit_counts_for_bill_payment_capacity_but_balance_stays_negative(
+    db_session: Session,
+) -> None:
+    contents = (FIXTURES / "snoop_recurring.csv").read_bytes()
+    import_result = commit_snoop_csv(
+        contents,
+        source_filename="snoop_recurring.csv",
+        session=db_session,
+    )
+    account = get_accounts_summary(db_session, import_result.entity_id).accounts[0]
+
+    updated_account = update_account(
+        db_session,
+        import_result.entity_id,
+        account.id,
+        AccountUpdate(
+            account_type="current",
+            current_balance="-409.88",
+            overdraft_limit="1000.00",
+            balance_as_of="2026-06-14",
+        ),
+    )
+    dashboard = get_dashboard_summary(db_session, import_result.entity_id)
+
+    assert updated_account.current_balance == "-409.88"
+    assert updated_account.overdraft_limit == "1000.00"
+    assert updated_account.available_balance == "590.12"
+    assert updated_account.liability_balance == "409.88"
+    assert dashboard.cash_on_hand == "590.12"
+
+
 def test_dashboard_and_calendar_use_confirmed_and_candidate_commitments(
     db_session: Session,
 ) -> None:

@@ -9,6 +9,7 @@ from app.routes import (
     dashboard,
     decisions,
     forecast,
+    freeagent,
     imports,
     insights,
     planning,
@@ -34,6 +35,7 @@ def create_app() -> FastAPI:
         return {"status": "ok", "app": settings.app_name, "env": settings.app_env}
 
     app.include_router(imports.router, prefix="/api/imports", tags=["imports"])
+    app.include_router(freeagent.router, prefix="/api/integrations/freeagent", tags=["freeagent"])
     app.include_router(transfers.router, prefix="/api/transfers", tags=["transfers"])
     app.include_router(commitments.router, prefix="/api/commitments", tags=["commitments"])
     app.include_router(decisions.router, prefix="/api/decisions", tags=["decisions"])

@@ -70,6 +70,9 @@ export type AccountSummary = {
   source_account_name: string;
   account_type: string;
   current_balance: string | null;
+  overdraft_limit: string | null;
+  available_balance: string | null;
+  liability_balance: string;
   include_in_cash_on_hand: boolean;
   include_in_forecast: boolean;
   transaction_count: number;
@@ -81,6 +84,7 @@ export type AccountSummary = {
 export type AccountUpdate = {
   account_type?: string;
   current_balance?: string;
+  overdraft_limit?: string;
   balance_as_of?: string;
   include_in_cash_on_hand?: boolean;
   include_in_forecast?: boolean;
@@ -412,6 +416,78 @@ export type TransactionFilters = {
   transactionType?: string;
 };
 
+export type FreeAgentBankAccount = {
+  url: string;
+  name: string;
+  bank_name: string | null;
+  type: string;
+  status: string;
+  currency: string;
+  current_balance: string | null;
+  latest_activity_date: string | null;
+  updated_at: string | null;
+  is_personal: boolean;
+  is_primary: boolean;
+};
+
+export type FreeAgentConnectionStatus = {
+  configured: boolean;
+  validated: boolean;
+  status: string;
+  message: string;
+  environment: string | null;
+  base_url: string | null;
+  auth_url: string | null;
+  token_url: string | null;
+  client_id_last4: string | null;
+  company_name: string | null;
+  company_url: string | null;
+  selected_bank_account_url: string | null;
+  selected_bank_account_name: string | null;
+  sync_cursor_updated_since: string | null;
+  last_validated_at: string | null;
+  last_synced_at: string | null;
+  secret_storage: string;
+};
+
+export type FreeAgentCredentials = {
+  environment: "production" | "sandbox" | "custom";
+  base_url?: string;
+  auth_url?: string;
+  token_url?: string;
+  client_id: string;
+  client_secret: string;
+  access_token: string;
+  refresh_token?: string;
+};
+
+export type FreeAgentValidationResult = {
+  status: FreeAgentConnectionStatus;
+  accounts: FreeAgentBankAccount[];
+};
+
+export type FreeAgentImportRequest = {
+  bank_account_url: string;
+  from_date?: string;
+  to_date?: string;
+  updated_since?: string;
+  view?: string;
+  last_uploaded?: boolean;
+};
+
+export type FreeAgentImportResult = {
+  import_id: string;
+  account_id: string;
+  account_name: string;
+  row_count: number;
+  imported_transaction_count: number;
+  skipped_duplicate_count: number;
+  date_start: string | null;
+  date_end: string | null;
+  next_updated_since: string | null;
+  warnings: string[];
+};
+
 export async function previewSnoopImport(file: File): Promise<ImportPreview> {
   return uploadCsv<ImportPreview>("/api/imports/snoop/preview", file);
 }
@@ -422,6 +498,40 @@ export async function commitSnoopImport(file: File): Promise<ImportCommitResult>
 
 export async function resetImportedData(): Promise<ResetDataResult> {
   return fetchJson<ResetDataResult>("/api/imports/reset", { method: "POST" });
+}
+
+export async function getFreeAgentStatus(): Promise<FreeAgentConnectionStatus> {
+  return fetchJson<FreeAgentConnectionStatus>("/api/integrations/freeagent/status");
+}
+
+export async function saveFreeAgentCredentials(
+  payload: FreeAgentCredentials,
+): Promise<FreeAgentConnectionStatus> {
+  return fetchJson<FreeAgentConnectionStatus>("/api/integrations/freeagent/credentials", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function validateFreeAgent(): Promise<FreeAgentValidationResult> {
+  return fetchJson<FreeAgentValidationResult>("/api/integrations/freeagent/validate", {
+    method: "POST",
+  });
+}
+
+export async function getFreeAgentBankAccounts(): Promise<FreeAgentBankAccount[]> {
+  return fetchJson<FreeAgentBankAccount[]>("/api/integrations/freeagent/bank-accounts");
+}
+
+export async function importFreeAgentTransactions(
+  payload: FreeAgentImportRequest,
+): Promise<FreeAgentImportResult> {
+  return fetchJson<FreeAgentImportResult>("/api/integrations/freeagent/import", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
 }
 
 export async function detectTransfers(): Promise<TransferDetectionResult> {
@@ -584,7 +694,7 @@ async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
   const request = fetch(requestUrl, init).then(async (response) => {
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(errorText || `Request failed with ${response.status}`);
+      throw new Error(readableApiError(errorText, response.status));
     }
     return response.json() as Promise<T>;
   });
@@ -595,6 +705,26 @@ async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
   }
 
   return request;
+}
+
+function readableApiError(errorText: string, status: number): string {
+  if (!errorText) return `Request failed with ${status}`;
+  try {
+    const parsed = JSON.parse(errorText) as { detail?: unknown };
+    if (typeof parsed.detail === "string") return parsed.detail;
+    if (Array.isArray(parsed.detail)) {
+      return parsed.detail
+        .map((item) => {
+          if (typeof item === "string") return item;
+          if (item && typeof item === "object" && "msg" in item) return String(item.msg);
+          return JSON.stringify(item);
+        })
+        .join("; ");
+    }
+  } catch {
+    return errorText;
+  }
+  return errorText;
 }
 
 function buildQuery(params: Record<string, boolean | number | string | undefined>): string {

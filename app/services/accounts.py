@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.models import Account, Entity, Transaction
 from app.schemas.accounts import AccountsSummaryResponse, AccountSummary, AccountUpdate
+from app.services.account_balances import available_for_bills, liability_balance
 
 ACCOUNT_TYPES = {"current", "savings", "pot", "credit_card", "loan", "bnpl", "unknown"}
 
@@ -53,6 +54,9 @@ def summarize_account(session: Session, account: Account) -> AccountSummary:
         source_account_name=account.source_account_name,
         account_type=account.account_type,
         current_balance=format_optional_money(account.current_balance),
+        overdraft_limit=format_optional_money(account.overdraft_limit),
+        available_balance=format_optional_money(available_for_bills(account)),
+        liability_balance=format_money(liability_balance(account)),
         include_in_cash_on_hand=account.include_in_cash_on_hand,
         include_in_forecast=account.include_in_forecast,
         transaction_count=int(transaction_count or 0),
@@ -82,6 +86,8 @@ def update_account(
 
     if payload.current_balance is not None:
         account.current_balance = Decimal(payload.current_balance).quantize(Decimal("0.01"))
+    if payload.overdraft_limit is not None:
+        account.overdraft_limit = Decimal(payload.overdraft_limit).quantize(Decimal("0.01"))
     if payload.balance_as_of is not None:
         account.balance_as_of = date.fromisoformat(payload.balance_as_of)
     if payload.include_in_cash_on_hand is not None:

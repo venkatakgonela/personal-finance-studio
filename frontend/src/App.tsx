@@ -1,5 +1,25 @@
 import { type FormEvent, type KeyboardEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import {
+  closestCenter,
+  DndContext,
+  DragOverlay,
+  KeyboardSensor,
+  MeasuringStrategy,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  rectSwappingStrategy,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import {
   sankey as createSankey,
   sankeyLinkHorizontal,
   type SankeyGraph,
@@ -14,6 +34,10 @@ import {
   type DashboardSummary,
   type DecisionQueueResponse,
   type ForecastResponse,
+  type FreeAgentBankAccount,
+  type FreeAgentConnectionStatus,
+  type FreeAgentCredentials,
+  type FreeAgentImportResult,
   type HealthResponse,
   type ImportCommitResult,
   type ImportPreview,
@@ -34,18 +58,23 @@ import {
   getDashboardSummary,
   getDecisions,
   getForecast,
+  getFreeAgentBankAccounts,
+  getFreeAgentStatus,
   getHealth,
   getInsights,
   getPlanningOverview,
   getTransactions,
   getUpcomingCommitments,
+  importFreeAgentTransactions,
   markBillInstancePaid,
   previewSnoopImport,
   rejectDecision,
   resetImportedData,
+  saveFreeAgentCredentials,
   updateAccount,
   updateCommitment,
   updateTransaction,
+  validateFreeAgent,
 } from "./api";
 
 type LoadState = "idle" | "loading" | "ready" | "error";
@@ -142,18 +171,51 @@ type MerchantSetting = {
   ignored: boolean;
   sourceName: string;
 };
+type PlanningAssumptions = {
+  expectedIncomeAmount: number;
+  expectedIncomeLabel: string;
+  incomeConfidence: "stable" | "variable" | "changing";
+  jobChangeExpected: boolean;
+  knownUpcomingCosts: number;
+  lifestyleAllowance: number;
+  lookbackMonths: "1" | "3" | "6";
+  oneOffIncomeExclusions: number;
+  safetyBuffer: number;
+};
+type CustomDashboardWidget = {
+  accent: "blue" | "green" | "amber";
+  body: string;
+  id: string;
+  title: string;
+  value: string;
+};
 type PlanningControlState = {
   budgetMode: BudgetMode;
   budgetRows: BudgetPlanRow[];
   categories: CategorySetting[];
+  customDashboardWidgets: CustomDashboardWidget[];
+  dashboardWidgetOrder: string[];
+  hiddenDashboardWidgets: string[];
   ruleApplications: RuleApplicationSnapshot[];
   scenarios: CashflowScenario[];
   goals: LocalGoal[];
   merchants: MerchantSetting[];
+  planningAssumptions: PlanningAssumptions;
   rollovers: BudgetRolloverRow[];
   rules: RuleSetting[];
   tags: TagSetting[];
 };
+
+const defaultDashboardWidgetIds = [
+  "cash-position",
+  "spending-plan",
+  "upcoming",
+  "spending",
+  "planning-snapshot",
+  "decision-queue",
+  "review-focus",
+  "cashflow",
+];
 
 const routeItems = [
   { label: "Dashboard", route: "dashboard" },
@@ -169,6 +231,7 @@ const routeItems = [
   { label: "Subscriptions", route: "subscriptions" },
   { label: "Reports", route: "reports" },
   { label: "Decision Queue", route: "decision-queue" },
+  { label: "FreeAgent", route: "freeagent" },
   { label: "Import", route: "import" },
   { label: "Settings", route: "settings" },
 ] as const;
@@ -191,6 +254,7 @@ const pageTitles: Record<RouteId, { eyebrow: string; title: string }> = {
   subscriptions: { eyebrow: "Subscriptions", title: "Keep only what earns its place." },
   reports: { eyebrow: "Reports", title: "Spot spending patterns." },
   "decision-queue": { eyebrow: "Decision queue", title: "Resolve only the decisions that matter." },
+  freeagent: { eyebrow: "FreeAgent", title: "Connect live bank data safely." },
   import: { eyebrow: "Import center", title: "Bring fresh data into the plan." },
   settings: { eyebrow: "Settings", title: "Shape the local money system." },
 };
@@ -536,6 +600,7 @@ export function App() {
     setForecast(forecastResult);
     setInsights(insightsResult);
     setPlanning(planningResult);
+    setError(null);
   }
 
   function saveUserName(nextName: string) {
@@ -598,13 +663,19 @@ export function App() {
     }
   }
 
-  async function runAccountBalanceUpdate(accountId: string, balance: string, accountType: string) {
+  async function runAccountBalanceUpdate(
+    accountId: string,
+    balance: string,
+    accountType: string,
+    overdraftLimit: string,
+  ) {
     setError(null);
     setLoadState("loading");
     try {
       await updateAccount(accountId, {
         account_type: accountType,
         current_balance: balance,
+        overdraft_limit: overdraftLimit || "0.00",
         balance_as_of: new Date().toISOString().slice(0, 10),
       });
       await refreshWorkspace();
@@ -716,6 +787,7 @@ export function App() {
           onDetectCommitments={runCommitmentDetection}
           onDetectTransfers={runTransferDetection}
           onPreview={runPreview}
+          onRefreshWorkspace={refreshWorkspace}
           onUserNameSave={saveUserName}
           preview={preview}
           query={searchQuery}
@@ -941,6 +1013,7 @@ function AppPage({
   onDetectCommitments,
   onDetectTransfers,
   onPreview,
+  onRefreshWorkspace,
   onUserNameSave,
   periodKind,
   periodLabel,
@@ -979,6 +1052,7 @@ function AppPage({
     accountId: string,
     balance: string,
     accountType: string,
+    overdraftLimit: string,
   ) => Promise<void>;
   onBillPaid: (instanceId: string, amount: string) => Promise<void>;
   onCommit: () => Promise<void>;
@@ -991,6 +1065,7 @@ function AppPage({
   onDetectCommitments: () => Promise<void>;
   onDetectTransfers: () => Promise<void>;
   onPreview: (file: File) => Promise<void>;
+  onRefreshWorkspace: () => Promise<void>;
   onUserNameSave: (name: string) => void;
   periodKind: DateWindowKind;
   periodLabel: string;
@@ -1082,6 +1157,7 @@ function AppPage({
       <section className="page-grid page-grid-single" aria-label="Budget page">
         <BudgetPageCard
           controlState={controlState}
+          dashboard={dashboard}
           insights={insights}
           onControlStateChange={onControlStateChange}
           periodLabel={periodLabel}
@@ -1224,6 +1300,14 @@ function AppPage({
     );
   }
 
+  if (route === "freeagent") {
+    return (
+      <section className="page-grid page-grid-single" aria-label="FreeAgent integration page">
+        <FreeAgentIntegrationCard onImported={onRefreshWorkspace} />
+      </section>
+    );
+  }
+
   if (route === "import") {
     return (
       <section className="import-page-grid" aria-label="Import page">
@@ -1252,59 +1336,379 @@ function AppPage({
   }
 
   return (
-    <section className="dashboard-grid" aria-label="Personal Finance Studio dashboard">
-      <DashboardHeroCard
-        dashboard={dashboard}
-        planning={planning}
-      />
-      <SpendingPlanCard
-        controlState={controlState}
-        dashboard={dashboard}
-        insights={insights}
-        planning={planning}
-        upcoming={upcoming}
-      />
-      <UpcomingCard
-        includeCandidates={includeCandidates}
-        limit={3}
-        onBillPaid={onBillPaid}
-        periodKind={periodKind}
-        periodLabel={periodLabel}
-        query={query}
-        upcoming={upcoming}
-      />
-      <SpendingCard dashboard={dashboard} insights={insights} periodLabel={periodLabel} />
-      <PlanningSnapshotCard
-        controlState={controlState}
-        insights={insights}
-        planning={planning}
-      />
-      <DecisionQueueCard
-        busy={busy}
-        compact
-        decisions={decisions}
-        limit={3}
-        onDecisionAction={onDecisionAction}
-        query={query}
-      />
-      <ReviewFocusCard
-        decisions={decisions}
-        planning={planning}
-        transactions={transactions}
-      />
-      <CashflowCard
-        commitmentResult={commitmentResult}
-        commitments={commitments}
-        dashboard={dashboard}
-        decisions={decisions}
-        forecast={forecast}
-        includeCandidates={includeCandidates}
-        preview={preview}
-        transactions={transactions}
-        transferResult={transferResult}
-        upcoming={upcoming}
-      />
-    </section>
+    <DashboardWidgets
+      busy={busy}
+      commitmentResult={commitmentResult}
+      commitments={commitments}
+      controlState={controlState}
+      dashboard={dashboard}
+      decisions={decisions}
+      forecast={forecast}
+      includeCandidates={includeCandidates}
+      insights={insights}
+      onBillPaid={onBillPaid}
+      onControlStateChange={onControlStateChange}
+      onDecisionAction={onDecisionAction}
+      periodKind={periodKind}
+      periodLabel={periodLabel}
+      planning={planning}
+      preview={preview}
+      query={query}
+      transactions={transactions}
+      transferResult={transferResult}
+      upcoming={upcoming}
+    />
+  );
+}
+
+function DashboardWidgets({
+  busy,
+  commitmentResult,
+  commitments,
+  controlState,
+  dashboard,
+  decisions,
+  forecast,
+  includeCandidates,
+  insights,
+  onBillPaid,
+  onControlStateChange,
+  onDecisionAction,
+  periodKind,
+  periodLabel,
+  planning,
+  preview,
+  query,
+  transactions,
+  transferResult,
+  upcoming,
+}: {
+  busy: boolean;
+  commitmentResult: CommitmentDetectionResult | null;
+  commitments: CommitmentsResponse | null;
+  controlState: PlanningControlState;
+  dashboard: DashboardSummary | null;
+  decisions: DecisionQueueResponse | null;
+  forecast: ForecastResponse | null;
+  includeCandidates: boolean;
+  insights: InsightsResponse | null;
+  onBillPaid: (instanceId: string, amount: string) => Promise<void>;
+  onControlStateChange: (state: PlanningControlState | ((current: PlanningControlState) => PlanningControlState)) => void;
+  onDecisionAction: (
+    action: "confirm" | "reject",
+    decisionType: string,
+    decisionId: string,
+  ) => Promise<void>;
+  periodKind: DateWindowKind;
+  periodLabel: string;
+  planning: PlanningOverview | null;
+  preview: ImportPreview | null;
+  query: string;
+  transactions: TransactionsResponse | null;
+  transferResult: TransferDetectionResult | null;
+  upcoming: UpcomingCommitmentsResponse | null;
+}) {
+  const [activeWidgetId, setActiveWidgetId] = useState<string | null>(null);
+  const widgetOrder = dashboardWidgetOrder(controlState);
+  const visibleWidgets = widgetOrder.filter((id) => !controlState.hiddenDashboardWidgets.includes(id));
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  const updateOrder = (nextOrder: string[]) => {
+    onControlStateChange((current) => ({
+      ...current,
+      dashboardWidgetOrder: nextOrder,
+    }));
+  };
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveWidgetId(String(event.active.id));
+  };
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    setActiveWidgetId(null);
+    if (!over || active.id === over.id) return;
+    const oldIndex = widgetOrder.indexOf(String(active.id));
+    const newIndex = widgetOrder.indexOf(String(over.id));
+    if (oldIndex < 0 || newIndex < 0) return;
+    updateOrder(arrayMove(widgetOrder, oldIndex, newIndex));
+  };
+
+  const renderWidget = (widgetId: string) => {
+    if (widgetId.startsWith("custom:")) {
+      const customWidget = controlState.customDashboardWidgets.find((widget) => `custom:${widget.id}` === widgetId);
+      return customWidget ? <CustomDashboardWidgetCard widget={customWidget} /> : null;
+    }
+
+    switch (widgetId) {
+      case "cash-position":
+        return <DashboardHeroCard dashboard={dashboard} planning={planning} />;
+      case "spending-plan":
+        return (
+          <SpendingPlanCard
+            controlState={controlState}
+            dashboard={dashboard}
+            insights={insights}
+            planning={planning}
+            upcoming={upcoming}
+          />
+        );
+      case "upcoming":
+        return (
+          <UpcomingCard
+            includeCandidates={includeCandidates}
+            limit={3}
+            onBillPaid={onBillPaid}
+            periodKind={periodKind}
+            periodLabel={periodLabel}
+            query={query}
+            upcoming={upcoming}
+          />
+        );
+      case "spending":
+        return <SpendingCard dashboard={dashboard} insights={insights} periodLabel={periodLabel} />;
+      case "planning-snapshot":
+        return <PlanningSnapshotCard controlState={controlState} insights={insights} planning={planning} />;
+      case "decision-queue":
+        return (
+          <DecisionQueueCard
+            busy={busy}
+            compact
+            decisions={decisions}
+            limit={3}
+            onDecisionAction={onDecisionAction}
+            query={query}
+          />
+        );
+      case "review-focus":
+        return <ReviewFocusCard decisions={decisions} planning={planning} transactions={transactions} />;
+      case "cashflow":
+        return (
+          <CashflowCard
+            commitmentResult={commitmentResult}
+            commitments={commitments}
+            dashboard={dashboard}
+            decisions={decisions}
+            forecast={forecast}
+            includeCandidates={includeCandidates}
+            preview={preview}
+            transactions={transactions}
+            transferResult={transferResult}
+            upcoming={upcoming}
+          />
+        );
+      default:
+        return null;
+    }
+  };
+
+  const activeWidget = activeWidgetId ? renderWidget(activeWidgetId) : null;
+
+  return (
+    <>
+      <DndContext
+        collisionDetection={closestCenter}
+        measuring={{ droppable: { strategy: MeasuringStrategy.Always } }}
+        onDragCancel={() => setActiveWidgetId(null)}
+        onDragEnd={handleDragEnd}
+        onDragStart={handleDragStart}
+        sensors={sensors}
+      >
+        <SortableContext items={visibleWidgets} strategy={rectSwappingStrategy}>
+          <section className="dashboard-grid" aria-label="Personal Finance Studio dashboard">
+            {visibleWidgets.map((widgetId) => {
+              const widget = renderWidget(widgetId);
+              if (!widget) return null;
+              return (
+                <SortableDashboardWidget
+                  key={widgetId}
+                  title={dashboardWidgetTitle(widgetId, controlState)}
+                  widgetId={widgetId}
+                  wide={widgetId === "cash-position"}
+                >
+                  {widget}
+                </SortableDashboardWidget>
+              );
+            })}
+          </section>
+        </SortableContext>
+        <DragOverlay adjustScale={false} dropAnimation={{ duration: 220, easing: "cubic-bezier(0.2, 0, 0, 1)" }}>
+          {activeWidget && activeWidgetId ? (
+            <DashboardWidgetOverlay title={dashboardWidgetTitle(activeWidgetId, controlState)}>
+              {activeWidget}
+            </DashboardWidgetOverlay>
+          ) : null}
+        </DragOverlay>
+      </DndContext>
+    </>
+  );
+}
+
+function SortableDashboardWidget({
+  children,
+  title,
+  widgetId,
+  wide,
+}: {
+  children: ReactNode;
+  title: string;
+  widgetId: string;
+  wide: boolean;
+}) {
+  const {
+    attributes,
+    isDragging,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+  } = useSortable({ id: widgetId });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  return (
+    <div
+      className={[
+        "dashboard-widget-shell",
+        wide ? "dashboard-widget-wide" : "",
+        isDragging ? "is-dragging" : "",
+      ].filter(Boolean).join(" ")}
+      ref={setNodeRef}
+      style={style}
+    >
+      <button
+        className="widget-toolbar"
+        type="button"
+        {...attributes}
+        {...listeners}
+        aria-label={`Drag ${title} widget to rearrange`}
+      >
+        <span className="drag-handle" aria-hidden="true">
+          <i />
+          <i />
+          <i />
+        </span>
+        <span className="drag-instruction">Arrange</span>
+      </button>
+      {children}
+    </div>
+  );
+}
+
+function DashboardWidgetOverlay({ children, title }: { children: ReactNode; title: string }) {
+  return (
+    <div className="dashboard-widget-overlay" aria-label={`${title} widget preview`}>
+      {children}
+    </div>
+  );
+}
+
+function DashboardCustomizeCard({
+  controlState,
+  onControlStateChange,
+}: {
+  controlState: PlanningControlState;
+  onControlStateChange: (state: PlanningControlState | ((current: PlanningControlState) => PlanningControlState)) => void;
+}) {
+  const [customForm, setCustomForm] = useState({ body: "", title: "", value: "" });
+  const widgetOrder = dashboardWidgetOrder(controlState);
+  const toggleWidget = (widgetId: string) => {
+    onControlStateChange((current) => {
+      const hidden = current.hiddenDashboardWidgets.includes(widgetId)
+        ? current.hiddenDashboardWidgets.filter((id) => id !== widgetId)
+        : [...current.hiddenDashboardWidgets, widgetId];
+      return { ...current, hiddenDashboardWidgets: hidden };
+    });
+  };
+  const resetDashboard = () => {
+    onControlStateChange((current) => ({
+      ...current,
+      dashboardWidgetOrder: [...defaultDashboardWidgetIds, ...current.customDashboardWidgets.map((widget) => `custom:${widget.id}`)],
+      hiddenDashboardWidgets: [],
+    }));
+  };
+  const addCustomWidget = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const title = customForm.title.trim();
+    if (!title) return;
+    const widget: CustomDashboardWidget = {
+      accent: "blue",
+      body: customForm.body.trim(),
+      id: makeLocalId("widget"),
+      title,
+      value: customForm.value.trim(),
+    };
+    onControlStateChange((current) => ({
+      ...current,
+      customDashboardWidgets: [widget, ...current.customDashboardWidgets],
+      dashboardWidgetOrder: [...dashboardWidgetOrder(current), `custom:${widget.id}`],
+    }));
+    setCustomForm({ body: "", title: "", value: "" });
+  };
+
+  return (
+    <article className="card dashboard-customize-card">
+      <CollapsibleBlock meta={`${widgetOrder.length} widgets`} title="Customize dashboard">
+        <div className="widget-preference-grid">
+          {widgetOrder.map((widgetId) => (
+            <label className="checkbox-label widget-toggle" key={widgetId}>
+              <input
+                checked={!controlState.hiddenDashboardWidgets.includes(widgetId)}
+                onChange={() => toggleWidget(widgetId)}
+                type="checkbox"
+              />
+              {dashboardWidgetTitle(widgetId, controlState)}
+            </label>
+          ))}
+        </div>
+        <form className="custom-widget-form" onSubmit={addCustomWidget}>
+          <label>
+            Widget title
+            <input
+              onChange={(event) => setCustomForm((current) => ({ ...current, title: event.target.value }))}
+              placeholder="Holiday buffer, Tax note..."
+              value={customForm.title}
+            />
+          </label>
+          <label>
+            Optional value
+            <input
+              onChange={(event) => setCustomForm((current) => ({ ...current, value: event.target.value }))}
+              placeholder="£500, Due 30 Jun..."
+              value={customForm.value}
+            />
+          </label>
+          <label>
+            Note
+            <textarea
+              onChange={(event) => setCustomForm((current) => ({ ...current, body: event.target.value }))}
+              placeholder="What should this widget remind you?"
+              rows={2}
+              value={customForm.body}
+            />
+          </label>
+          <div className="custom-widget-actions">
+            <button className="button-link" type="submit">Add custom widget</button>
+            <button className="button-link button-link-secondary" onClick={resetDashboard} type="button">
+              Reset layout
+            </button>
+          </div>
+        </form>
+      </CollapsibleBlock>
+    </article>
+  );
+}
+
+function CustomDashboardWidgetCard({ widget }: { widget: CustomDashboardWidget }) {
+  return (
+    <article className={`card custom-dashboard-widget custom-dashboard-widget-${widget.accent}`}>
+      <CardHeader title={widget.title} subtitle="Custom widget" />
+      {widget.value ? <strong className="custom-widget-value">{widget.value}</strong> : null}
+      {widget.body ? <p>{widget.body}</p> : <p className="empty-copy">No note added yet.</p>}
+    </article>
   );
 }
 
@@ -1427,6 +1831,347 @@ function GettingStartedCard({
         ))}
       </div>
     </article>
+  );
+}
+
+function FreeAgentIntegrationCard({ onImported }: { onImported: () => Promise<void> }) {
+  const [status, setStatus] = useState<FreeAgentConnectionStatus | null>(null);
+  const [accounts, setAccounts] = useState<FreeAgentBankAccount[]>([]);
+  const [importResult, setImportResult] = useState<FreeAgentImportResult | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [form, setForm] = useState<FreeAgentCredentials>({
+    environment: "production",
+    client_id: "",
+    client_secret: "",
+    access_token: "",
+    refresh_token: "",
+  });
+  const [selectedAccountUrl, setSelectedAccountUrl] = useState("");
+  const [fromDate, setFromDate] = useState(`${new Date().getFullYear()}-01-01`);
+  const [toDate, setToDate] = useState(todayIso());
+  const [useIncrementalCursor, setUseIncrementalCursor] = useState(false);
+  const completedSteps = [
+    Boolean(status?.configured),
+    Boolean(status?.validated),
+    Boolean(importResult),
+  ].filter(Boolean).length;
+
+  useEffect(() => {
+    let cancelled = false;
+    async function hydrateFreeAgent() {
+      try {
+        const nextStatus = await getFreeAgentStatus();
+        if (cancelled) return;
+        setStatus(nextStatus);
+        setUseIncrementalCursor(Boolean(nextStatus.sync_cursor_updated_since));
+        if (nextStatus.validated) {
+          try {
+            const nextAccounts = await getFreeAgentBankAccounts();
+            if (cancelled) return;
+            setAccounts(nextAccounts);
+            setSelectedAccountUrl(nextStatus.selected_bank_account_url ?? nextAccounts[0]?.url ?? "");
+          } catch {
+            if (!cancelled) {
+              setMessage("Saved FreeAgent connection found, but accounts could not be refreshed. Revalidate when the API is reachable.");
+            }
+          }
+        }
+      } catch (err) {
+        if (!cancelled) setMessage(freeAgentErrorMessage(err));
+      }
+    }
+
+    void hydrateFreeAgent();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function saveAndValidate(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setMessage(null);
+    try {
+      await saveFreeAgentCredentials({
+        ...form,
+        base_url: form.environment === "custom" ? form.base_url : undefined,
+        auth_url: form.auth_url || undefined,
+        token_url: form.token_url || undefined,
+        refresh_token: form.refresh_token || undefined,
+      });
+      const validation = await validateFreeAgent();
+      setStatus(validation.status);
+      setUseIncrementalCursor(Boolean(validation.status.sync_cursor_updated_since));
+      setAccounts(validation.accounts);
+      setSelectedAccountUrl(validation.status.selected_bank_account_url ?? validation.accounts[0]?.url ?? "");
+      setMessage(`Validated ${validation.accounts.length} FreeAgent bank account(s).`);
+    } catch (err) {
+      setMessage(freeAgentErrorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function runFreeAgentImport(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selectedAccountUrl) return;
+    setBusy(true);
+    setMessage(null);
+    try {
+      const shouldUseCursor = Boolean(useIncrementalCursor && status?.sync_cursor_updated_since);
+      const result = await importFreeAgentTransactions({
+        bank_account_url: selectedAccountUrl,
+        from_date: shouldUseCursor ? undefined : fromDate,
+        to_date: shouldUseCursor ? undefined : toDate,
+        updated_since: shouldUseCursor ? status?.sync_cursor_updated_since ?? undefined : undefined,
+        view: "all",
+        last_uploaded: false,
+      });
+      setImportResult(result);
+      const nextStatus = await getFreeAgentStatus();
+      setStatus(nextStatus);
+      setUseIncrementalCursor(Boolean(nextStatus.sync_cursor_updated_since));
+      await onImported();
+      setMessage(
+        `Imported ${result.imported_transaction_count}; skipped ${result.skipped_duplicate_count} duplicate(s).`,
+      );
+    } catch (err) {
+      setMessage(freeAgentErrorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const selectedAccount = accounts.find((account) => account.url === selectedAccountUrl);
+  const canImport = Boolean(status?.validated && selectedAccountUrl);
+  const hasIncrementalCursor = Boolean(status?.sync_cursor_updated_since);
+  const importingWithCursor = Boolean(useIncrementalCursor && hasIncrementalCursor);
+
+  return (
+    <article className="card freeagent-card wide-card">
+      <CardHeader
+        title="FreeAgent Live Import"
+        subtitle="Validate OAuth details, choose a bank account, then import only new or selected transactions."
+        helpText="Secrets and tokens are encrypted before storage. Prefer a dedicated read-only development app and rotate tokens if a device is shared."
+      />
+      <div className="integration-status-strip freeagent-status-strip" aria-live="polite">
+        <div>
+          <span className={`status-pill ${status?.validated ? "status-pill-ok" : "status-pill-warn"}`}>
+            {status?.validated ? "Validated" : status?.configured ? "Configured" : "Not connected"}
+          </span>
+          <strong>{status?.company_name ?? "FreeAgent connection"}</strong>
+          <small>{status?.message ?? "Add OAuth details to start."}</small>
+        </div>
+        <div className="freeagent-progress-chip" aria-label={`${completedSteps} of 3 FreeAgent steps complete`}>
+          <span>{completedSteps}/3</span>
+          <small>Setup progress</small>
+        </div>
+        <p>{status?.secret_storage ?? "Secret storage will be initialized on save."}</p>
+      </div>
+
+      <div className="freeagent-stage-grid">
+        <form className="freeagent-panel" onSubmit={(event) => void saveAndValidate(event)}>
+          <div className="freeagent-panel-header">
+            <span>Step 1</span>
+            <div>
+              <strong>Connect and validate</strong>
+              <small>Credentials stay local and encrypted; validation only reads company and accounts.</small>
+            </div>
+          </div>
+          <div className="form-grid freeagent-form-grid">
+            <label>
+              Environment
+              <select
+                value={form.environment}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    environment: event.target.value as FreeAgentCredentials["environment"],
+                  }))
+                }
+              >
+                <option value="production">Production API</option>
+                <option value="sandbox">Sandbox API</option>
+                <option value="custom">Custom/mock URL</option>
+              </select>
+            </label>
+            {form.environment === "custom" ? (
+              <label>
+                Base URL
+                <input
+                  onChange={(event) => setForm((current) => ({ ...current, base_url: event.target.value }))}
+                  placeholder="http://127.0.0.1:9000"
+                  required
+                  type="url"
+                  value={form.base_url ?? ""}
+                />
+              </label>
+            ) : null}
+            <label>
+              OAuth client ID
+              <input
+                autoComplete="off"
+                onChange={(event) => setForm((current) => ({ ...current, client_id: event.target.value }))}
+                required
+                value={form.client_id}
+              />
+            </label>
+            <SensitiveInput
+              label="OAuth client secret"
+              onChange={(value) => setForm((current) => ({ ...current, client_secret: value }))}
+              required
+              value={form.client_secret}
+            />
+            <SensitiveInput
+              label="Access token"
+              hint="Short-lived token from OAuth Playground or FreeAgent OAuth flow. Paste the token value only; the app adds Bearer automatically."
+              onChange={(value) => setForm((current) => ({ ...current, access_token: value }))}
+              required
+              value={form.access_token}
+            />
+            <SensitiveInput
+              label="Refresh token"
+              hint="Optional, but different from the access token. Add it if you want the app to refresh expired access tokens automatically."
+              optional
+              onChange={(value) => setForm((current) => ({ ...current, refresh_token: value }))}
+              value={form.refresh_token ?? ""}
+            />
+          </div>
+          <button className="button-link" disabled={busy} type="submit">
+            {busy ? "Validating..." : "Save and validate"}
+          </button>
+        </form>
+
+        <form className="freeagent-panel" onSubmit={(event) => void runFreeAgentImport(event)}>
+          <div className="freeagent-panel-header">
+            <span>Step 2</span>
+            <div>
+              <strong>Choose import scope</strong>
+              <small>Use the saved cursor for daily imports, or choose a one-off date window.</small>
+            </div>
+          </div>
+          <div className="form-grid freeagent-form-grid">
+            <label>
+              Bank account
+              <select
+                disabled={!accounts.length}
+                onChange={(event) => setSelectedAccountUrl(event.target.value)}
+                value={selectedAccountUrl}
+              >
+                <option value="">Choose account</option>
+                {accounts.map((account) => (
+                  <option key={account.url} value={account.url}>
+                    {account.name} - {account.currency} {account.current_balance ?? "n/a"}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="checkbox-label freeagent-checkbox">
+              <input
+                checked={importingWithCursor}
+                disabled={!hasIncrementalCursor}
+                onChange={(event) => setUseIncrementalCursor(event.target.checked)}
+                type="checkbox"
+              />
+              Use saved incremental cursor
+            </label>
+            {!importingWithCursor ? (
+              <>
+                <label>
+                  From date
+                  <input onChange={(event) => setFromDate(event.target.value)} type="date" value={fromDate} />
+                </label>
+                <label>
+                  To date
+                  <input onChange={(event) => setToDate(event.target.value)} type="date" value={toDate} />
+                </label>
+              </>
+            ) : null}
+          </div>
+          <div className="freeagent-account-preview">
+            <strong>{selectedAccount?.name ?? "No account selected"}</strong>
+            <span>
+              {selectedAccount
+                ? `${selectedAccount.type} · ${selectedAccount.status} · latest ${selectedAccount.latest_activity_date ?? "unknown"}`
+                : "Validate first, then choose the account to import."}
+            </span>
+            <small>
+              {hasIncrementalCursor
+                ? `Cursor: ${status?.sync_cursor_updated_since}`
+                : "First import needs a date range; a cursor is saved after transactions are imported."}
+            </small>
+          </div>
+          <button className="button-link" disabled={!canImport || busy} type="submit">
+            {busy ? "Importing..." : importingWithCursor ? "Run incremental import" : "Run date-range import"}
+          </button>
+        </form>
+      </div>
+
+      {message ? <p className="status-copy">{message}</p> : null}
+      <p className="freeagent-token-note">
+        Refresh token is optional and is not the same as the access token. You can validate with only
+        a currently valid access token; add the refresh token later if you want automatic token refresh.
+        If validation fails, generate a fresh access token and paste only the token value.
+      </p>
+      {importResult ? (
+        <div className="import-result-grid">
+          <Metric label="Rows fetched" value={String(importResult.row_count)} />
+          <Metric label="Imported" value={String(importResult.imported_transaction_count)} />
+          <Metric label="Duplicates" value={String(importResult.skipped_duplicate_count)} />
+          <Metric label="Next cursor" value={importResult.next_updated_since ?? "not set"} />
+        </div>
+      ) : null}
+    </article>
+  );
+}
+
+function freeAgentErrorMessage(err: unknown) {
+  const message = errorMessage(err);
+  if (message === "Failed to fetch") {
+    return "FreeAgent validation failed. Check that the backend is online and the selected API URL is reachable.";
+  }
+  return message;
+}
+
+function SensitiveInput({
+  hint,
+  label,
+  onChange,
+  optional = false,
+  required = false,
+  value,
+}: {
+  hint?: string;
+  label: string;
+  onChange: (value: string) => void;
+  optional?: boolean;
+  required?: boolean;
+  value: string;
+}) {
+  const [revealed, setRevealed] = useState(false);
+
+  return (
+    <label className="sensitive-field">
+      <span>
+        {label}
+        {optional ? <em>optional</em> : null}
+      </span>
+      <div className="sensitive-input-wrap">
+        <input
+          autoComplete="new-password"
+          onChange={(event) => onChange(event.target.value)}
+          required={required}
+          spellCheck={false}
+          type={revealed ? "text" : "password"}
+          value={value}
+        />
+        <button onClick={() => setRevealed((current) => !current)} type="button">
+          {revealed ? "Hide" : "Show"}
+        </button>
+      </div>
+      {hint ? <small>{hint}</small> : null}
+    </label>
   );
 }
 
@@ -2366,12 +3111,12 @@ function SettingsWorkbenchCard({
   onTransactionUpdate: (transactionId: string, payload: TransactionUpdate) => Promise<void>;
   transactions: TransactionsResponse | null;
 }) {
-  const [section, setSection] = useState<"categories" | "data" | "merchants" | "rules" | "system" | "tags">("categories");
+  const [section, setSection] = useState<"categories" | "dashboard" | "data" | "merchants" | "rules" | "system" | "tags">("categories");
   return (
     <article className="card settings-workbench">
       <div className="settings-layout">
         <nav className="settings-nav" aria-label="Settings sections">
-          {(["categories", "merchants", "rules", "tags", "data", "system"] as const).map((item) => (
+          {(["categories", "dashboard", "merchants", "rules", "tags", "data", "system"] as const).map((item) => (
             <button
               className={section === item ? "active" : ""}
               key={item}
@@ -2385,6 +3130,9 @@ function SettingsWorkbenchCard({
         <div className="settings-panel">
           {section === "categories" ? (
             <CategorySettings controlState={controlState} onControlStateChange={onControlStateChange} />
+          ) : null}
+          {section === "dashboard" ? (
+            <DashboardCustomizeCard controlState={controlState} onControlStateChange={onControlStateChange} />
           ) : null}
           {section === "merchants" ? (
             <MerchantSettings
@@ -3039,6 +3787,7 @@ function SinkingFundsCard({ planning }: { planning: PlanningOverview | null }) {
 
 function BudgetPageCard({
   controlState,
+  dashboard,
   insights,
   onControlStateChange,
   periodLabel,
@@ -3046,6 +3795,7 @@ function BudgetPageCard({
   upcoming,
 }: {
   controlState: PlanningControlState;
+  dashboard: DashboardSummary | null;
   insights: InsightsResponse | null;
   onControlStateChange: (state: PlanningControlState | ((current: PlanningControlState) => PlanningControlState)) => void;
   periodLabel: string;
@@ -3055,6 +3805,7 @@ function BudgetPageCard({
   const rows = budgetRows(controlState, insights);
   const totals = budgetTotals(rows, insights);
   const spendingPlan = spendingPlanTotals(controlState, insights, upcoming, planning);
+  const safeSpend = safeSpendPlan(controlState, dashboard, spendingPlan);
   const updateBudget = (group: string, value: string) => {
     const plannedAmount = Math.max(0, numberFromInput(value));
     onControlStateChange((current) => {
@@ -3121,6 +3872,11 @@ function BudgetPageCard({
       <p className="fine-print">
         Formula: remaining = planned outflow - actual outflow{controlState.budgetMode === "rollover" ? " + rollover" : ""}. Actuals are imported transactions for this selected period.
       </p>
+      <PlanningAssumptionsPanel
+        controlState={controlState}
+        onControlStateChange={onControlStateChange}
+        safeSpend={safeSpend}
+      />
       <div className="budget-table" role="table" aria-label="Monthly budget">
         <div className="budget-row budget-row-header" role="row">
           <span>Group</span>
@@ -3363,6 +4119,7 @@ function AccountsCard({
     accountId: string,
     balance: string,
     accountType: string,
+    overdraftLimit: string,
   ) => Promise<void>;
   query: string;
 }) {
@@ -3402,6 +4159,7 @@ function AccountGroupSection({
     accountId: string,
     balance: string,
     accountType: string,
+    overdraftLimit: string,
   ) => Promise<void>;
 }) {
   const [open, setOpen] = useState(group.defaultOpen);
@@ -3451,49 +4209,96 @@ function AccountReviewRow({
     accountId: string,
     balance: string,
     accountType: string,
+    overdraftLimit: string,
   ) => Promise<void>;
 }) {
   const [balance, setBalance] = useState(account.current_balance ?? "");
   const [accountType, setAccountType] = useState(account.account_type);
+  const [overdraftLimit, setOverdraftLimit] = useState(account.overdraft_limit ?? "");
   const balanceInvalid = !isValidMoneyInput(balance, { allowEmpty: false });
+  const overdraftInvalid = !isValidMoneyInput(overdraftLimit, { allowEmpty: true });
+  const supportsOverdraft = ["current", "unknown"].includes(accountType);
+  const hasLiability = Number(account.liability_balance) > 0;
 
   return (
     <div className="account-review-row">
-      <div>
-        <strong>{account.display_name}</strong>
-        <small>
-          {account.provider} · imported net {money(account.net_total)}
-        </small>
+      <div className="account-review-main">
+        <div className="account-review-copy">
+          <strong>{account.display_name}</strong>
+          <small>
+            <span>{account.provider}</span>
+            <span>Imported net {money(account.net_total)}</span>
+          </small>
+        </div>
+        <div className="account-balance-pills" aria-label={`${account.display_name} balance treatment`}>
+          <span className="account-money-pill account-money-pill-available">
+            <small>Available</small>
+            <strong>{account.available_balance ? money(account.available_balance) : "Needs balance"}</strong>
+          </span>
+          {hasLiability ? (
+            <span className="account-money-pill account-money-pill-liability">
+              <small>Liability</small>
+              <strong>{money(account.liability_balance)}</strong>
+            </span>
+          ) : null}
+        </div>
       </div>
-      <select
-        aria-label={`Type for ${account.display_name}`}
-        onChange={(event) => setAccountType(event.target.value)}
-        value={accountType}
-      >
-        <option value="unknown">Unknown</option>
-        <option value="current">Current</option>
-        <option value="savings">Savings</option>
-        <option value="pot">Pot</option>
-        <option value="credit_card">Credit card</option>
-        <option value="loan">Loan</option>
-        <option value="bnpl">BNPL</option>
-      </select>
-      <input
-        aria-label={`Balance for ${account.display_name}`}
-        aria-invalid={balanceInvalid}
-        inputMode="decimal"
-        onChange={(event) => setBalance(event.target.value)}
-        placeholder="Current balance"
-        value={balance}
-      />
-      <button
-        disabled={busy || balanceInvalid}
-        onClick={() => void onAccountBalanceUpdate(account.id, balance, accountType)}
-        type="button"
-      >
-        Save
-      </button>
-      {balanceInvalid ? <small className="field-error account-balance-error">Enter a valid balance.</small> : null}
+      <div className="account-review-controls">
+        <label className="compact-field">
+          <span>Type</span>
+          <select
+            aria-label={`Type for ${account.display_name}`}
+            onChange={(event) => setAccountType(event.target.value)}
+            value={accountType}
+          >
+            <option value="unknown">Unknown</option>
+            <option value="current">Current</option>
+            <option value="savings">Savings</option>
+            <option value="pot">Pot</option>
+            <option value="credit_card">Credit card</option>
+            <option value="loan">Loan</option>
+            <option value="bnpl">BNPL</option>
+          </select>
+        </label>
+        <label className="compact-field">
+          <span>Balance</span>
+          <input
+            aria-label={`Balance for ${account.display_name}`}
+            aria-invalid={balanceInvalid}
+            inputMode="decimal"
+            onChange={(event) => setBalance(event.target.value)}
+            placeholder="0.00"
+            value={balance}
+          />
+        </label>
+        <label className="compact-field">
+          <span>Overdraft limit</span>
+          <input
+            aria-label={`Overdraft limit for ${account.display_name}`}
+            aria-invalid={overdraftInvalid}
+            disabled={!supportsOverdraft}
+            inputMode="decimal"
+            onChange={(event) => setOverdraftLimit(event.target.value)}
+            placeholder="0.00"
+            value={supportsOverdraft ? overdraftLimit : ""}
+          />
+        </label>
+        <button
+          disabled={busy || balanceInvalid || overdraftInvalid}
+          onClick={() => void onAccountBalanceUpdate(account.id, balance, accountType, overdraftLimit)}
+          type="button"
+        >
+          Save
+        </button>
+      </div>
+      {balanceInvalid || overdraftInvalid ? (
+        <div className="account-review-errors">
+          {balanceInvalid ? <small className="field-error account-balance-error">Enter a valid balance.</small> : null}
+          {overdraftInvalid ? (
+            <small className="field-error account-balance-error">Enter a valid overdraft limit.</small>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -3887,6 +4692,137 @@ function PlanningSnapshotCard({
   );
 }
 
+function PlanningAssumptionsPanel({
+  controlState,
+  onControlStateChange,
+  safeSpend,
+}: {
+  controlState: PlanningControlState;
+  onControlStateChange: (state: PlanningControlState | ((current: PlanningControlState) => PlanningControlState)) => void;
+  safeSpend: ReturnType<typeof safeSpendPlan>;
+}) {
+  const updateAssumption = (key: keyof PlanningAssumptions, value: PlanningAssumptions[keyof PlanningAssumptions]) => {
+    onControlStateChange((current) => ({
+      ...current,
+      planningAssumptions: {
+        ...defaultPlanningControlState.planningAssumptions,
+        ...current.planningAssumptions,
+        [key]: value,
+      },
+    }));
+  };
+
+  return (
+    <div className="assumption-panel">
+      <div className="assumption-panel-copy">
+        <strong>Safe-spend assumptions</strong>
+        <small>
+          Use this Budget workbench to temper dashboard facts for job changes, holidays, one-off income, and minimum overdraft headroom.
+        </small>
+      </div>
+      <div className="budget-summary-grid">
+        <Metric label="Safe to spend" value={money(String(safeSpend.value))} />
+        <Metric label="Cash capacity" value={money(String(safeSpend.cashCapacity))} />
+        <Metric label="Adjusted surplus" value={money(String(safeSpend.assumptionAdjustedSurplus))} />
+        <Metric label="Assumption deductions" value={money(String(safeSpend.assumptionDeductions))} />
+      </div>
+      <div className="assumption-grid">
+        <label>
+          Expected income still to arrive
+          <input
+            inputMode="decimal"
+            onChange={(event) => updateAssumption("expectedIncomeAmount", numberFromInput(event.target.value))}
+            placeholder="0.00"
+            value={moneyInputValue(controlState.planningAssumptions.expectedIncomeAmount)}
+          />
+        </label>
+        <label>
+          Income label
+          <input
+            onChange={(event) => updateAssumption("expectedIncomeLabel", event.target.value)}
+            placeholder="Salary, bonus, reimbursement..."
+            value={controlState.planningAssumptions.expectedIncomeLabel}
+          />
+        </label>
+        <label>
+          Exclude one-off income
+          <input
+            inputMode="decimal"
+            onChange={(event) => updateAssumption("oneOffIncomeExclusions", numberFromInput(event.target.value))}
+            placeholder="0.00"
+            value={moneyInputValue(controlState.planningAssumptions.oneOffIncomeExclusions)}
+          />
+        </label>
+        <label>
+          Lifestyle allowance left
+          <input
+            inputMode="decimal"
+            onChange={(event) => updateAssumption("lifestyleAllowance", numberFromInput(event.target.value))}
+            placeholder="Groceries, travel, family..."
+            value={moneyInputValue(controlState.planningAssumptions.lifestyleAllowance)}
+          />
+        </label>
+        <label>
+          Known upcoming costs
+          <input
+            inputMode="decimal"
+            onChange={(event) => updateAssumption("knownUpcomingCosts", numberFromInput(event.target.value))}
+            placeholder="Holiday, school, repairs..."
+            value={moneyInputValue(controlState.planningAssumptions.knownUpcomingCosts)}
+          />
+        </label>
+        <label>
+          Safety buffer / overdraft headroom
+          <input
+            inputMode="decimal"
+            onChange={(event) => updateAssumption("safetyBuffer", numberFromInput(event.target.value))}
+            placeholder="Minimum never-cross balance"
+            value={moneyInputValue(controlState.planningAssumptions.safetyBuffer)}
+          />
+        </label>
+        <label>
+          Income confidence
+          <select
+            onChange={(event) =>
+              updateAssumption("incomeConfidence", event.target.value as PlanningAssumptions["incomeConfidence"])
+            }
+            value={controlState.planningAssumptions.incomeConfidence}
+          >
+            <option value="stable">Stable</option>
+            <option value="variable">Variable</option>
+            <option value="changing">Changing job/income</option>
+          </select>
+        </label>
+        <label>
+          Lookback baseline
+          <select
+            onChange={(event) =>
+              updateAssumption("lookbackMonths", event.target.value as PlanningAssumptions["lookbackMonths"])
+            }
+            value={controlState.planningAssumptions.lookbackMonths}
+          >
+            <option value="1">1 month evidence</option>
+            <option value="3">3 month evidence</option>
+            <option value="6">6 month evidence</option>
+          </select>
+        </label>
+        <label className="checkbox-label assumption-checkbox">
+          <input
+            checked={controlState.planningAssumptions.jobChangeExpected}
+            onChange={(event) => updateAssumption("jobChangeExpected", event.target.checked)}
+            type="checkbox"
+          />
+          Job or income change expected
+        </label>
+      </div>
+      <p className="spending-plan-formula">
+        Formula: safe spend = min(cash capacity {money(String(safeSpend.cashCapacity))}, adjusted surplus {money(String(safeSpend.assumptionAdjustedSurplus))}).
+        Lookback is evidence only: {controlState.planningAssumptions.lookbackMonths} month(s).
+      </p>
+    </div>
+  );
+}
+
 function SpendingPlanCard({
   controlState,
   dashboard,
@@ -3903,24 +4839,30 @@ function SpendingPlanCard({
   const plan = spendingPlanTotals(controlState, insights, upcoming, planning);
   const planSegments = spendingPlanSegments(plan);
   const allocated = plan.obligations + plan.goalContributions + plan.flexibleActual;
-  const leftLabel = plan.leftToSpend >= 0 ? "Left to spend" : "Over planned income";
+  const safeSpend = safeSpendPlan(controlState, dashboard, plan);
+  const leftLabel = safeSpend.value >= 0 ? "Safe to spend" : "Over committed";
   const hasPlanData = plan.income > 0 || allocated > 0;
+
   return (
     <article className="card spending-plan-card">
       <CardHeader
-        helpText="This is not account cash. It is a period plan: imported income less expected bills/subscriptions, goal set-asides, and flexible spending already seen."
+        helpText="Safe to spend is capped by available cash and adjusted by your planning assumptions. The period surplus remains visible as evidence, not as spendable cash."
         title="Spending Plan"
-        subtitle="Selected-period income minus planned and tracked outflows."
+        subtitle="Cash-constrained plan using your assumptions."
       />
       {hasPlanData ? (
         <>
           <div className="spending-plan-hero">
             <span>
               {leftLabel}
-              <HelpTip text="What remains after this period's income funds expected bills, goal set-asides, and flexible spending already tracked." />
+              <HelpTip text="The lower of available cash capacity and assumption-adjusted period surplus after buffers, lifestyle allowance, known upcoming costs, and one-off income exclusions." />
             </span>
-            <strong className={plan.leftToSpend >= 0 ? "positive-text" : "negative-text"}>{money(String(plan.leftToSpend))}</strong>
-            {dashboard?.confidence !== "ready" ? (
+            <strong className={safeSpend.value >= 0 ? "positive-text" : "negative-text"}>{money(String(safeSpend.value))}</strong>
+            {!safeSpend.assumptionsReady ? (
+              <small>
+                Tune assumptions in Budget before treating this as decision-grade.
+              </small>
+            ) : dashboard?.confidence !== "ready" ? (
               <small>
                 Add balances in <a href="#/accounts">Accounts</a> to improve confidence.
               </small>
@@ -3928,7 +4870,7 @@ function SpendingPlanCard({
           </div>
           <div
             className="spending-plan-stack"
-            aria-label={`Left to spend allocation. Income ${money(String(plan.income))}, bills and subscriptions ${money(String(plan.obligations))}, savings goals ${money(String(plan.goalContributions))}, flexible actual ${money(String(plan.flexibleActual))}, ${leftLabel.toLowerCase()} ${money(String(plan.leftToSpend))}.`}
+            aria-label={`Spending allocation. Income ${money(String(plan.income))}, bills and subscriptions ${money(String(plan.obligations))}, savings goals ${money(String(plan.goalContributions))}, flexible actual ${money(String(plan.flexibleActual))}, safe to spend ${money(String(safeSpend.value))}.`}
           >
             {planSegments.length > 0 ? (
               planSegments.map((segment) => (
@@ -3953,6 +4895,11 @@ function SpendingPlanCard({
           </div>
           <div className="budget-summary-grid">
             <Metric
+              helpText="Imported income minus one-off income exclusions."
+              label="Adjusted income"
+              value={money(String(safeSpend.adjustedIncome))}
+            />
+            <Metric
               helpText="Expected bill and subscription amounts in the selected planning window."
               label="Bills/subscriptions"
               value={money(String(plan.obligations))}
@@ -3968,11 +4915,15 @@ function SpendingPlanCard({
               value={money(String(plan.flexibleActual))}
             />
             <Metric
-              helpText="Bills/subscriptions plus savings goals plus flexible spend already tracked."
-              label="Allocated total"
-              value={money(String(allocated))}
+              helpText="Imported period surplus before cash and assumption safety caps."
+              label="Period surplus"
+              value={money(String(plan.leftToSpend))}
             />
           </div>
+          <p className="spending-plan-formula">
+            Fact-led summary: cash capacity {money(String(safeSpend.cashCapacity))}; period surplus {money(String(plan.leftToSpend))}.
+            Tune assumptions in Budget to adjust for income changes, trips, buffers, and one-off items.
+          </p>
         </>
       ) : (
         <p className="empty-copy">
@@ -3980,7 +4931,7 @@ function SpendingPlanCard({
         </p>
       )}
       <div className="card-actions">
-        <a className="button-link" href="#/budget">Tune budget</a>
+        <a className="button-link" href="#/budget">Tune assumptions</a>
         <a className="button-link button-link-secondary" href="#/cash-flow">Scenario plan</a>
       </div>
     </article>
@@ -4603,8 +5554,22 @@ const defaultPlanningControlState: PlanningControlState = {
     { group: "flexible", id: "category-groceries", name: "Groceries", type: "expense" },
     { group: "debt", id: "category-debt", name: "Debt payments", type: "expense" },
   ],
+  customDashboardWidgets: [],
+  dashboardWidgetOrder: [...defaultDashboardWidgetIds],
+  hiddenDashboardWidgets: [],
   goals: [],
   merchants: [],
+  planningAssumptions: {
+    expectedIncomeAmount: 0,
+    expectedIncomeLabel: "",
+    incomeConfidence: "stable",
+    jobChangeExpected: false,
+    knownUpcomingCosts: 0,
+    lifestyleAllowance: 0,
+    lookbackMonths: "3",
+    oneOffIncomeExclusions: 0,
+    safetyBuffer: 0,
+  },
   rollovers: [],
   rules: [
     {
@@ -4628,10 +5593,27 @@ function readPlanningControlState(): PlanningControlState {
   try {
     const raw = window.localStorage.getItem(planningControlStorageKey);
     if (!raw) return defaultPlanningControlState;
-    return { ...defaultPlanningControlState, ...JSON.parse(raw) } as PlanningControlState;
+    return normalizePlanningControlState(JSON.parse(raw));
   } catch {
     return defaultPlanningControlState;
   }
+}
+
+function normalizePlanningControlState(value: Partial<PlanningControlState>): PlanningControlState {
+  const merged = {
+    ...defaultPlanningControlState,
+    ...value,
+    planningAssumptions: {
+      ...defaultPlanningControlState.planningAssumptions,
+      ...value.planningAssumptions,
+    },
+  };
+  return {
+    ...merged,
+    customDashboardWidgets: merged.customDashboardWidgets ?? [],
+    dashboardWidgetOrder: dashboardWidgetOrder(merged as PlanningControlState),
+    hiddenDashboardWidgets: merged.hiddenDashboardWidgets ?? [],
+  } as PlanningControlState;
 }
 
 function writePlanningControlState(state: PlanningControlState) {
@@ -4685,6 +5667,34 @@ function numberFromInput(value: string) {
   const normalized = value.replace(/[£,\s]/g, "");
   const parsed = Number(normalized);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function moneyInputValue(value: number) {
+  return value ? value.toFixed(2) : "";
+}
+
+function dashboardWidgetOrder(controlState: PlanningControlState) {
+  const customIds = controlState.customDashboardWidgets.map((widget) => `custom:${widget.id}`);
+  const knownIds = [...defaultDashboardWidgetIds, ...customIds];
+  const savedOrder = controlState.dashboardWidgetOrder.filter((id) => knownIds.includes(id));
+  return [...savedOrder, ...knownIds.filter((id) => !savedOrder.includes(id))];
+}
+
+function dashboardWidgetTitle(widgetId: string, controlState: PlanningControlState) {
+  if (widgetId.startsWith("custom:")) {
+    return controlState.customDashboardWidgets.find((widget) => `custom:${widget.id}` === widgetId)?.title ?? "Custom widget";
+  }
+  const titles: Record<string, string> = {
+    "cash-position": "Cash Position",
+    cashflow: "Cash Flow",
+    "decision-queue": "Decision Queue",
+    "planning-snapshot": "Budget & Goals",
+    "review-focus": "Review Focus",
+    spending: "Spending Pulse",
+    "spending-plan": "Spending Plan",
+    upcoming: "Bills",
+  };
+  return titles[widgetId] ?? titleCase(widgetId);
 }
 
 function isValidMoneyInput(value: string, { allowEmpty }: { allowEmpty: boolean }) {
@@ -4761,6 +5771,54 @@ function spendingPlanTotals(
   };
 }
 
+function safeSpendPlan(
+  controlState: PlanningControlState,
+  dashboard: DashboardSummary | null,
+  plan: ReturnType<typeof spendingPlanTotals>,
+) {
+  const assumptions = {
+    ...defaultPlanningControlState.planningAssumptions,
+    ...controlState.planningAssumptions,
+  };
+  const cashCapacity = Number(dashboard?.available_after_commitments ?? dashboard?.cash_on_hand ?? 0);
+  const adjustedIncome = Math.max(0, plan.income - assumptions.oneOffIncomeExclusions);
+  const assumptionDeductions =
+    assumptions.knownUpcomingCosts +
+    assumptions.lifestyleAllowance +
+    assumptions.safetyBuffer;
+  const confidenceHaircut =
+    assumptions.incomeConfidence === "stable" && !assumptions.jobChangeExpected
+      ? 0
+      : assumptions.incomeConfidence === "variable"
+        ? Math.max(assumptions.expectedIncomeAmount * 0.25, 0)
+        : Math.max(assumptions.expectedIncomeAmount * 0.5, 0);
+  const assumptionAdjustedSurplus =
+    adjustedIncome +
+    assumptions.expectedIncomeAmount -
+    confidenceHaircut -
+    plan.obligations -
+    plan.goalContributions -
+    plan.flexibleActual -
+    assumptionDeductions;
+  const assumptionsReady = [
+    assumptions.expectedIncomeAmount,
+    assumptions.knownUpcomingCosts,
+    assumptions.lifestyleAllowance,
+    assumptions.oneOffIncomeExclusions,
+    assumptions.safetyBuffer,
+  ].some((value) => value > 0) || assumptions.incomeConfidence !== "stable" || assumptions.jobChangeExpected;
+
+  return {
+    adjustedIncome,
+    assumptionAdjustedSurplus,
+    assumptionDeductions,
+    assumptionsReady,
+    cashCapacity,
+    confidenceHaircut,
+    value: Math.min(cashCapacity, assumptionAdjustedSurplus),
+  };
+}
+
 function spendingPlanSegments(plan: ReturnType<typeof spendingPlanTotals>) {
   const allocated = plan.obligations + plan.goalContributions + plan.flexibleActual;
   const denominator = Math.max(plan.income, allocated, 1);
@@ -4769,7 +5827,7 @@ function spendingPlanSegments(plan: ReturnType<typeof spendingPlanTotals>) {
     { color: "#d99a2b", label: "Savings goals", value: plan.goalContributions },
     { color: "#2587a6", label: "Flexible actual", value: plan.flexibleActual },
     plan.leftToSpend >= 0
-      ? { color: "#2f7d5c", label: "Left to spend", value: plan.leftToSpend }
+      ? { color: "#2f7d5c", label: "Period surplus", value: plan.leftToSpend }
       : { color: "#b85c5c", label: "Over planned income", value: Math.abs(plan.leftToSpend) },
   ].filter((segment) => segment.value > 0.005);
 
@@ -5017,11 +6075,13 @@ function accountBuckets(accounts: AccountsResponse | null) {
   }>(
     (groups, account) => {
       const value = Number(account.current_balance ?? account.net_total);
+      const liability = Number(account.liability_balance ?? 0);
       const label = titleCase(account.account_type === "unknown" ? account.provider : account.account_type);
-      if (["credit_card", "loan", "bnpl"].includes(account.account_type) || value < 0) {
-        groups.liabilities[label] = (groups.liabilities[label] ?? 0) + Math.abs(value);
-      } else {
+      if (value > 0 && !["credit_card", "loan", "bnpl"].includes(account.account_type)) {
         groups.assets[label] = (groups.assets[label] ?? 0) + Math.max(0, value);
+      }
+      if (liability > 0 || ["credit_card", "loan", "bnpl"].includes(account.account_type)) {
+        groups.liabilities[label] = (groups.liabilities[label] ?? 0) + Math.max(liability, Math.abs(Math.min(value, 0)));
       }
       return groups;
     },

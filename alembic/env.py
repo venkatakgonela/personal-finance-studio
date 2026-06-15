@@ -9,6 +9,7 @@ from app.models import (  # noqa: F401
     account,
     entity,
     import_log,
+    integration,
     internal_transfer,
     profile,
     transaction,

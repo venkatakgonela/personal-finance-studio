@@ -17,6 +17,7 @@ from app.schemas.planning import (
     StaleCommitmentReview,
     SubscriptionReviewItem,
 )
+from app.services.account_balances import available_for_bills
 from app.services.categories import normalized_group_for_transaction
 from app.services.dashboard import latest_transaction_date
 from app.services.decisions import count_decisions
@@ -193,7 +194,7 @@ def known_cash_on_hand(session: Session, entity_id: str) -> Decimal:
         )
     ).all()
     return sum(
-        (account.current_balance or Decimal("0.00") for account in accounts),
+        (available_for_bills(account) or Decimal("0.00") for account in accounts),
         Decimal("0.00"),
     )
 
