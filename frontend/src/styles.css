@@ -711,19 +711,20 @@ h3 {
   font-size: 0.64rem;
   font-weight: 850;
   letter-spacing: 0.05em;
-  max-width: 0;
   opacity: 0;
-  overflow: hidden;
+  transform: translateX(3px);
   text-transform: uppercase;
-  transition: max-width 160ms ease, opacity 150ms ease;
+  transition:
+    opacity 150ms ease,
+    transform 160ms ease;
   white-space: nowrap;
 }
 
 .dashboard-widget-shell:hover .drag-instruction,
 .dashboard-widget-shell:focus-within .drag-instruction,
 .dashboard-widget-shell.is-dragging .drag-instruction {
-  max-width: 74px;
   opacity: 1;
+  transform: translateX(0);
 }
 
 .dashboard-widget-overlay {
@@ -2532,9 +2533,10 @@ input[aria-invalid="true"] {
 .transaction-merchant small,
 .transaction-account strong,
 .transaction-account small {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow: visible;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+  white-space: normal;
 }
 
 .transaction-amount {
@@ -2988,9 +2990,13 @@ button.collapsible-block-header:focus {
 }
 
 .name-setup-form {
-  grid-template-columns: minmax(220px, 1fr) max-content;
+  grid-template-columns: minmax(0, 1fr);
   margin-bottom: 0;
   background: rgba(255, 255, 255, 0.72);
+}
+
+.name-setup-form .settings-primary-action {
+  justify-self: start;
 }
 
 .getting-started {
@@ -3137,6 +3143,7 @@ button.collapsible-block-header:focus {
 .control-form label {
   display: grid;
   gap: 6px;
+  min-width: 0;
   color: var(--muted);
   font-size: 0.72rem;
   font-weight: 800;
@@ -3156,6 +3163,8 @@ button.collapsible-block-header:focus {
   background: white;
   color: var(--text);
   font: inherit;
+  min-width: 0;
+  width: 100%;
 }
 
 .settings-primary-action {

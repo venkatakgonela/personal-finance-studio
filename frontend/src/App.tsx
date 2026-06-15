@@ -977,6 +977,7 @@ function PeriodControls({
       {showCandidateToggle ? (
         <label className="candidate-toggle">
           <input
+            aria-label="Include bill candidates"
             checked={includeCandidates}
             onChange={(event) => onIncludeCandidatesChange(event.target.checked)}
             type="checkbox"
@@ -1657,6 +1658,7 @@ function DashboardCustomizeCard({
           {widgetOrder.map((widgetId) => (
             <label className="checkbox-label widget-toggle" key={widgetId}>
               <input
+                aria-label={`Show ${dashboardWidgetTitle(widgetId, controlState)} widget`}
                 checked={!controlState.hiddenDashboardWidgets.includes(widgetId)}
                 onChange={() => toggleWidget(widgetId)}
                 type="checkbox"
@@ -1984,6 +1986,7 @@ function FreeAgentIntegrationCard({ onImported }: { onImported: () => Promise<vo
             <label>
               Environment
               <select
+                aria-label="FreeAgent API environment"
                 value={form.environment}
                 onChange={(event) =>
                   setForm((current) => ({
@@ -2001,6 +2004,7 @@ function FreeAgentIntegrationCard({ onImported }: { onImported: () => Promise<vo
               <label>
                 Base URL
                 <input
+                  aria-label="FreeAgent custom base URL"
                   onChange={(event) => setForm((current) => ({ ...current, base_url: event.target.value }))}
                   placeholder="http://127.0.0.1:9000"
                   required
@@ -2012,6 +2016,7 @@ function FreeAgentIntegrationCard({ onImported }: { onImported: () => Promise<vo
             <label>
               OAuth client ID
               <input
+                aria-label="FreeAgent OAuth client ID"
                 autoComplete="off"
                 onChange={(event) => setForm((current) => ({ ...current, client_id: event.target.value }))}
                 required
@@ -2056,6 +2061,7 @@ function FreeAgentIntegrationCard({ onImported }: { onImported: () => Promise<vo
             <label>
               Bank account
               <select
+                aria-label="FreeAgent bank account"
                 disabled={!accounts.length}
                 onChange={(event) => setSelectedAccountUrl(event.target.value)}
                 value={selectedAccountUrl}
@@ -2070,6 +2076,7 @@ function FreeAgentIntegrationCard({ onImported }: { onImported: () => Promise<vo
             </label>
             <label className="checkbox-label freeagent-checkbox">
               <input
+                aria-label="Use saved incremental cursor"
                 checked={importingWithCursor}
                 disabled={!hasIncrementalCursor}
                 onChange={(event) => setUseIncrementalCursor(event.target.checked)}
@@ -2081,11 +2088,21 @@ function FreeAgentIntegrationCard({ onImported }: { onImported: () => Promise<vo
               <>
                 <label>
                   From date
-                  <input onChange={(event) => setFromDate(event.target.value)} type="date" value={fromDate} />
+                  <input
+                    aria-label="FreeAgent import from date"
+                    onChange={(event) => setFromDate(event.target.value)}
+                    type="date"
+                    value={fromDate}
+                  />
                 </label>
                 <label>
                   To date
-                  <input onChange={(event) => setToDate(event.target.value)} type="date" value={toDate} />
+                  <input
+                    aria-label="FreeAgent import to date"
+                    onChange={(event) => setToDate(event.target.value)}
+                    type="date"
+                    value={toDate}
+                  />
                 </label>
               </>
             ) : null}
@@ -2160,6 +2177,7 @@ function SensitiveInput({
       </span>
       <div className="sensitive-input-wrap">
         <input
+          aria-label={label}
           autoComplete="new-password"
           onChange={(event) => onChange(event.target.value)}
           required={required}
@@ -2167,7 +2185,7 @@ function SensitiveInput({
           type={revealed ? "text" : "password"}
           value={value}
         />
-        <button onClick={() => setRevealed((current) => !current)} type="button">
+        <button aria-label={`${revealed ? "Hide" : "Show"} ${label}`} onClick={() => setRevealed((current) => !current)} type="button">
           {revealed ? "Hide" : "Show"}
         </button>
       </div>
@@ -3676,6 +3694,7 @@ function GoalsCard({
         <label>
           Due date
           <input
+            aria-label="Goal due date"
             onChange={(event) => setForm({ ...form, dueDate: event.target.value })}
             type="date"
             value={form.dueDate}
