@@ -42,6 +42,7 @@ import {
   markBillInstancePaid,
   previewSnoopImport,
   rejectDecision,
+  resetImportedData,
   updateAccount,
   updateCommitment,
   updateTransaction,
@@ -238,6 +239,7 @@ export function App() {
   const [reportView, setReportView] = useState<ReportView>(() => initialReportView());
   const [reportGroupBy, setReportGroupBy] = useState<ReportGroupBy>(() => initialReportGroupBy());
   const [controlState, setControlState] = useState<PlanningControlState>(() => readPlanningControlState());
+  const [userName, setUserName] = useState(() => readUserName());
   const [route, setRoute] = useState<RouteId>(currentRoute());
   const [loadState, setLoadState] = useState<LoadState>("idle");
   const [error, setError] = useState<string | null>(null);
@@ -250,7 +252,7 @@ export function App() {
   const lastSyncedHash = useRef("");
 
   const busy = loadState === "loading";
-  const pageTitle = getPageTitle(route);
+  const pageTitle = getPageTitle(route, userName);
   const showCandidateToggle = candidateToggleApplies(route);
   const dateWindow = useMemo(
     () => getDateWindow(periodPreset, customStartDate, customEndDate),
@@ -265,6 +267,10 @@ export function App() {
   useEffect(() => {
     writePlanningControlState(controlState);
   }, [controlState]);
+
+  useEffect(() => {
+    writeUserName(userName);
+  }, [userName]);
 
   async function checkApiHealth() {
     try {
@@ -532,6 +538,45 @@ export function App() {
     setPlanning(planningResult);
   }
 
+  function saveUserName(nextName: string) {
+    setUserName(cleanUserName(nextName));
+  }
+
+  async function runResetAppData() {
+    const confirmed = window.confirm(
+      "Reset imported data, local planning preferences, and your saved name? This cannot be undone.",
+    );
+    if (!confirmed) return;
+
+    setError(null);
+    setLoadState("loading");
+    try {
+      await resetImportedData();
+      clearLocalWorkspacePreferences();
+      setSelectedFile(null);
+      setPreview(null);
+      setCommitResult(null);
+      setAccounts(null);
+      setTransactions(null);
+      setTransferResult(null);
+      setCommitmentResult(null);
+      setCommitments(null);
+      setDecisions(null);
+      setDashboard(null);
+      setUpcoming(null);
+      setForecast(null);
+      setInsights(null);
+      setPlanning(null);
+      setControlState(defaultPlanningControlState);
+      setUserName("");
+      await refreshWorkspace();
+      setLoadState("ready");
+    } catch (err) {
+      setError(errorMessage(err));
+      setLoadState("error");
+    }
+  }
+
   async function runDecisionAction(
     action: "confirm" | "reject",
     decisionType: string,
@@ -614,7 +659,7 @@ export function App() {
 
   return (
     <div className="app-frame">
-      <Sidebar currentRoute={route} />
+      <Sidebar currentRoute={route} userName={userName} />
       <main className="dashboard-shell">
         <header className="topbar">
           <div>
@@ -659,8 +704,10 @@ export function App() {
           forecast={forecast}
           insights={insights}
           planning={planning}
+          userName={userName}
           onControlStateChange={setControlState}
           onHealthCheck={checkApiHealth}
+          onResetAppData={runResetAppData}
           onAccountBalanceUpdate={runAccountBalanceUpdate}
           onBillPaid={runBillPaid}
           onCommit={runCommit}
@@ -669,6 +716,7 @@ export function App() {
           onDetectCommitments={runCommitmentDetection}
           onDetectTransfers={runTransferDetection}
           onPreview={runPreview}
+          onUserNameSave={saveUserName}
           preview={preview}
           query={searchQuery}
           route={route}
@@ -691,9 +739,11 @@ export function App() {
   );
 }
 
-function Sidebar({ currentRoute }: { currentRoute: RouteId }) {
+function Sidebar({ currentRoute, userName }: { currentRoute: RouteId; userName: string }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [entityContext, setEntityContext] = useState<"household" | "business">("household");
+  const displayName = userName || "Workspace";
+  const avatar = displayName.slice(0, 1).toUpperCase();
   return (
     <aside className="sidebar">
       <div className="brand-lockup">
@@ -761,9 +811,9 @@ function Sidebar({ currentRoute }: { currentRoute: RouteId }) {
           onClick={() => setMenuOpen((open) => !open)}
           type="button"
         >
-          <span>W</span>
+          <span>{avatar}</span>
           <div>
-            <strong>Workspace</strong>
+            <strong>{displayName}</strong>
             <small>{entityContext === "household" ? "Household" : "Business preview"}</small>
           </div>
           <b className="profile-chevron" aria-hidden="true" />
@@ -879,8 +929,10 @@ function AppPage({
   includeCandidates,
   insights,
   planning,
+  userName,
   onControlStateChange,
   onHealthCheck,
+  onResetAppData,
   onAccountBalanceUpdate,
   onBillPaid,
   onCommit,
@@ -889,6 +941,7 @@ function AppPage({
   onDetectCommitments,
   onDetectTransfers,
   onPreview,
+  onUserNameSave,
   periodKind,
   periodLabel,
   preview,
@@ -918,8 +971,10 @@ function AppPage({
   includeCandidates: boolean;
   insights: InsightsResponse | null;
   planning: PlanningOverview | null;
+  userName: string;
   onControlStateChange: (state: PlanningControlState | ((current: PlanningControlState) => PlanningControlState)) => void;
   onHealthCheck: () => Promise<void>;
+  onResetAppData: () => Promise<void>;
   onAccountBalanceUpdate: (
     accountId: string,
     balance: string,
@@ -936,6 +991,7 @@ function AppPage({
   onDetectCommitments: () => Promise<void>;
   onDetectTransfers: () => Promise<void>;
   onPreview: (file: File) => Promise<void>;
+  onUserNameSave: (name: string) => void;
   periodKind: DateWindowKind;
   periodLabel: string;
   preview: ImportPreview | null;
@@ -1160,6 +1216,7 @@ function AppPage({
           insights={insights}
           onControlStateChange={onControlStateChange}
           onHealthCheck={onHealthCheck}
+          onResetAppData={onResetAppData}
           onTransactionUpdate={onTransactionUpdate}
           transactions={transactions}
         />
@@ -1169,10 +1226,15 @@ function AppPage({
 
   if (route === "import") {
     return (
-      <section className="page-grid" aria-label="Import page">
+      <section className="import-page-grid" aria-label="Import page">
+        <div className="import-onboarding-stack">
+          <NameSetupCard onSave={onUserNameSave} userName={userName} />
+          <ImportFreshnessCard planning={planning} />
+        </div>
         <GettingStartedCard
           accounts={accounts}
           busy={busy}
+          canImport={Boolean(userName)}
           commitmentResult={commitmentResult}
           commitments={commitments}
           commitResult={commitResult}
@@ -1185,7 +1247,6 @@ function AppPage({
           transactions={transactions}
           transferResult={transferResult}
         />
-        <ImportFreshnessCard planning={planning} />
       </section>
     );
   }
@@ -1194,9 +1255,7 @@ function AppPage({
     <section className="dashboard-grid" aria-label="Personal Finance Studio dashboard">
       <DashboardHeroCard
         dashboard={dashboard}
-        periodKind={periodKind}
         planning={planning}
-        upcoming={upcoming}
       />
       <SpendingPlanCard
         controlState={controlState}
@@ -1251,6 +1310,7 @@ function AppPage({
 
 function GettingStartedCard({
   busy,
+  canImport,
   preview,
   commitResult,
   transferResult,
@@ -1265,6 +1325,7 @@ function GettingStartedCard({
   onDetectCommitments,
 }: {
   busy: boolean;
+  canImport: boolean;
   preview: ImportPreview | null;
   commitResult: ImportCommitResult | null;
   transferResult: TransferDetectionResult | null;
@@ -1291,7 +1352,7 @@ function GettingStartedCard({
             aria-label="Choose Snoop CSV"
             type="file"
             accept=".csv,text/csv"
-            disabled={busy}
+            disabled={busy || !canImport}
             onChange={(event) => {
               const file = event.target.files?.[0];
               if (file) void onPreview(file);
@@ -1309,7 +1370,7 @@ function GettingStartedCard({
           ? `${transactions.total_count} transactions loaded`
         : "Persist transactions and accounts",
       action: (
-        <button disabled={!preview || busy} onClick={() => void onCommit()} type="button">
+        <button disabled={!canImport || !preview || busy} onClick={() => void onCommit()} type="button">
           {busy ? "Committing..." : "Commit"}
         </button>
       ),
@@ -1323,7 +1384,7 @@ function GettingStartedCard({
           ? "Candidates waiting in queue"
         : "Pair account movements before reporting",
       action: (
-        <button disabled={!hasImportedData || busy} onClick={onDetectTransfers} type="button">
+        <button disabled={!canImport || !hasImportedData || busy} onClick={onDetectTransfers} type="button">
           {busy ? "Detecting..." : "Detect"}
         </button>
       ),
@@ -1337,7 +1398,7 @@ function GettingStartedCard({
           ? `${commitments.total_count} candidates`
         : "Create a useful recurring inbox",
       action: (
-        <button disabled={!hasImportedData || busy} onClick={onDetectCommitments} type="button">
+        <button disabled={!canImport || !hasImportedData || busy} onClick={onDetectCommitments} type="button">
           {busy ? "Detecting..." : "Detect"}
         </button>
       ),
@@ -1347,6 +1408,9 @@ function GettingStartedCard({
   return (
     <article className="card getting-started wide-card">
       <CardHeader title="Getting Started" subtitle="Finish setup from your Snoop export." />
+      {!canImport ? (
+        <p className="status-copy">Add your name above first so this workspace can be personalized before import.</p>
+      ) : null}
       <div className="progress-ring" aria-label={`${completedCount(steps)} of ${steps.length} complete`}>
         {completedCount(steps)}/{steps.length}
       </div>
@@ -1366,6 +1430,57 @@ function GettingStartedCard({
   );
 }
 
+function NameSetupCard({
+  onSave,
+  userName,
+}: {
+  onSave: (name: string) => void;
+  userName: string;
+}) {
+  const [draftName, setDraftName] = useState(userName);
+  const isSaved = Boolean(userName);
+
+  useEffect(() => {
+    setDraftName(userName);
+  }, [userName]);
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const nextName = cleanUserName(draftName);
+    if (!nextName) return;
+    onSave(nextName);
+  }
+
+  return (
+    <article className={`card name-setup-card ${isSaved ? "name-setup-card-complete" : ""}`}>
+      <CardHeader
+        helpText="The saved name is used for greetings and workspace copy before and after import."
+        title={isSaved ? `Welcome, ${userName}` : "Personalize your workspace"}
+        subtitle={
+          isSaved
+            ? "This name is used for greetings and the workspace menu."
+            : "Before importing data, tell us what name to use across the app."
+        }
+      />
+      <form className="control-form name-setup-form" onSubmit={handleSubmit}>
+        <label>
+          Your name
+          <input
+            aria-label="Your name"
+            autoComplete="given-name"
+            onChange={(event) => setDraftName(event.target.value)}
+            placeholder="e.g. Alex"
+            value={draftName}
+          />
+        </label>
+        <button className="settings-primary-action" disabled={!cleanUserName(draftName)} type="submit">
+          {isSaved ? "Update name" : "Save and continue"}
+        </button>
+      </form>
+    </article>
+  );
+}
+
 function SpendingCard({
   dashboard,
   insights,
@@ -1378,12 +1493,21 @@ function SpendingCard({
   const groups = reportGroups(insights, "category", "spending").slice(0, 4);
   const totalOutflow = groups.reduce((sum, group) => sum + group.value, 0);
   const topGroup = groups[0];
+  const flexibleSpend = (insights?.category_groups ?? [])
+    .filter((group) => group.group === "flexible")
+    .reduce((sum, group) => sum + Math.abs(Number(group.outflow_total)), 0);
+  const flexibleAllowance = Number(dashboard?.flexible_spend_allowance ?? 0);
+  const flexibleLeft = flexibleAllowance > 0 ? flexibleAllowance - flexibleSpend : null;
 
   return (
     <article className="card spending-pulse-card">
-      <CardHeader title="Spending Pulse" subtitle={`${periodLabel} by category`} />
+      <CardHeader
+        helpText="These totals come from transactions in the selected date range. They are activity totals, not current account balances."
+        title="Period Activity"
+        subtitle={`${periodLabel} transactions`}
+      />
       <div className="spending-pulse-hero">
-        <span>Total outflow</span>
+        <span>Tracked outflow</span>
         <strong>{totalOutflow ? money(String(totalOutflow)) : "-"}</strong>
         <small>
           {topGroup
@@ -1414,8 +1538,9 @@ function SpendingCard({
       <div className="split-metrics">
         <Metric label="Top group" value={topGroup?.label ?? "-"} />
         <Metric
-          label="Flex allowance"
-          value={dashboard?.flexible_spend_allowance ? money(dashboard.flexible_spend_allowance) : "-"}
+          helpText="Default flexible guardrail minus flexible spending in this selected period."
+          label="Flexible left"
+          value={flexibleLeft === null ? "-" : money(String(flexibleLeft))}
         />
       </div>
       <div className="card-actions">
@@ -1428,27 +1553,31 @@ function SpendingCard({
 
 function DashboardHeroCard({
   dashboard,
-  periodKind,
   planning,
-  upcoming,
 }: {
   dashboard: DashboardSummary | null;
-  periodKind: DateWindowKind;
   planning: PlanningOverview | null;
-  upcoming: UpcomingCommitmentsResponse | null;
 }) {
   const cashReady = dashboard?.confidence === "ready";
   const freshness = planning?.import_freshness.status ?? "checking";
+  const cashOnHand = dashboard?.cash_on_hand === null || dashboard?.cash_on_hand === undefined
+    ? null
+    : Number(dashboard.cash_on_hand);
+  const confirmedDue = Number(dashboard?.upcoming_confirmed_total ?? 0);
+  const candidateDue = Number(dashboard?.upcoming_candidate_total ?? 0);
+  const afterConfirmed = cashOnHand === null ? null : cashOnHand - confirmedDue;
+  const afterCandidates = cashOnHand === null ? null : cashOnHand - confirmedDue - candidateDue;
   return (
     <article className="card dashboard-hero-card">
       <div className="dashboard-hero-copy">
-        <span className="hero-kicker">Today’s household position</span>
+        <span className="hero-kicker">
+          Cash Position
+          <HelpTip text="Included cash account balances today. This is a balance number, not income or spending for the selected period." />
+        </span>
         <strong>{cashReady && dashboard?.cash_on_hand ? money(dashboard.cash_on_hand) : "Needs balances"}</strong>
-        <p>
-          {cashReady
-            ? "Balances are ready. Use cash flow and upcoming bills to decide what is safe to spend."
-            : dashboard?.message ?? "Import data and enter balances to unlock trusted available-money planning."}
-        </p>
+        {!cashReady ? (
+          <p>{dashboard?.message ?? "Import data and enter balances to unlock trusted available-money planning."}</p>
+        ) : null}
         <div className="hero-actions">
           <a className="button-link" href="#/accounts">Review balances</a>
           <a className="button-link button-link-secondary" href="#/cash-flow">Open cash flow</a>
@@ -1456,23 +1585,33 @@ function DashboardHeroCard({
       </div>
       <div className="hero-stat-grid">
         <Metric
-          label="30-day after bills"
-          value={dashboard?.available_after_commitments ? money(dashboard.available_after_commitments) : "-"}
+          helpText="Current included cash minus confirmed bills in the 30-day planning queue."
+          label="After confirmed bills"
+          value={afterConfirmed === null ? "-" : money(String(afterConfirmed))}
         />
         <Metric
-          label="Flexible left"
-          value={dashboard?.flexible_spend_remaining ? money(dashboard.flexible_spend_remaining) : "-"}
+          helpText="Current included cash minus confirmed bills and candidate bills. Candidates only count after review."
+          label="After candidates"
+          value={afterCandidates === null ? "-" : money(String(afterCandidates))}
         />
         <Metric
-          label={billMetricLabel(periodKind)}
-          value={upcoming ? money(upcoming.expected_total) : "-"}
+          helpText="Bills already trusted enough to affect the 30-day cash-flow forecast."
+          label="Confirmed bills"
+          value={dashboard ? money(dashboard.upcoming_confirmed_total) : "-"}
         />
-        <Metric label="Decisions" value={dashboard?.decision_count ?? "-"} />
+        <Metric
+          helpText="Detected bill candidates waiting for review. These show risk but do not become trusted bills until confirmed."
+          label="Candidate bills"
+          value={dashboard ? money(dashboard.upcoming_candidate_total) : "-"}
+        />
       </div>
       <div className={`hero-freshness hero-freshness-${freshness}`}>
         <span className="system-badge-dot" />
         <div>
-          <strong>{titleCase(freshness)}</strong>
+          <strong>
+            Data {titleCase(freshness)}
+            <HelpTip text="Freshness is based on the latest imported transaction date and helps you judge whether reports need a new import." />
+          </strong>
           <small>{planning?.import_freshness.message ?? "Checking local data freshness."}</small>
         </div>
       </div>
@@ -1991,11 +2130,11 @@ function DecisionQueueCard({
     return (
       <article className="card decision-card decision-card-compact">
         <CardHeader
-          title="Decision Queue"
+          title="Decision Impact"
           subtitle={
             decisions
-              ? `${visibleCount} priority checks · ${decisions.total_count} open`
-              : "High-impact checks"
+              ? `${visibleCount} shown · ${decisions.total_count} accuracy checks open`
+              : "Checks that improve reports and forecasts"
           }
         />
         {summary}
@@ -2214,6 +2353,7 @@ function SettingsWorkbenchCard({
   insights,
   onControlStateChange,
   onHealthCheck,
+  onResetAppData,
   onTransactionUpdate,
   transactions,
 }: {
@@ -2222,6 +2362,7 @@ function SettingsWorkbenchCard({
   insights: InsightsResponse | null;
   onControlStateChange: (state: PlanningControlState | ((current: PlanningControlState) => PlanningControlState)) => void;
   onHealthCheck: () => Promise<void>;
+  onResetAppData: () => Promise<void>;
   onTransactionUpdate: (transactionId: string, payload: TransactionUpdate) => Promise<void>;
   transactions: TransactionsResponse | null;
 }) {
@@ -2264,7 +2405,7 @@ function SettingsWorkbenchCard({
             <TagSettings controlState={controlState} onControlStateChange={onControlStateChange} />
           ) : null}
           {section === "data" ? (
-            <DataSettings controlState={controlState} />
+            <DataSettings controlState={controlState} onResetAppData={onResetAppData} />
           ) : null}
           {section === "system" ? <SystemStatusCard health={health} onHealthCheck={onHealthCheck} /> : null}
         </div>
@@ -2648,7 +2789,13 @@ function MerchantSettings({
   );
 }
 
-function DataSettings({ controlState }: { controlState: PlanningControlState }) {
+function DataSettings({
+  controlState,
+  onResetAppData,
+}: {
+  controlState: PlanningControlState;
+  onResetAppData: () => Promise<void>;
+}) {
   return (
     <section>
       <CardHeader title="Data" subtitle="Local planning preferences and import entry points." />
@@ -2661,6 +2808,18 @@ function DataSettings({ controlState }: { controlState: PlanningControlState }) 
       <div className="card-actions">
         <a className="button-link" href="#/import">Open import center</a>
         <a className="button-link button-link-secondary" href="#/budget">Open budget</a>
+      </div>
+      <div className="danger-zone">
+        <div>
+          <strong>Reset and start fresh</strong>
+          <p>
+            Clears imported transactions, accounts, detected bills, decisions, local planning preferences,
+            and your saved display name.
+          </p>
+        </div>
+        <button className="danger-button" onClick={() => void onResetAppData()} type="button">
+          Reset app data
+        </button>
       </div>
     </section>
   );
@@ -3436,7 +3595,7 @@ function CashflowCard({
 
   return (
     <article className="card forecast-card">
-      <CardHeader title="Cash Flow Readiness" subtitle={`What is usable for the real dashboard · ${candidateMode}`} />
+      <CardHeader title="Planning Risk" subtitle={`Forecast confidence for dated bills · ${candidateMode}`} />
       <div className="readiness-grid">
         <Metric label="Starting cash" value={forecast?.starting_balance ? money(forecast.starting_balance) : "-"} />
         <Metric label="Ending cash" value={forecast?.projected_ending_balance ? money(forecast.projected_ending_balance) : "-"} />
@@ -3472,8 +3631,8 @@ function CashflowCard({
       </CollapsibleBlock>
       <p className="fine-print">
         {includeCandidates
-          ? "Confirmed commitments affect projected balances; candidates are shown separately until reviewed."
-          : "Only confirmed commitments are included; candidate bills are hidden from this planning view."}
+          ? "Confirmed bills affect projected balances. Candidate bills are visible risk items until reviewed."
+          : "Only confirmed bills affect projected balances. Turn on candidates to see unconfirmed risk."}
         {preview || transactions || transferResult || commitmentResult || commitments ? "" : " Import data to begin."}
       </p>
       <div className="card-actions">
@@ -3748,24 +3907,25 @@ function SpendingPlanCard({
   const hasPlanData = plan.income > 0 || allocated > 0;
   return (
     <article className="card spending-plan-card">
-      <CardHeader title="Left to Spend" subtitle="What remains after committed and tracked spend." />
+      <CardHeader
+        helpText="This is not account cash. It is a period plan: imported income less expected bills/subscriptions, goal set-asides, and flexible spending already seen."
+        title="Spending Plan"
+        subtitle="Selected-period income minus planned and tracked outflows."
+      />
       {hasPlanData ? (
         <>
           <div className="spending-plan-hero">
-            <span>{leftLabel}</span>
+            <span>
+              {leftLabel}
+              <HelpTip text="What remains after this period's income funds expected bills, goal set-asides, and flexible spending already tracked." />
+            </span>
             <strong className={plan.leftToSpend >= 0 ? "positive-text" : "negative-text"}>{money(String(plan.leftToSpend))}</strong>
-            {dashboard?.confidence === "ready" ? (
-              <small>Current period estimate from imported income, bills, goals, and flexible spend.</small>
-            ) : (
+            {dashboard?.confidence !== "ready" ? (
               <small>
-                Current period estimate. Add balances in <a href="#/accounts">Accounts</a> to improve confidence.
+                Add balances in <a href="#/accounts">Accounts</a> to improve confidence.
               </small>
-            )}
+            ) : null}
           </div>
-          <p className="spending-plan-formula">
-            Imported income funds the plan. The bar shows expected bills/subscriptions, monthly goal
-            set-asides, flexible spend already tracked, and the remaining amount.
-          </p>
           <div
             className="spending-plan-stack"
             aria-label={`Left to spend allocation. Income ${money(String(plan.income))}, bills and subscriptions ${money(String(plan.obligations))}, savings goals ${money(String(plan.goalContributions))}, flexible actual ${money(String(plan.flexibleActual))}, ${leftLabel.toLowerCase()} ${money(String(plan.leftToSpend))}.`}
@@ -3792,10 +3952,26 @@ function SpendingPlanCard({
             ))}
           </div>
           <div className="budget-summary-grid">
-            <Metric label="Bills/subscriptions" value={money(String(plan.obligations))} />
-            <Metric label="Savings goals" value={money(String(plan.goalContributions))} />
-            <Metric label="Flexible actual" value={money(String(plan.flexibleActual))} />
-            <Metric label="Allocated total" value={money(String(allocated))} />
+            <Metric
+              helpText="Expected bill and subscription amounts in the selected planning window."
+              label="Bills/subscriptions"
+              value={money(String(plan.obligations))}
+            />
+            <Metric
+              helpText="Monthly contributions for active savings goals."
+              label="Savings goals"
+              value={money(String(plan.goalContributions))}
+            />
+            <Metric
+              helpText="Flexible spending already found in the selected transaction period."
+              label="Flexible actual"
+              value={money(String(plan.flexibleActual))}
+            />
+            <Metric
+              helpText="Bills/subscriptions plus savings goals plus flexible spend already tracked."
+              label="Allocated total"
+              value={money(String(allocated))}
+            />
           </div>
         </>
       ) : (
@@ -3833,7 +4009,7 @@ function ReviewFocusCard({
   return (
     <article className="card review-focus-card">
       <CardHeader
-        title="Review Focus"
+        title="Review Actions"
         subtitle={urgency > 0 ? `${urgency} items can improve accuracy` : "Everything important looks tidy"}
       />
       <div className="review-focus-hero">
@@ -3848,11 +4024,11 @@ function ReviewFocusCard({
       </div>
       <div className="review-focus-grid">
         <a href="#/transactions?reviewed=unreviewed">
-          <span>Unreviewed</span>
+          <span>Unreviewed transactions</span>
           <strong>{unreviewed}</strong>
         </a>
         <a href="#/decision-queue">
-          <span>Decisions</span>
+          <span>Open decisions</span>
           <strong>{decisionCount}</strong>
         </a>
         <a href="#/recurring">
@@ -3860,7 +4036,7 @@ function ReviewFocusCard({
           <strong>{staleCount}</strong>
         </a>
         <a href="#/transactions">
-          <span>In view</span>
+          <span>Transactions in view</span>
           <strong>{transactionCount}</strong>
         </a>
       </div>
@@ -4093,11 +4269,111 @@ function ExportsCard({
   );
 }
 
-function CardHeader({ title, subtitle }: { title: string; subtitle: string }) {
+const CARD_HELP_TEXT: Record<string, string> = {
+  Accounts: "Detected accounts from your import. Add current balances and account types here so cash position and forecasts become trustworthy.",
+  "Bill Activity": "Bills and subscriptions found in the selected past date range, including paid, planned, and candidate items.",
+  "Bills in View": "Bills and subscriptions inside the selected date window.",
+  "Budget": "Compares your planned budget with actual spending from the selected date range.",
+  "Budget & Goals": "A compact dashboard view of budget usage and savings-goal progress.",
+  "Cash Flow": "Shows how income, savings, bills, and spending move through the selected period.",
+  "Cash Flow Plan": "Projects upcoming cash pressure and lets you test what-if changes before they happen.",
+  Categories: "Local category groups used by budget, review, reporting, and rules workflows.",
+  Data: "Local workspace controls, saved planning preferences, import entry points, and reset tools.",
+  "Decision Impact": "High-priority review items that can change report accuracy, recurring bills, or forecast confidence.",
+  "Decision Queue": "Review and confirm detected transfer matches, recurring candidates, and other decisions before trusting reports.",
+  Exports: "Downloads CSV files from the current local view, filters, and planning settings.",
+  Goals: "Savings targets and progress plans for future expenses or milestones.",
+  "Getting Started": "Import setup steps that turn a raw Snoop CSV into accounts, transactions, bills, and review decisions.",
+  "Import Freshness": "Shows how old the imported data is so you know when reports may need a fresh import.",
+  Income: "Income report for the selected date range, grouped by the selected report control.",
+  Insights: "Ranked category and merchant summaries from the current report period.",
+  Merchants: "Merchant display names and aliases used across transaction review and reports.",
+  "Monthly Review": "A month-end checklist for income, outflows, review coverage, decisions, and saved views.",
+  "Net Worth Performance": "A visual account-balance trend based on the balances currently entered for your accounts.",
+  "Period Activity": "These totals come from transactions in the selected date range. They are activity totals, not current account balances.",
+  "Personalize your workspace": "The saved name is used for greetings and workspace copy before and after import.",
+  "Planned Bills": "Bills and subscriptions planned for the selected future date range.",
+  "Planning Risk": "Forecast risk from dated bills, candidates, and open decisions.",
+  Recurring: "Detected repeating bills, subscriptions, and recurring income candidates.",
+  Reports: "Visual reports for income, spending, cash flow, and exportable insight views.",
+  "Review Actions": "Open review work that improves transaction quality, reports, and forecast confidence.",
+  Rules: "Preview-style local rules for renaming, tagging, and recategorising transactions.",
+  "Saved Filters": "Reusable report and transaction drilldowns saved for quick future access.",
+  "Service Status": "Checks whether the local backend API is online and reachable from the frontend.",
+  "Sinking Funds": "Named savings pots for irregular or future expenses.",
+  Spending: "Spending report for the selected date range, grouped by the selected report control.",
+  "Spending Plan": "This is not account cash. It is a period plan: imported income less expected bills/subscriptions, goal set-asides, and flexible spending already seen.",
+  "Stale Commitments": "Recurring items whose due date has passed and may need review, rescheduling, or confirmation.",
+  Subscriptions: "Recurring services and bills that may deserve cancellation, confirmation, or review.",
+  Summary: "Assets and liabilities grouped from the current account list.",
+  Tags: "Local labels for review, tax, reimbursement, subscription, business, or split notes.",
+  "This Month’s Bills": "Bills and subscriptions in the current month, including paid, planned, and candidate items depending on the candidate toggle.",
+  Transactions: "Imported transaction rows with filters, review status, categories, accounts, and editable transaction type.",
+};
+
+const METRIC_HELP_TEXT: Record<string, string> = {
+  "Actual outflow": "Spending already found in the selected date range.",
+  "After candidates": "Current included cash minus confirmed bills and candidate bills. Candidates only count after review.",
+  "After confirmed bills": "Current included cash minus confirmed bills in the 30-day planning queue.",
+  "Allocated total": "Bills/subscriptions plus savings goals plus flexible spend already tracked.",
+  "Bills in window": "Bills and subscriptions dated inside the current forecast window.",
+  "Bills/subscriptions": "Expected bill and subscription amounts in the selected planning window.",
+  "Budget rows": "Number of custom budget rows saved locally.",
+  "Busiest day": "The calendar day with the highest planned bill total in this view.",
+  "Candidate bills": "Detected bill candidates waiting for review. These show risk but do not become trusted bills until confirmed.",
+  "Candidate due": "Detected candidate bills in the forecast window that are not yet confirmed.",
+  "Cash pressure": "How much current cash is covered by near-term spending pressure.",
+  "Change": "Difference between the baseline and this scenario estimate.",
+  "Confirmed bills": "Bills already trusted enough to affect the 30-day cash-flow forecast.",
+  "Confirmed due": "Confirmed bills in the planning queue.",
+  "Current": "Amount currently saved or entered for this goal.",
+  "Custom goals": "Number of user-created goals saved locally.",
+  "Days old": "Days since the newest imported transaction.",
+  "Decisions open": "Open review decisions that can improve report or forecast accuracy.",
+  "Ending cash": "Projected cash after forecasted confirmed events.",
+  "Flexible actual": "Flexible spending already found in the selected transaction period.",
+  "Flexible left": "Default flexible guardrail minus flexible spending in this selected period.",
+  "Income": "Income transactions in the selected period.",
+  "Income actual": "Income already found in the selected date range.",
+  "Latest import": "Most recent import date recorded by the local API.",
+  "Latest transaction": "Newest transaction date currently loaded.",
+  "Left to spend": "What remains after this period's income funds expected bills, goal set-asides, and flexible spending already tracked.",
+  "Lowest point": "Lowest projected cash balance in the forecast timeline.",
+  "Monthly set aside": "Monthly contribution planned for this goal.",
+  "Open decisions": "Decision-queue items still waiting for confirmation or rejection.",
+  "Outflows": "Expense, bill, debt, and flexible spending out of the account set.",
+  "Planned days": "Number of days in this calendar view that contain planned bills.",
+  "Planned outflow": "Budgeted spending planned for the selected period.",
+  "Planned total": "Total expected bills and planned commitments in this calendar view.",
+  "Remaining": "Amount still needed, or budget left after actual outflow.",
+  "Reviewed": "Transactions already marked reviewed in the monthly review workflow.",
+  "Rules": "Number of local automation rules saved in Settings.",
+  "Saved filters": "Saved views available for reports and transaction review.",
+  "Savings goals": "Monthly contributions for active savings goals.",
+  "Scenario ending": "Projected ending cash after applying this what-if scenario.",
+  "Starting cash": "Cash balance used as the forecast starting point.",
+  "Tags": "Number of local transaction tags available in Settings.",
+  "Target": "Goal amount you are saving toward.",
+  "Top group": "Largest visible category group in the current report period.",
+  "Unreviewed": "Transactions still waiting for review.",
+};
+
+function CardHeader({
+  helpText,
+  title,
+  subtitle,
+}: {
+  helpText?: string;
+  title: string;
+  subtitle: string;
+}) {
   return (
     <div className="card-header">
       <div>
-        <h2>{title}</h2>
+        <h2 aria-label={title}>
+          {title}
+          {helpText ?? CARD_HELP_TEXT[title] ? <HelpTip text={helpText ?? CARD_HELP_TEXT[title]} /> : null}
+        </h2>
         <p>{subtitle}</p>
       </div>
     </div>
@@ -4162,10 +4438,30 @@ function CollapsibleBlock({
   );
 }
 
-function Metric({ label, value }: { label: string; value: string | number }) {
+function HelpTip({ text }: { text: string }) {
+  return (
+    <span className="help-tip">
+      <button aria-label="Show help" title={text} type="button">?</button>
+      <span className="help-tip-content" role="tooltip">{text}</span>
+    </span>
+  );
+}
+
+function Metric({
+  helpText,
+  label,
+  value,
+}: {
+  helpText?: string;
+  label: string;
+  value: string | number;
+}) {
   return (
     <div className="metric">
-      <span>{label}</span>
+      <span className="metric-label">
+        {label}
+        {helpText ?? METRIC_HELP_TEXT[label] ? <HelpTip text={helpText ?? METRIC_HELP_TEXT[label]} /> : null}
+      </span>
       <strong className="metric-value">{value}</strong>
     </div>
   );
@@ -4201,11 +4497,11 @@ function hasDecisionType(decisions: DecisionQueueResponse | null, decisionType: 
   return Boolean(decisions?.decisions.some((decision) => decision.decision_type === decisionType));
 }
 
-function getPageTitle(route: RouteId) {
+function getPageTitle(route: RouteId, userName: string) {
   if (route !== "dashboard") return pageTitles[route];
   return {
     ...pageTitles.dashboard,
-    title: `${timeOfDayGreeting()}.`,
+    title: userName ? `${timeOfDayGreeting()}, ${userName}.` : `${timeOfDayGreeting()}.`,
   };
 }
 
@@ -4236,16 +4532,10 @@ function periodKindForPreset(preset: PeriodPreset, startDate: string, endDate: s
 }
 
 function billCardTitle(periodKind: DateWindowKind, periodLabel?: string) {
-  if (periodKind === "past") return "Recent Bills";
-  if (periodKind === "future") return "Upcoming Bills";
-  if (periodLabel === "This month") return "Bills This Month";
-  return "Bills";
-}
-
-function billMetricLabel(periodKind: DateWindowKind) {
-  if (periodKind === "past") return "Recent bills";
-  if (periodKind === "future") return "Upcoming";
-  return "Bills";
+  if (periodKind === "past") return "Bill Activity";
+  if (periodKind === "future") return "Planned Bills";
+  if (periodLabel === "This month") return "This Month’s Bills";
+  return "Bills in View";
 }
 
 function billListTitle(periodKind: DateWindowKind) {
@@ -4296,6 +4586,8 @@ function dayNumber(isoDate: string) {
 }
 
 const planningControlStorageKey = "personal-finance-studio.phase-2-controls";
+const oldPlanningControlStorageKey = "personal-finance-studio.phase-1-75-controls";
+const userNameStorageKey = "personal-finance-studio.user-name";
 
 const defaultPlanningControlState: PlanningControlState = {
   budgetMode: "category",
@@ -4347,6 +4639,41 @@ function writePlanningControlState(state: PlanningControlState) {
     window.localStorage.setItem(planningControlStorageKey, JSON.stringify(state));
   } catch {
     // Local preferences are helpful but should not block the finance UI.
+  }
+}
+
+function readUserName(): string {
+  try {
+    return cleanUserName(window.localStorage.getItem(userNameStorageKey) ?? "");
+  } catch {
+    return "";
+  }
+}
+
+function writeUserName(name: string) {
+  try {
+    const cleanName = cleanUserName(name);
+    if (cleanName) {
+      window.localStorage.setItem(userNameStorageKey, cleanName);
+    } else {
+      window.localStorage.removeItem(userNameStorageKey);
+    }
+  } catch {
+    // Local personalization should not block the finance UI.
+  }
+}
+
+function cleanUserName(name: string) {
+  return name.trim().replace(/\s+/g, " ").slice(0, 40);
+}
+
+function clearLocalWorkspacePreferences() {
+  try {
+    window.localStorage.removeItem(planningControlStorageKey);
+    window.localStorage.removeItem(oldPlanningControlStorageKey);
+    window.localStorage.removeItem(userNameStorageKey);
+  } catch {
+    // Reset still succeeds server-side if localStorage is unavailable.
   }
 }
 

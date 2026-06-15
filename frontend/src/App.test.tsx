@@ -88,6 +88,11 @@ describe("App", () => {
 
     render(<App />);
 
+    fireEvent.change(screen.getByLabelText("Your name"), {
+      target: { value: "Alex" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save and continue" }));
+
     const file = new File(["date,amount"], "snoop.csv", { type: "text/csv" });
     fireEvent.change(screen.getByLabelText("Choose Snoop CSV"), {
       target: { files: [file] },

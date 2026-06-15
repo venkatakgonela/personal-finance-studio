@@ -4,7 +4,9 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
 from app.db import get_session
+from app.schemas.data import ResetDataResult
 from app.schemas.imports import SnoopImportCommitResult, SnoopImportPreview
+from app.services.data_reset import reset_household_data
 from app.services.import_commit import commit_snoop_csv
 from app.services.snoop_import import SnoopImportError, preview_snoop_csv
 
@@ -36,3 +38,10 @@ async def commit_snoop_import(
         return commit_snoop_csv(contents, source_filename=file.filename, session=session)
     except SnoopImportError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/reset", response_model=ResetDataResult)
+def reset_imported_data(
+    session: Annotated[Session, Depends(get_session)],
+) -> ResetDataResult:
+    return reset_household_data(session)

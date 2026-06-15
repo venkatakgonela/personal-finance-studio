@@ -26,17 +26,20 @@ ai-eos-metadata:
 - `app/config.py`: environment-driven settings.
 - `app/db.py`: SQLAlchemy engine/session setup.
 - `app/models/`: SQLAlchemy entities for Household/Profile, accounts, transactions, import logs, internal transfer matches, commitments, and bill instances.
-- `app/schemas/`: Pydantic response/request schemas for all API surfaces.
+- `app/schemas/`: Pydantic response/request schemas for all API surfaces, including reset/data
+  management responses.
 - `app/routes/`: FastAPI routers for imports, accounts, transactions, transfers, commitments, calendar, forecast, dashboard, insights, planning, and decisions.
-- `app/services/`: deterministic finance logic for parsing/imports, category normalization, transfer detection, commitment detection, dashboard math, calendar/upcoming, forecast, insights, Phase 1.5 planning overview, transaction review, and Decision Queue actions.
+- `app/services/`: deterministic finance logic for parsing/imports, category normalization, transfer detection, commitment detection, dashboard math, calendar/upcoming, forecast, insights, Phase 1.5 planning overview, transaction review, Decision Queue actions, and imported-data reset.
 
 ## Frontend
 
 - `frontend/src/App.tsx`: current route shell, Phase 1/1.5 UI components, Phase 1.75 editable
   planning controls, Phase 2 rule/merchant/scenario/budget/export workflows, URL-hash state
-  persistence, calendar planner, and D3 Sankey report model/rendering.
+  persistence, shared contextual help tooltips, first-run import personalization, calendar planner,
+  and D3 Sankey report model/rendering.
 - `frontend/src/api.ts`: typed API client for backend routes, query params, and in-flight GET request de-duplication.
-- `frontend/src/styles.css`: design tokens, layout, tables, filters, and responsive styles.
+- `frontend/src/styles.css`: design tokens, layout, tables, filters, contextual help tooltip
+  placement/stacking, and responsive styles.
 - `frontend/src/App.test.tsx`: Vitest/React Testing Library component coverage.
 - `frontend/e2e/app.spec.ts`: Playwright browser coverage for real-stack dashboard smoke, transaction filters, refresh-persisted URL state, Phase 1.5/1.75 planning routes, profile-menu navigation, calendar planner behavior, report/account graphics, route-health/overflow checks, and Decision Queue layout.
 - `frontend/playwright.config.ts`: starts/checks both FastAPI (`8025`) and Vite (`5175`) for E2E.
@@ -51,7 +54,7 @@ ai-eos-metadata:
 - `tests/test_commitments.py`: recurring commitment and bill instance coverage.
 - `tests/test_dashboard_calendar.py`: dashboard and upcoming/calendar coverage.
 - `tests/test_decisions.py`: Decision Queue service/action coverage.
-- `tests/test_api.py`: FastAPI endpoint smoke and filter coverage.
+- `tests/test_api.py`: FastAPI endpoint smoke, filter coverage, and imported-data reset coverage.
 - `tests/test_phase1_completion.py`: completion-slice regression coverage for transaction review, forecast, bill payment, insights, and Phase 1.5 planning overview.
 - `tests/test_phase2_household_expansion.py`: Phase 2 category normalization guard for rule-applied group labels.
 

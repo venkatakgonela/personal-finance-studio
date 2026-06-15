@@ -48,6 +48,9 @@ yet an Open Banking app, tax product, investment platform, or cloud collaboratio
 | Settings Workbench | Local categories, tags, rules, merchants, data, and system controls. | Gives users control over classification and reporting quality. |
 | Rules | Preview/apply/undo transaction rule changes. | Speeds up cleanup without silently rewriting data. |
 | Merchant Cleanup | Rename, merge, ignore, restore, or split merchant display labels. | Reports become readable while preserving raw imported merchant text. |
+| First-run Personalization | Captures a preferred display name before first import. | Keeps the workspace generic until the user opts into personalization. |
+| Reset Imported Data | Flushes local imported finance data from Settings > Data. | Lets users clear demos/bad imports and restart cleanly without hand-editing the database. |
+| Contextual Help | Adds `?` help icons to card headers and key metrics. | Keeps pages uncluttered while still explaining balances, forecasts, candidates, and period activity. |
 | URL Persistence | Keeps date range, filters, search, report tab/grouping, and include-candidate state in the URL hash. | Refreshes and shared local links preserve context. |
 
 ## Why These Features Matter Together
@@ -81,11 +84,12 @@ Open `Workspace / Household > Import data`.
 
 Use this order:
 
-1. Choose a Snoop CSV.
-2. Preview row count, date range, detected accounts, categories, duplicates, and warnings.
-3. Commit the import.
-4. Run transfer detection.
-5. Run recurring bill detection.
+1. Enter a preferred display name if this is the first time using the app.
+2. Choose a Snoop CSV.
+3. Preview row count, date range, detected accounts, categories, duplicates, and warnings.
+4. Commit the import.
+5. Run transfer detection.
+6. Run recurring bill detection.
 
 Expected result: accounts, transactions, candidate transfers, candidate bills, and freshness status
 become available across the app.
@@ -134,16 +138,17 @@ Use:
 
 ### Workflow A: First Import To Trusted Dashboard
 
-1. Import CSV.
-2. Commit import.
-3. Detect transfers.
-4. Detect bills.
-5. Enter account balances.
-6. Resolve Decision Queue.
-7. Open Dashboard.
+1. Save the user's preferred display name.
+2. Import CSV.
+3. Commit import.
+4. Detect transfers.
+5. Detect bills.
+6. Enter account balances.
+7. Resolve Decision Queue.
+8. Open Dashboard.
 
-Success condition: no `Failed to fetch`, dashboard shows household position, bill totals, spending
-pulse, and review focus.
+Success condition: no `Failed to fetch`, dashboard separates Cash Position, Spending Plan, Period
+Activity, Planning Risk, and Review Actions, with help icons available for metric definitions.
 
 ### Workflow B: Weekly Money Review
 
@@ -206,6 +211,17 @@ Success condition: user can explain where money came from, where it went, and wh
 
 Success condition: reports become readable without corrupting raw imported transaction text.
 
+### Workflow H: Reset And Start Fresh
+
+1. Open `Workspace / Household > Settings`.
+2. Open the `Data` section.
+3. Use `Reset imported data`.
+4. Return to `Import data`.
+5. Import a fresh Snoop CSV and rerun transfer/bill detection.
+
+Success condition: previous demo/imported rows are gone, defaults remain available, and the user can
+start a clean finance setup.
+
 ## What End Users Should Expect
 
 Users should expect:
@@ -215,6 +231,7 @@ Users should expect:
 - CSV import rather than live bank sync.
 - Human review before important inferred changes.
 - Better answers after balances, decisions, and transaction review are completed.
+- Less on-card explanatory clutter; most definitions are available through consistent help icons.
 - Forecasts and budgets that are useful planning tools, not financial advice.
 - Some settings stored locally in the browser until server-backed preference persistence is built.
 

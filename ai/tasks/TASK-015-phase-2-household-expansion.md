@@ -80,8 +80,14 @@ Business entity imports and the local assistant are intentionally Phase 2.1, not
   transaction text.
 - Added flexible and rollover budget modes with rollover amount inputs and visible formulas.
 - Added Dashboard Spending Plan: income minus bills/subscriptions, savings goals, and flexible spend.
+- Refined Dashboard semantics into Cash Position, Spending Plan, Period Activity, Planning Risk, and
+  Review Actions so balances, selected-period activity, and forecast/review work are not conflated.
 - Added Cash Flow what-if scenarios with income/outflow adjustments and baseline comparison.
 - Added Reports export controls for transactions, budget, monthly review, and category reports.
+- Added shared contextual help tooltips for card headers and key metrics across primary routes,
+  with hover/focus support, viewport-safe placement, and neutral accessible labels.
+- Added first-run import personalization and a Settings > Data reset workflow for clearing imported
+  finance data before a fresh import.
 - Added backend normalization coverage so rule-applied group labels map to expected finance groups.
 - Applied QA hardening after the route audit:
   - Import Center actions now show visible busy labels and the file picker matches button spacing.
@@ -89,6 +95,10 @@ Business entity imports and the local assistant are intentionally Phase 2.1, not
   - Dashboard hero labels distinguish the 30-day after-bills backend summary from selected-window bills.
   - Budget table columns preserve planned/actual/rollover/remaining/status values with safe
     horizontal overflow instead of clipping.
+  - Dashboard explanatory copy moved into help tooltips to reduce visible clutter while preserving
+    definitions.
+  - Tooltip stacking and placement were hardened so help text renders above neighboring cards and
+    stays inside the viewport.
   - Decision Queue has a structured empty state and client-side "show more" paging.
   - Calendar chips, transaction rows, recurring candidate buttons, and report legends have overflow/spacing safeguards.
   - Sidebar profile menu now includes a Household/Business context switcher shell ahead of Phase 2.1 backend scoping.
@@ -112,6 +122,16 @@ cd frontend && npm run lint
 cd frontend && npm run build
 cd frontend && npm run test -- --run
 cd frontend && npm run test:e2e -- --grep "dashboard|all primary routes"
+```
+
+Latest tooltip/import reset validation:
+
+```bash
+uv run pytest
+cd frontend && npm run lint
+cd frontend && npm run build
+cd frontend && npm run test -- --run
+cd frontend && npm run test:e2e
 ```
 
 ## Phase 2.1 Boundary

@@ -56,6 +56,13 @@ export type ImportCommitResult = {
   warnings: string[];
 };
 
+export type ResetDataResult = {
+  deleted: Record<string, number>;
+  entity_name: string;
+  profile_name: string;
+  status: string;
+};
+
 export type AccountSummary = {
   id: string;
   provider: string;
@@ -411,6 +418,10 @@ export async function previewSnoopImport(file: File): Promise<ImportPreview> {
 
 export async function commitSnoopImport(file: File): Promise<ImportCommitResult> {
   return uploadCsv<ImportCommitResult>("/api/imports/snoop/commit", file);
+}
+
+export async function resetImportedData(): Promise<ResetDataResult> {
+  return fetchJson<ResetDataResult>("/api/imports/reset", { method: "POST" });
 }
 
 export async function detectTransfers(): Promise<TransferDetectionResult> {

@@ -150,7 +150,7 @@ test("real local stack loads dashboard data without fetch errors", async ({ page
 
   await expect(page.getByRole("heading", { name: /Good (morning|afternoon|evening)\./ })).toBeVisible();
   await expect(page.getByText("Failed to fetch")).toHaveCount(0);
-  await expect(page.getByRole("heading", { name: "Spending Pulse" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Period Activity" })).toBeVisible();
 });
 
 test("renders the dashboard with the polished visual system", async ({ page }) => {
@@ -162,9 +162,9 @@ test("renders the dashboard with the polished visual system", async ({ page }) =
   await expect(page.getByLabel("Date range", { exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: /API online|API checking/ })).toBeVisible();
   await expect(page.getByRole("button", { name: /Workspace Household/ })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Spending Pulse" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Decision Queue" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Bills This Month" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Period Activity" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Decision Impact" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "This Month’s Bills" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Balance Readiness" })).toHaveCount(0);
   await expect(page.getByText("Failed to fetch")).toHaveCount(0);
   const dashboard = page.getByLabel("Personal Finance Studio dashboard");
@@ -193,7 +193,7 @@ test("renders the dashboard with the polished visual system", async ({ page }) =
   expect(visualSystem.buttonRadius).toBe("8px");
 
   await page.getByLabel("Date range", { exact: true }).selectOption("last-30");
-  await expect(page.getByRole("heading", { name: "Recent Bills" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Bill Activity" })).toBeVisible();
 });
 
 test("renders phase 1.5 planning routes and saved filter URLs", async ({ page }) => {
@@ -281,6 +281,41 @@ test("supports phase 1.75 editable planning controls", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Getting Started" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Import Freshness" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "System Status" })).toHaveCount(0);
+});
+
+test("captures a first-run name before import and can reset app data", async ({ page }) => {
+  let resetCalls = 0;
+  await mockAppApis(page, {
+    onReset() {
+      resetCalls += 1;
+    },
+  });
+
+  await page.goto("/#/import");
+  await expect(page.getByRole("heading", { name: "Personalize your workspace" })).toBeVisible();
+  await expect(page.getByLabel("Choose Snoop CSV")).toBeDisabled();
+
+  await page.getByLabel("Your name").fill("Alex");
+  await page.getByRole("button", { name: "Save and continue" }).click();
+  await expect(page.getByRole("heading", { name: "Welcome, Alex" })).toBeVisible();
+  await expect(page.getByLabel("Choose Snoop CSV")).toBeEnabled();
+
+  await page.goto("/#/dashboard");
+  await expect(page.getByRole("heading", { name: /Good (morning|afternoon|evening), Alex\./ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Alex Household/ })).toBeVisible();
+
+  page.once("dialog", async (dialog) => {
+    expect(dialog.message()).toContain("Reset imported data");
+    await dialog.accept();
+  });
+  await page.goto("/#/settings");
+  await page.getByRole("button", { name: "Data" }).click();
+  await page.getByRole("button", { name: "Reset app data" }).click();
+
+  expect(resetCalls).toBe(1);
+  await expect(page.getByRole("button", { name: /Workspace Household/ })).toBeVisible();
+  await page.goto("/#/import");
+  await expect(page.getByRole("heading", { name: "Personalize your workspace" })).toBeVisible();
 });
 
 test("supports phase 2 household expansion workflows", async ({ page }) => {
@@ -551,7 +586,7 @@ test("scopes candidate toggle to planning views and updates upcoming bills", asy
 
   await expect(page.getByLabel("Include bill candidates")).toBeVisible();
   await expect(page.getByText(/Candidate bills included/)).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Bills This Month" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "This Month’s Bills" })).toBeVisible();
   await expect(page.locator(".calendar-grid")).toBeVisible();
   await expect(page.locator(".calendar-day.has-plans")).toContainText("Klarna");
   await expect(page.locator(".calendar-day.has-plans")).toContainText("£98.31");
@@ -630,8 +665,31 @@ test("keeps decision queue actions usable on mobile", async ({ page }) => {
 
 async function mockAppApis(
   page: Page,
-  options: { onTransactionPatch?: () => void; onTransactionsRequest?: (url: URL) => void } = {},
+  options: {
+    onReset?: () => void;
+    onTransactionPatch?: () => void;
+    onTransactionsRequest?: (url: URL) => void;
+  } = {},
 ) {
+  await page.route("**/api/imports/reset", async (route) => {
+    options.onReset?.();
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        deleted: {
+          accounts: 1,
+          bill_instances: 1,
+          commitments: 1,
+          import_logs: 1,
+          internal_transfer_matches: 1,
+          transactions: 2,
+        },
+        entity_name: "Household",
+        profile_name: "Primary user",
+        status: "reset",
+      },
+    });
+  });
   await page.route("**/api/accounts", async (route) => {
     await route.fulfill({
       contentType: "application/json",

@@ -26,6 +26,7 @@ ai-eos-metadata:
 | ADR-013 | De-duplicate in-flight frontend GET requests | Accepted | 2026-06-14 |
 | ADR-014 | Use local-first editable planning preferences for Phase 1.75 | Accepted | 2026-06-15 |
 | ADR-015 | Split Phase 2 household expansion from Phase 2.1 business and assistant work | Accepted | 2026-06-15 |
+| ADR-016 | Move dense finance explanations into contextual help tooltips | Accepted | 2026-06-15 |
 
 ## ADR-001 - Use Entity-Scoped Household and Business Model
 
@@ -144,3 +145,16 @@ ai-eos-metadata:
   Business entity UI/import lanes and the read-only local assistant.
 - **Consequences**: Household controls can mature first while Business and LLM work remain cleanly
   isolated. Phase 2 implementation must keep current UI rhythm and avoid cross-entity data mixing.
+
+## ADR-016 - Move Dense Finance Explanations Into Contextual Help Tooltips
+
+- **Status**: Accepted
+- **Context**: Dashboard and planning cards became more accurate but also more verbose as labels
+  explained whether values were balances, selected-period activity, candidates, forecasts, or review
+  quality signals.
+- **Decision**: Use a shared contextual help tooltip pattern for card headers and key metric labels.
+  Keep visible card copy concise, and move definitions/assumptions into `?` help controls that work
+  on hover and keyboard focus.
+- **Consequences**: Screens stay calmer and less crowded while still explaining finance semantics.
+  Tooltip buttons must use neutral accessible names so they do not interfere with form labels or
+  action buttons, and tooltip stacking/placement becomes part of the design-system regression scope.

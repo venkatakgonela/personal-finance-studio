@@ -86,6 +86,9 @@ affordance; Phase 2.1 owns backend entity scoping, separate ledgers, and busines
 
 ### Setup / Import
 
+- First-time import asks for the user's preferred display name before allowing CSV import, so the
+  workspace can greet and label the experience generically rather than being hard-coded to one
+  person.
 - Import Snoop CSV.
 - Preview detected date range, columns, row counts.
 - Show accounts discovered.
@@ -100,12 +103,17 @@ affordance; Phase 2.1 owns backend entity scoping, separate ledgers, and busines
 ### Household Dashboard
 
 - Time-aware UK greeting in the page title.
-- Today's household position hero with cash readiness, available after commitments, flexible spend remaining, selected-window bills, Decision Queue count, and data freshness.
-- Backend `available_after_commitments` currently represents the 30-day after-bills summary; labels
-  must not imply it changes with the selected date window until backend range-aware dashboard
-  summaries are implemented.
-- Spending Pulse card with categorized outflow bars and flexible allowance context.
-- Bills card with date-aware naming: `Recent Bills` for historical ranges, `Bills This Month` for current month, and `Upcoming Bills` for future windows.
+- Cash Position hero with current included cash balances, after-confirmed-bills, after-candidates,
+  confirmed-bills, candidate-bills, and data freshness. The hero must be explicit that cash position
+  is a balance view, not selected-period income or spending.
+- Backend after-bills values are still 30-day planning summaries; labels must not imply they change
+  with the selected date window until backend range-aware dashboard summaries are implemented.
+- Spending Plan card explains left-to-spend as selected-period income minus expected
+  bills/subscriptions, savings goals, and flexible actuals.
+- Period Activity card shows selected-period transaction activity and categorized outflow bars. It
+  must not imply the numbers are current balances.
+- Bills card with date-aware naming: `Bill Activity` for historical ranges, `This Month's Bills` for
+  current month, and `Planned Bills` for future windows.
 - Compact Decision Queue preview; full review table belongs on the Decision Queue page.
 - Cash Flow readiness/forecast card.
 - Keep the dashboard focused on household decisions. Avoid duplicating the hero's balance-readiness
@@ -209,6 +217,8 @@ affordance; Phase 2.1 owns backend entity scoping, separate ledgers, and busines
 - Show backend API health clearly.
 - Explain how to start the local stack when the API is offline.
 - Keep this operational status separate from finance data so users understand service problems quickly.
+- Data reset belongs in Settings > Data and should clearly warn that imported accounts,
+  transactions, commitments, decisions, and import logs will be flushed so the user can start fresh.
 - Phase 1.75 adds a Settings workbench:
   categories, merchants, rules, tags, data/import status, and system status.
 - Category, tag, rule, and merchant preference edits can be local-first in Phase 1.75, but should be
@@ -254,6 +264,12 @@ affordance; Phase 2.1 owns backend entity scoping, separate ledgers, and busines
 - Do not over-chart.
 - Make every dashboard card answer a real household decision.
 - Keep finance labels plain English.
+- Use the shared help tooltip pattern for card headers and important metric labels instead of
+  placing long explanatory sentences inside cards. Tooltips must support hover and keyboard focus,
+  stay inside the viewport, render above neighboring cards, and use neutral accessible names so they
+  do not pollute form/control labels.
+- When a tooltip carries the explanation, remove duplicated visible copy unless it is needed as a
+  primary empty-state or action prompt.
 - Keep primary nav for daily work only. Put lower-frequency operational actions such as Import and
   Settings in the household/profile menu to reduce sidebar noise.
 - Keep page content on a centered, bounded canvas rather than stretching indefinitely on wide

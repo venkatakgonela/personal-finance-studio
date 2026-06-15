@@ -24,7 +24,7 @@ Phase 1/2 currently has one active entity, Household, populated by Snoop CSV imp
 ## 2. Key Components
 
 - **Frontend App**: React, TypeScript, route-based screens, design system, charts, tables, calendar/timeline views.
-- **Frontend App Status**: `frontend/src/App.tsx` currently owns the hash-route shell, topbar date controls, dashboard cards, account review, transaction filters/table, cashflow, calendar/upcoming, recurring, goals, budget modes/rollovers, sinking funds, monthly review, subscriptions, reports/exports, import center, Decision Queue, and Settings UI.
+- **Frontend App Status**: `frontend/src/App.tsx` currently owns the hash-route shell, topbar date controls, dashboard cards, shared contextual help tooltips, account review, transaction filters/table, cashflow, calendar/upcoming, recurring, goals, budget modes/rollovers, sinking funds, monthly review, subscriptions, reports/exports, first-run import personalization, import center, Decision Queue, and Settings UI.
 - **Backend API**: FastAPI endpoints for imports, accounts, transactions, transfers, commitments, calendar, forecasts, dashboards, insights, planning, and decisions.
 - **Import Service**: Snoop CSV parser, validator, previewer, fingerprinting/upsert engine, import logs.
 - **Classification Service**: account type mapping, category normalization, merchant rules, reviewed/unreviewed state.
@@ -94,6 +94,7 @@ Backend APIs:
 - `GET /health`
 - `POST /api/imports/snoop/preview`
 - `POST /api/imports/snoop/commit`
+- `POST /api/imports/reset`
 - `GET/PATCH /api/accounts`
 - `GET/PATCH /api/transactions`
 - `POST/GET /api/transfers`
@@ -108,6 +109,8 @@ Backend APIs:
 
 Phase 2 additions should preserve this simple API style. Mutating workflows such as rule application
 must expose preview, commit, and undo/reversal concepts rather than silently rewriting imported data.
+Reset workflows must be explicit, destructive, and limited to imported/local finance data so defaults
+and app code remain intact while demos or bad imports can be cleared.
 
 ## 6. Architecture Principles
 

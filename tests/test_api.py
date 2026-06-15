@@ -1,9 +1,11 @@
 from pathlib import Path
 
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.main import create_app
+from app.models import Account, ImportLog, Transaction
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -48,6 +50,27 @@ def test_snoop_commit_endpoint(api_client, db_session: Session) -> None:
     assert payload["profile_name"] == "Primary user"
     assert payload["imported_transaction_count"] == 5
     assert payload["created_account_count"] == 2
+
+
+def test_reset_imported_data_endpoint_clears_finance_records(api_client, db_session: Session) -> None:
+    client = TestClient(api_client)
+
+    with (FIXTURES / "snoop_minimal.csv").open("rb") as csv_file:
+        client.post(
+            "/api/imports/snoop/commit",
+            files={"file": ("snoop_minimal.csv", csv_file, "text/csv")},
+        )
+
+    response = client.post("/api/imports/reset")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "reset"
+    assert payload["profile_name"] == "Primary user"
+    assert payload["deleted"]["transactions"] == 5
+    assert db_session.scalars(select(Transaction)).all() == []
+    assert db_session.scalars(select(Account)).all() == []
+    assert db_session.scalars(select(ImportLog)).all() == []
 
 
 def test_transfer_detect_endpoint(api_client, db_session: Session) -> None:

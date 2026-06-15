@@ -20,20 +20,24 @@ and good-to-have ideas, see `ai/new-enhancements.md`. For demo/video scripts, se
 
 2. Open `Workspace / Household` in the bottom-left menu, then choose `Import data`.
 
-3. Import a Snoop CSV.
+3. Enter your preferred display name if this is the first import.
+   - The app uses this name for greetings and workspace copy.
+   - The workspace remains generic until a name is saved.
+
+4. Import a Snoop CSV.
    - Choose the CSV.
    - Preview row counts, detected accounts, date range, categories, and warnings.
    - Commit the import.
    - Run transfer detection.
    - Run recurring bill detection.
 
-4. Review accounts.
+5. Review accounts.
    - Open `Accounts`.
    - Set account types such as current, savings, credit card, loan, BNPL, or unknown.
    - Enter current balances where missing.
    - Cash-on-hand and forecast confidence improve once balances are known.
 
-5. Resolve high-impact decisions.
+6. Resolve high-impact decisions.
    - Open `Decision Queue`.
    - Confirm or reject transfer matches and recurring candidates.
    - This keeps income, spending, and cashflow reports from being inflated.
@@ -44,6 +48,9 @@ and good-to-have ideas, see `ai/new-enhancements.md`. For demo/video scripts, se
 2. Use global search for merchants, accounts, bills, or transactions.
 3. Open `Transactions` to filter by account, category group, transaction type, review state, and posted/pending status.
 4. Save transaction review changes when a transaction should become spending, income, debt payment, transfer, refund, ignored, or reviewed.
+5. Use the small `?` help icons on card headings and metrics when a number needs context. These
+   tooltips explain whether a value is a balance, selected-period activity, forecast, candidate, or
+   review-quality signal.
 
 ## Bills, Calendar, And Subscriptions
 
@@ -93,7 +100,9 @@ and good-to-have ideas, see `ai/new-enhancements.md`. For demo/video scripts, se
 3. Use `Rules` to preview matching transactions, apply to selected rows, and undo the latest rule application.
 4. Use `Merchants` to rename, merge, ignore, restore, or split merchant labels for reports.
 5. Use `Data` for local planning preference counts and quick links.
-6. Use `System` to check API/frontend health.
+6. Use `Reset imported data` only when you intentionally want to flush imported accounts,
+   transactions, commitments, decisions, and import logs so the workspace can start fresh.
+7. Use `System` to check API/frontend health.
 
 ## Good Operating Rhythm
 
@@ -104,3 +113,4 @@ and good-to-have ideas, see `ai/new-enhancements.md`. For demo/video scripts, se
 5. Check Dashboard left-to-spend and Cash Flow pressure.
 6. Adjust Budget and Goals.
 7. Use Reports/Exports for deeper review.
+8. If the data is a demo or stale import, reset in Settings > Data and import fresh data.

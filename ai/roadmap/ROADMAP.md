@@ -145,10 +145,18 @@ imported transactions, commitments, accounts, or explicit user-entered plan valu
   formulas, responsive row spacing, and no hidden/clipped values on narrower dashboard widths.
 - Dashboard includes a Spending Plan card that explains left-to-spend as income minus obligations,
   savings goals, and flexible actuals.
+- Dashboard semantics now separate Cash Position, Spending Plan, Period Activity, Planning Risk, and
+  Review Actions so balances, selected-period activity, and forecast/review work are not mixed.
+- Shared help tooltips now explain card headers and important metrics across primary routes, with
+  long dashboard explanation copy moved out of card bodies to reduce clutter.
 - Reports include CSV export controls for transactions, budget, monthly review, and category reports.
 - Phase 2 QA hardening added dashboard/import spacing fixes, visible import busy states, strict
   numeric validation for cashflow scenarios and account balances, compact decision-queue paging,
-  calendar/report overflow protections, and restored heading/number typography tokens.
+  calendar/report overflow protections, tooltip placement/viewport checks, and restored
+  heading/number typography tokens.
+- First-run import now asks for a user display name before CSV import, and Settings > Data includes a
+  reset control backed by a local API endpoint so demo/imported data can be flushed before starting
+  fresh.
 - The profile menu now exposes a Household/Business context switcher shell. Full Business entity
   backend scoping/import lanes remain Phase 2.1.
 - Phase 2.1 remains the boundary for Business entity data isolation/imports and read-only local assistant work.
