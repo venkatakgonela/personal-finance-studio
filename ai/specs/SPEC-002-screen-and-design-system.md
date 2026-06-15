@@ -1,7 +1,7 @@
 # SPEC-002: Screen Plan & Design System
 
 **Author:** Kiran Gonela / Codex  
-**Status:** Phase 1.75 implemented locally
+**Status:** Phase 2 implemented locally
 **Date:** 2026-06-15
 
 ## 1. Design Direction
@@ -159,6 +159,8 @@ bottom-left household/profile menu. The profile chevron must visibly rotate when
 - Clear formula copy so users can trust the tally.
 - Budget data may start as local-first preferences, but actuals must come from imported
   transaction/insight data.
+- Phase 2 adds category, flexible, and rollover budget modes. Rollover rows must show the rollover
+  input directly beside planned/actual/remaining so the formula remains auditable.
 
 ### Sinking Funds
 
@@ -198,6 +200,10 @@ bottom-left household/profile menu. The profile chevron must visibly rotate when
   labelled as local planning settings until server persistence exists.
 - Create actions in Settings should use the compact primary-action style so `Create category`,
   `Create rule`, and `New tag` feel related to the same design system.
+- Phase 2 Rules must preview transaction impact before apply and provide an undo for the latest
+  local rule application.
+- Phase 2 Merchants can merge via shared display names, split back to raw source labels, and tune
+  report grouping without deleting raw imported names.
 - System status belongs in Settings and should not be repeated in the Import Center.
 
 ### Insights
@@ -222,6 +228,7 @@ bottom-left household/profile menu. The profile chevron must visibly rotate when
 - Category/merchant grouping controls should change the rendered destinations without requiring a
   page reload.
 - Report summary strip should show income, expenses, and net in GBP for the selected date window.
+- Phase 2 adds CSV export actions for transactions, budget, monthly review, and category reports.
 
 ## 7. UI Principles
 
@@ -272,3 +279,6 @@ bottom-left household/profile menu. The profile chevron must visibly rotate when
   rhythm.
 - Implemented profile-menu cleanup: Kiran/Household now sits at the bottom-left, opens Import and
   Settings actions, and uses a rotating chevron for clear expanded/collapsed state.
+- Implemented Phase 2 household expansion: rule preview/apply/undo, merchant alias/merge/split,
+  cashflow scenarios, category/flexible/rollover budget modes, dashboard Spending Plan, and report
+  CSV exports.

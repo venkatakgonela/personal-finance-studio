@@ -6,10 +6,11 @@ from app.models import Transaction
 
 INCOME_TOKENS = {"salary", "income", "pay", "wages", "interest"}
 TRANSFER_TOKENS = {"internal transfer", "transfer", "self-bills", "savings"}
-DEBT_TOKENS = {"credit", "loan", "finance", "bnpl", "klarna", "card", "mortgage"}
+DEBT_TOKENS = {"credit", "loan", "finance", "bnpl", "klarna", "card", "mortgage", "debt"}
 FIXED_TOKENS = {
     "bill",
     "bills",
+    "fixed",
     "utilities",
     "subscription",
     "subscriptions",
@@ -20,8 +21,18 @@ FIXED_TOKENS = {
     "mobile",
     "broadband",
 }
-NON_MONTHLY_TOKENS = {"annual", "yearly", "dvla", "mot", "car tax", "insurance"}
+NON_MONTHLY_TOKENS = {
+    "annual",
+    "yearly",
+    "non monthly",
+    "non_monthly",
+    "dvla",
+    "mot",
+    "car tax",
+    "insurance",
+}
 FLEXIBLE_TOKENS = {
+    "flexible",
     "groceries",
     "shopping",
     "eating",

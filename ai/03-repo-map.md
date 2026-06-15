@@ -8,7 +8,7 @@ ai-eos-metadata:
 # Repo Map - Personal Finance Studio
 
 **Last reviewed:** 2026-06-15
-**Current repository status:** Phase 1.75 editable planning control plane complete locally; Phase 2 household expansion planned.
+**Current repository status:** Phase 2 household expansion complete locally.
 
 ## Root
 
@@ -33,8 +33,8 @@ ai-eos-metadata:
 ## Frontend
 
 - `frontend/src/App.tsx`: current route shell, Phase 1/1.5 UI components, Phase 1.75 editable
-  planning controls, URL-hash state persistence, calendar planner, and D3 Sankey report
-  model/rendering.
+  planning controls, Phase 2 rule/merchant/scenario/budget/export workflows, URL-hash state
+  persistence, calendar planner, and D3 Sankey report model/rendering.
 - `frontend/src/api.ts`: typed API client for backend routes, query params, and in-flight GET request de-duplication.
 - `frontend/src/styles.css`: design tokens, layout, tables, filters, and responsive styles.
 - `frontend/src/App.test.tsx`: Vitest/React Testing Library component coverage.
@@ -53,6 +53,7 @@ ai-eos-metadata:
 - `tests/test_decisions.py`: Decision Queue service/action coverage.
 - `tests/test_api.py`: FastAPI endpoint smoke and filter coverage.
 - `tests/test_phase1_completion.py`: completion-slice regression coverage for transaction review, forecast, bill payment, insights, and Phase 1.5 planning overview.
+- `tests/test_phase2_household_expansion.py`: Phase 2 category normalization guard for rule-applied group labels.
 
 ## Generated/Ignored Runtime Areas
 

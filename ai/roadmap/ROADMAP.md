@@ -8,7 +8,7 @@ ai-eos-metadata:
 # Project Roadmap - Personal Finance Studio
 
 **Last reviewed:** 2026-06-15
-**Current phase:** Phase 1.75 complete locally; Phase 2 household expansion scoped.
+**Current phase:** Phase 2 household expansion implemented locally; Phase 2.1 is next.
 
 ## Milestones
 
@@ -18,7 +18,7 @@ ai-eos-metadata:
 | Phase 1 | Household Snoop import, transactions, transfers, commitments, forecast, dashboard | Complete locally |
 | Phase 1.5 | Goals foundation, monthly review, richer reports, subscription review | Complete locally |
 | Phase 1.75 | Editable planning control plane: goals, budgets, taxonomy/rules, import center, richer dashboard/cashflow | Complete locally |
-| Phase 2 | Rule application, merchant cleanup, scenarios, budget modes, spending plan, exports | Scoped |
+| Phase 2 | Rule application, merchant cleanup, scenarios, budget modes, spending plan, exports | Complete locally |
 | Phase 2.1 | Business entity imports, Tide/NatWest CSV, local LLM assistant | Not Started |
 | Phase 3 | Optional Open Banking, sync health, advanced planning | Not Started |
 
@@ -126,12 +126,27 @@ imported transactions, commitments, accounts, or explicit user-entered plan valu
 
 ## Phase 2 - Household Expansion
 
-- Rule engine application workflow: preview rule impact, apply to selected transactions, and undo.
-- Merchant merge/split and merchant aliases.
-- PocketSmith-style cashflow scenario planning: what-if income/outflow changes, long-range projections, and scenario comparison.
-- Monarch-style budget modes: category budgeting, flexible budgeting, rollover handling, and shared household review.
-- Simplifi-style spending plan: income minus bills, subscriptions, savings goals, and left-to-spend.
-- Exportable reports and CSV exports for budget, transactions, and monthly review.
+- [x] Rule engine application workflow: preview rule impact, apply to selected transactions, and undo.
+- [x] Merchant merge/split and merchant aliases.
+- [x] PocketSmith-style cashflow scenario planning: what-if income/outflow changes, long-range projections, and scenario comparison.
+- [x] Monarch-style budget modes: category budgeting, flexible budgeting, rollover handling, and shared household review.
+- [x] Simplifi-style spending plan: income minus bills, subscriptions, savings goals, and left-to-spend.
+- [x] Exportable reports and CSV exports for budget, transactions, and monthly review.
+
+## Phase 2 Completion Notes
+
+- Rules can be previewed against currently loaded transactions, applied to selected matching rows,
+  and undone from the latest local rule-application snapshot.
+- Merchant cleanup supports display-name aliasing/merging, ignore/restore, and split-back-to-source
+  behavior; reports and insights use cleaned display labels without mutating raw imported merchant
+  text.
+- Cash Flow now includes what-if scenarios with income/outflow adjustments and baseline comparison.
+- Budget now supports category, flexible, and rollover modes with visible planned/actual/remaining
+  formulas.
+- Dashboard includes a Spending Plan card that explains left-to-spend as income minus obligations,
+  savings goals, and flexible actuals.
+- Reports include CSV export controls for transactions, budget, monthly review, and category reports.
+- Phase 2.1 remains the boundary for Business entity UI/imports and read-only local assistant work.
 
 ## Phase 2.1 - Business And Assistant Expansion
 

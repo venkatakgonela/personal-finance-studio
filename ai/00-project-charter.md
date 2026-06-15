@@ -9,7 +9,7 @@ ai-eos-metadata:
 
 **Owner:** Kiran Gonela  
 **Type:** Local-first finance app
-**Current Status:** Phase 1.75 Editable Planning Control Plane is implemented locally; Phase 2 household expansion is next.
+**Current Status:** Phase 2 Household Expansion is implemented locally; Phase 2.1 business/assistant expansion is next.
 
 ## 1. Mission
 

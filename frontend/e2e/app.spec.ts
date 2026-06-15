@@ -269,7 +269,7 @@ test("supports phase 1.75 editable planning controls", async ({ page }) => {
   await page.getByRole("button", { name: "Rules" }).click();
   await page.getByLabel("Rule condition").fill("morrisons");
   await page.getByRole("button", { name: "Create rule" }).click();
-  await expect(page.getByText("If merchant contains morrisons")).toBeVisible();
+  await expect(page.locator(".rule-row").getByText("If merchant contains morrisons")).toBeVisible();
 
   await page.getByRole("button", { name: "Merchants" }).click();
   await expect(page.getByLabel("Display name for Morrisons")).toBeVisible();
@@ -281,6 +281,55 @@ test("supports phase 1.75 editable planning controls", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Getting Started" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Import Freshness" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "System Status" })).toHaveCount(0);
+});
+
+test("supports phase 2 household expansion workflows", async ({ page }) => {
+  let patchCount = 0;
+  await mockAppApis(page, {
+    onTransactionPatch() {
+      patchCount += 1;
+    },
+  });
+
+  await page.goto("/#/settings");
+  await page.getByRole("button", { name: "Rules" }).click();
+  await page.getByLabel("Rule condition").fill("morrisons");
+  await page.getByRole("button", { name: "Create rule" }).click();
+  await expect(page.getByRole("button", { name: /Rule impact preview/ })).toContainText("1 matches");
+  await page.getByRole("button", { name: /Rule impact preview/ }).click();
+  await expect(page.getByText(/Morrisons/)).toBeVisible();
+  await page.getByRole("button", { name: "Apply selected" }).click();
+  await expect(page.getByText("Applied 1 transaction.")).toBeVisible();
+  expect(patchCount).toBeGreaterThan(0);
+  await page.getByRole("button", { name: "Undo last apply" }).click();
+  await expect(page.getByText(/Undid If merchant contains morrisons/)).toBeVisible();
+
+  await page.getByRole("button", { name: "Merchants" }).click();
+  await page.getByLabel("Display name for Morrisons").fill("Supermarket");
+  await page.getByLabel("Display name for Morrisons").blur();
+  await page.goto("/#/reports");
+  await page.getByRole("tab", { name: "Spending" }).click();
+  await page.getByLabel("Report grouping").selectOption("merchant");
+  await expect(page.locator(".sankey-svg").getByText("Supermarket")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Exports" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Transactions CSV" })).toBeVisible();
+
+  await page.goto("/#/budget");
+  await page.getByRole("tab", { name: "Flexible" }).click();
+  await expect(page.getByText("Left to spend")).toBeVisible();
+  await page.getByRole("tab", { name: "Rollover" }).click();
+  await page.getByLabel("Rollover amount for Flexible").fill("25");
+  await page.getByLabel("Rollover amount for Flexible").press("Enter");
+  await expect(page.getByLabel("Monthly budget")).toContainText("£476.01");
+
+  await page.goto("/#/cash-flow");
+  await expect(page.getByRole("button", { name: /What-if scenarios/ })).toHaveAttribute("aria-expanded", "true");
+  await page.getByLabel("Scenario").fill("Trim groceries");
+  await page.getByLabel("Income change").fill("100");
+  await page.getByLabel("Outflow change").fill("-50");
+  await page.getByRole("button", { name: "Add scenario" }).click();
+  await expect(page.locator(".scenario-row").getByText("Trim groceries")).toBeVisible();
+  await expect(page.getByText(/Active comparison: Trim groceries/)).toBeVisible();
 });
 
 test("renders colorful account and report graphics", async ({ page }) => {
@@ -579,7 +628,7 @@ test("keeps decision queue actions usable on mobile", async ({ page }) => {
 
 async function mockAppApis(
   page: Page,
-  options: { onTransactionsRequest?: (url: URL) => void } = {},
+  options: { onTransactionPatch?: () => void; onTransactionsRequest?: (url: URL) => void } = {},
 ) {
   await page.route("**/api/accounts", async (route) => {
     await route.fulfill({
@@ -738,6 +787,15 @@ async function mockAppApis(
     });
   });
   await page.route("**/api/transactions**", async (route) => {
+    if (route.request().method() === "PATCH") {
+      options.onTransactionPatch?.();
+      await route.fulfill({
+        contentType: "application/json",
+        json: { ...baseTransaction, reviewed: true, source_category: "Flexible" },
+      });
+      return;
+    }
+
     const url = new URL(route.request().url());
     const normalizedGroup = url.searchParams.get("normalized_group");
     const transactionType = url.searchParams.get("transaction_type");

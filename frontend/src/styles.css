@@ -2337,7 +2337,8 @@ button.collapsible-block-header:focus {
 .control-form select,
 .budget-row input,
 .merchant-settings-row input,
-.merchant-settings-row select {
+.merchant-settings-row select,
+.rule-apply-toolbar select {
   min-height: 36px;
   padding: var(--space-xs) var(--space-sm);
   border: 1px solid var(--line);
@@ -2427,6 +2428,12 @@ button.collapsible-block-header:focus {
   color: var(--muted);
 }
 
+.status-copy {
+  margin: 0 0 var(--space-xs);
+  color: var(--focus);
+  font-weight: 800;
+}
+
 .tag-label-row {
   display: inline-flex;
   align-items: center;
@@ -2441,15 +2448,52 @@ button.collapsible-block-header:focus {
 
 .merchant-settings-row {
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) minmax(160px, 220px) auto;
+  grid-template-columns: minmax(220px, 1fr) minmax(160px, 220px) auto auto;
 }
 
 .data-settings-grid,
 .budget-summary-grid,
+.spending-plan-strip,
 .planning-snapshot-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: var(--space-sm);
+}
+
+.rule-apply-panel {
+  display: grid;
+  gap: var(--space-sm);
+  margin: var(--space-md) 0;
+  padding: var(--space-md);
+  border: 1px solid rgba(37, 135, 166, 0.18);
+  border-radius: var(--radius-row);
+  background: linear-gradient(135deg, rgba(234, 246, 248, 0.9), rgba(255, 255, 255, 0.86));
+}
+
+.rule-apply-toolbar {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: var(--space-md);
+}
+
+.rule-apply-toolbar label {
+  display: grid;
+  gap: 6px;
+  min-width: min(360px, 100%);
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.rule-preview-row {
+  justify-content: flex-start;
+}
+
+.rule-preview-row input {
+  flex: 0 0 auto;
 }
 
 .planning-snapshot-grid {
@@ -2488,6 +2532,10 @@ button.collapsible-block-header:focus {
   background: white;
 }
 
+.budget-row:has(input[aria-label^="Rollover"]) {
+  grid-template-columns: minmax(190px, 1.4fr) minmax(120px, 0.75fr) minmax(110px, 0.65fr) minmax(120px, 0.75fr) minmax(110px, 0.65fr) minmax(92px, auto);
+}
+
 .budget-row:last-child {
   border-bottom: 0;
 }
@@ -2518,6 +2566,7 @@ button.collapsible-block-header:focus {
 }
 
 .cashflow-planner-card,
+.spending-plan-card,
 .planning-snapshot-card,
 .budget-page-card {
   background:
@@ -2537,6 +2586,7 @@ button.collapsible-block-header:focus {
 }
 
 .cashflow-plan-hero span,
+.spending-plan-hero span,
 .snapshot-tile span {
   color: var(--muted);
   font-size: 0.72rem;
@@ -2546,11 +2596,84 @@ button.collapsible-block-header:focus {
 }
 
 .cashflow-plan-hero strong,
+.spending-plan-hero strong,
 .snapshot-tile strong {
   display: block;
   margin-top: 4px;
   color: var(--ink);
   font-size: 1.45rem;
+}
+
+.spending-plan-hero {
+  margin-bottom: var(--space-sm);
+  padding: var(--space-md);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-row);
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.spending-plan-hero small {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+}
+
+.spending-plan-stack {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 3px;
+  height: 12px;
+  margin-bottom: var(--space-sm);
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: rgba(203, 196, 184, 0.35);
+}
+
+.spending-plan-stack span {
+  min-width: 0;
+  height: 100%;
+}
+
+.scenario-form {
+  grid-template-columns: minmax(220px, 1.2fr) minmax(120px, 0.7fr) minmax(120px, 0.7fr) minmax(180px, 1fr) auto;
+}
+
+.scenario-list {
+  display: grid;
+  gap: var(--space-xs);
+  margin-top: var(--space-sm);
+}
+
+.scenario-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(140px, auto) minmax(120px, auto) auto;
+  gap: var(--space-sm);
+  align-items: center;
+  padding: var(--space-sm);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-row);
+  background: white;
+}
+
+.export-button-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-sm);
+}
+
+.export-button-grid button {
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: white;
+  color: var(--text);
+  font-weight: 850;
+}
+
+.export-button-grid button:hover {
+  border-color: rgba(37, 135, 166, 0.35);
+  background: var(--accent-soft);
+  color: var(--focus);
 }
 
 .cash-pressure-meter {
@@ -2874,7 +2997,8 @@ button.collapsible-block-header:focus {
 
   .hero-stat-grid,
   .budget-summary-grid,
-  .data-settings-grid {
+  .data-settings-grid,
+  .spending-plan-strip {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -2986,9 +3110,19 @@ button.collapsible-block-header:focus {
   .budget-summary-grid,
   .planning-snapshot-grid,
   .data-settings-grid,
+  .spending-plan-strip,
   .budget-row,
-  .merchant-settings-row {
+  .budget-row:has(input[aria-label^="Rollover"]),
+  .merchant-settings-row,
+  .rule-apply-toolbar,
+  .scenario-form,
+  .scenario-row,
+  .export-button-grid {
     grid-template-columns: 1fr;
+  }
+
+  .rule-apply-toolbar {
+    align-items: stretch;
   }
 
   .settings-nav {

@@ -8,7 +8,7 @@ ai-eos-metadata:
 # Architecture Design - Personal Finance Studio
 
 **Last reviewed:** 2026-06-15  
-**Implementation status:** Phase 1.75 local implementation exists; Phase 2 household expansion is planned.
+**Implementation status:** Phase 2 household expansion is implemented locally.
 
 ## 1. System Overview
 
@@ -19,12 +19,12 @@ Personal Finance Studio is planned as a local-first web application:
 - PostgreSQL database for durable local storage.
 - Docker Compose for local development and database runtime.
 
-Phase 1/1.75 currently has one active entity, Household, populated by Snoop CSV imports. Phase 2 stays household-focused and adds rule application, merchant cleanup, scenario planning, budget modes, spending-plan views, and exports. Business entity imports from Tide/NatWest Business are now Phase 2.1 so household expansion can remain coherent.
+Phase 1/2 currently has one active entity, Household, populated by Snoop CSV imports. Phase 2 stays household-focused and adds rule application, merchant cleanup, scenario planning, budget modes, spending-plan views, and exports. Business entity imports from Tide/NatWest Business are now Phase 2.1 so household expansion can remain coherent.
 
 ## 2. Key Components
 
 - **Frontend App**: React, TypeScript, route-based screens, design system, charts, tables, calendar/timeline views.
-- **Frontend App Status**: `frontend/src/App.tsx` currently owns the hash-route shell, topbar date controls, dashboard cards, account review, transaction filters/table, cashflow, calendar/upcoming, recurring, goals, budget, sinking funds, monthly review, subscriptions, reports, import center, Decision Queue, and Settings UI.
+- **Frontend App Status**: `frontend/src/App.tsx` currently owns the hash-route shell, topbar date controls, dashboard cards, account review, transaction filters/table, cashflow, calendar/upcoming, recurring, goals, budget modes/rollovers, sinking funds, monthly review, subscriptions, reports/exports, import center, Decision Queue, and Settings UI.
 - **Backend API**: FastAPI endpoints for imports, accounts, transactions, transfers, commitments, calendar, forecasts, dashboards, insights, planning, and decisions.
 - **Import Service**: Snoop CSV parser, validator, previewer, fingerprinting/upsert engine, import logs.
 - **Classification Service**: account type mapping, category normalization, merchant rules, reviewed/unreviewed state.
@@ -33,7 +33,7 @@ Phase 1/1.75 currently has one active entity, Household, populated by Snoop CSV 
 - **Forecast Engine**: projected balances, available-after-commitments, flexible spending remaining, low-balance warnings.
 - **Decision Queue**: low-noise human confirmations that improve accuracy; rendered as a compact desktop review table and mobile action cards.
 - **Planning Overview Service**: deterministic Phase 1.5 aggregation for goals, sinking funds, monthly review, subscription prompts, saved filters, import freshness, and stale commitments.
-- **Database**: PostgreSQL tables for entities, profiles, accounts, transactions, rules, bills, instances, and imports; Phase 1.75 user-authored planning preferences are currently browser-local until Phase 2 promotes selected controls to durable workflows.
+- **Database**: PostgreSQL tables for entities, profiles, accounts, transactions, rules, bills, instances, and imports; Phase 1.75/2 user-authored planning preferences are currently browser-local except explicit transaction review/rule application mutations.
 
 ## 3. Data Flow
 

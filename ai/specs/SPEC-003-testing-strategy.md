@@ -1,7 +1,7 @@
 # SPEC-003: Testing Strategy
 
 **Author:** Kiran Gonela / Codex  
-**Status:** Phase 1.75 implemented locally
+**Status:** Phase 2 implemented locally
 **Date:** 2026-06-15
 
 ## 1. Problem Statement
@@ -19,6 +19,8 @@ Testing is therefore part of the Phase 1 product, not a cleanup activity.
 - Verify browser UI flows work end to end.
 - Verify Phase 1.5 planning derivations and route health.
 - Verify Phase 1.75 editable planning controls, local persistence, and budget tally math.
+- Verify Phase 2 rule application, merchant cleanup, scenario planning, budget modes, spending plan,
+  and exports remain visually and functionally integrated.
 - Prevent regression in the core money model before visual polish.
 
 ## 3. Non-Goals
@@ -209,3 +211,12 @@ Phase 1.75 release criteria:
 - [x] Import Center browser flow passes.
 - [x] Dashboard/Cash Flow planning-value browser checks pass.
 - [x] Full backend, frontend, build, and E2E quality gates pass.
+
+Phase 2 release criteria:
+
+- [x] Rule preview/apply/undo browser flow passes.
+- [x] Merchant display merge affects reports without raw-data mutation.
+- [x] Budget flexible and rollover modes render and tally.
+- [x] Cashflow scenario add/delete comparison renders.
+- [x] Report export controls render.
+- [x] Phase 2 backend normalization guard passes.

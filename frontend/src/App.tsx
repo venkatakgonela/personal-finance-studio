@@ -18,6 +18,7 @@ import {
   type ImportCommitResult,
   type ImportPreview,
   type InsightsResponse,
+  type MerchantInsight,
   type PlanningOverview,
   type TransactionFilters,
   type TransactionUpdate,
@@ -91,6 +92,18 @@ type BudgetPlanRow = {
   group: string;
   plannedAmount: number;
 };
+type BudgetMode = "category" | "flexible" | "rollover";
+type BudgetRolloverRow = {
+  group: string;
+  rolloverAmount: number;
+};
+type CashflowScenario = {
+  id: string;
+  incomeAdjustment: number;
+  name: string;
+  notes: string;
+  outflowAdjustment: number;
+};
 type CategorySetting = {
   group: string;
   id: string;
@@ -109,6 +122,18 @@ type RuleSetting = {
   name: string;
   tag: string;
 };
+type RuleApplicationSnapshot = {
+  appliedAt: string;
+  id: string;
+  previous: Array<{
+    id: string;
+    reviewed: boolean;
+    sourceCategory: string;
+    transactionType: string;
+  }>;
+  ruleId: string;
+  ruleName: string;
+};
 type MerchantSetting = {
   categoryGroup: string;
   displayName: string;
@@ -117,10 +142,14 @@ type MerchantSetting = {
   sourceName: string;
 };
 type PlanningControlState = {
+  budgetMode: BudgetMode;
   budgetRows: BudgetPlanRow[];
   categories: CategorySetting[];
+  ruleApplications: RuleApplicationSnapshot[];
+  scenarios: CashflowScenario[];
   goals: LocalGoal[];
   merchants: MerchantSetting[];
+  rollovers: BudgetRolloverRow[];
   rules: RuleSetting[];
   tags: TagSetting[];
 };
@@ -954,10 +983,12 @@ function AppPage({
           upcoming={upcoming}
         />
         <CashflowPlanningCard
+          controlState={controlState}
           dashboard={dashboard}
           forecast={forecast}
           includeCandidates={includeCandidates}
           insights={insights}
+          onControlStateChange={onControlStateChange}
           periodLabel={periodLabel}
           upcoming={upcoming}
         />
@@ -981,6 +1012,8 @@ function AppPage({
           insights={insights}
           onControlStateChange={onControlStateChange}
           periodLabel={periodLabel}
+          planning={planning}
+          upcoming={upcoming}
         />
       </section>
     );
@@ -1080,6 +1113,7 @@ function AppPage({
       <section className="page-grid page-grid-single" aria-label="Reports page">
         <ReportMetricStrip insights={insights} />
         <SankeyReportCard
+          controlState={controlState}
           groupBy={reportGroupBy}
           insights={insights}
           onGroupByChange={setReportGroupBy}
@@ -1087,7 +1121,14 @@ function AppPage({
           periodLabel={periodLabel}
           reportView={reportView}
         />
-        <InsightsCard insights={insights} periodLabel={periodLabel} />
+        <InsightsCard controlState={controlState} insights={insights} periodLabel={periodLabel} />
+        <ExportsCard
+          controlState={controlState}
+          insights={insights}
+          periodLabel={periodLabel}
+          planning={planning}
+          transactions={transactions}
+        />
         <SavedFiltersCard planning={planning} />
       </section>
     );
@@ -1102,6 +1143,8 @@ function AppPage({
           insights={insights}
           onControlStateChange={onControlStateChange}
           onHealthCheck={onHealthCheck}
+          onTransactionUpdate={onTransactionUpdate}
+          transactions={transactions}
         />
       </section>
     );
@@ -1141,6 +1184,13 @@ function AppPage({
         upcoming={upcoming}
       />
       <SpendingCard dashboard={dashboard} insights={insights} />
+      <SpendingPlanCard
+        controlState={controlState}
+        dashboard={dashboard}
+        insights={insights}
+        planning={planning}
+        upcoming={upcoming}
+      />
       <PlanningSnapshotCard
         controlState={controlState}
         dashboard={dashboard}
@@ -1554,6 +1604,7 @@ function ReportMetric({
 }
 
 function SankeyReportCard({
+  controlState,
   groupBy,
   insights,
   onGroupByChange,
@@ -1561,6 +1612,7 @@ function SankeyReportCard({
   periodLabel,
   reportView,
 }: {
+  controlState: PlanningControlState;
   groupBy: ReportGroupBy;
   insights: InsightsResponse | null;
   onGroupByChange: (groupBy: ReportGroupBy) => void;
@@ -1570,7 +1622,7 @@ function SankeyReportCard({
 }) {
   const [expandedGroupId, setExpandedGroupId] = useState<string | null>(null);
   const totals = reportTotals(insights);
-  const groups = reportGroups(insights, groupBy, reportView);
+  const groups = reportGroups(insights, groupBy, reportView, controlState);
   const activeExpandedGroupId = groups.some((group) => group.id === expandedGroupId && group.children.length > 0)
     ? expandedGroupId
     : null;
@@ -2128,12 +2180,16 @@ function SettingsWorkbenchCard({
   insights,
   onControlStateChange,
   onHealthCheck,
+  onTransactionUpdate,
+  transactions,
 }: {
   controlState: PlanningControlState;
   health: ApiHealthState;
   insights: InsightsResponse | null;
   onControlStateChange: (state: PlanningControlState | ((current: PlanningControlState) => PlanningControlState)) => void;
   onHealthCheck: () => Promise<void>;
+  onTransactionUpdate: (transactionId: string, payload: TransactionUpdate) => Promise<void>;
+  transactions: TransactionsResponse | null;
 }) {
   const [section, setSection] = useState<"categories" | "data" | "merchants" | "rules" | "system" | "tags">("categories");
   return (
@@ -2163,7 +2219,12 @@ function SettingsWorkbenchCard({
             />
           ) : null}
           {section === "rules" ? (
-            <RuleSettings controlState={controlState} onControlStateChange={onControlStateChange} />
+            <RuleSettings
+              controlState={controlState}
+              onControlStateChange={onControlStateChange}
+              onTransactionUpdate={onTransactionUpdate}
+              transactions={transactions}
+            />
           ) : null}
           {section === "tags" ? (
             <TagSettings controlState={controlState} onControlStateChange={onControlStateChange} />
@@ -2290,30 +2351,96 @@ function TagSettings({
 function RuleSettings({
   controlState,
   onControlStateChange,
+  onTransactionUpdate,
+  transactions,
 }: {
   controlState: PlanningControlState;
   onControlStateChange: (state: PlanningControlState | ((current: PlanningControlState) => PlanningControlState)) => void;
+  onTransactionUpdate: (transactionId: string, payload: TransactionUpdate) => Promise<void>;
+  transactions: TransactionsResponse | null;
 }) {
   const [condition, setCondition] = useState("");
   const [action, setAction] = useState("flexible");
   const [tag, setTag] = useState(controlState.tags[0]?.name ?? "Review");
+  const [previewRuleId, setPreviewRuleId] = useState(controlState.rules[0]?.id ?? "");
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [ruleStatus, setRuleStatus] = useState("");
   const addRule = () => {
     if (!condition.trim()) return;
+    const newRule: RuleSetting = {
+      action,
+      condition: condition.trim(),
+      id: makeLocalId("rule"),
+      name: `If merchant contains ${condition.trim()}`,
+      tag,
+    };
     onControlStateChange((current) => ({
       ...current,
-      rules: [
-        ...current.rules,
+      rules: [...current.rules, newRule],
+    }));
+    setPreviewRuleId(newRule.id);
+    setCondition("");
+  };
+  const activeRule = controlState.rules.find((rule) => rule.id === previewRuleId) ?? controlState.rules[0];
+  const matches = activeRule ? ruleMatches(activeRule, transactions?.transactions ?? []) : [];
+  const selectedMatches = matches.filter((transaction) => selectedIds.includes(transaction.id));
+  const lastApplication = controlState.ruleApplications.at(-1);
+
+  useEffect(() => {
+    if (!activeRule) return;
+    setSelectedIds(ruleMatches(activeRule, transactions?.transactions ?? []).map((transaction) => transaction.id));
+  }, [activeRule, transactions]);
+
+  const applyRule = async () => {
+    if (!activeRule || selectedMatches.length === 0) return;
+    setRuleStatus(`Applying ${selectedMatches.length} transaction${selectedMatches.length === 1 ? "" : "s"}...`);
+    const previous = selectedMatches.map((transaction) => ({
+      id: transaction.id,
+      reviewed: transaction.reviewed,
+      sourceCategory: transaction.source_category,
+      transactionType: transaction.transaction_type,
+    }));
+    for (const transaction of selectedMatches) {
+      await onTransactionUpdate(transaction.id, {
+        notes: `Rule applied: ${activeRule.name}`,
+        reviewed: true,
+        source_category: titleCase(activeRule.action),
+        transaction_type: transactionTypeForGroup(activeRule.action, transaction),
+      });
+    }
+    onControlStateChange((current) => ({
+      ...current,
+      ruleApplications: [
+        ...current.ruleApplications,
         {
-          action,
-          condition: condition.trim(),
-          id: makeLocalId("rule"),
-          name: `If merchant contains ${condition.trim()}`,
-          tag,
+          appliedAt: new Date().toISOString(),
+          id: makeLocalId("rule-application"),
+          previous,
+          ruleId: activeRule.id,
+          ruleName: activeRule.name,
         },
       ],
     }));
-    setCondition("");
+    setRuleStatus(`Applied ${selectedMatches.length} transaction${selectedMatches.length === 1 ? "" : "s"}.`);
   };
+
+  const undoLastApplication = async () => {
+    if (!lastApplication) return;
+    setRuleStatus(`Undoing ${lastApplication.previous.length} transaction${lastApplication.previous.length === 1 ? "" : "s"}...`);
+    for (const snapshot of lastApplication.previous) {
+      await onTransactionUpdate(snapshot.id, {
+        reviewed: snapshot.reviewed,
+        source_category: snapshot.sourceCategory,
+        transaction_type: snapshot.transactionType,
+      });
+    }
+    onControlStateChange((current) => ({
+      ...current,
+      ruleApplications: current.ruleApplications.filter((item) => item.id !== lastApplication.id),
+    }));
+    setRuleStatus(`Undid ${lastApplication.ruleName}.`);
+  };
+
   return (
     <section>
       <CardHeader title="Rules" subtitle="Preview-style local rules. Phase 2 can apply them to transactions with undo." />
@@ -2326,6 +2453,66 @@ function RuleSettings({
         </select>
         <input aria-label="Rule tag" onChange={(event) => setTag(event.target.value)} placeholder="Tag" value={tag} />
         <button className="settings-primary-action" onClick={addRule} type="button">Create rule</button>
+      </div>
+      <div className="rule-apply-panel">
+        <div className="rule-apply-toolbar">
+          <label>
+            Preview rule
+            <select
+              aria-label="Rule preview"
+              onChange={(event) => setPreviewRuleId(event.target.value)}
+              value={activeRule?.id ?? ""}
+            >
+              {controlState.rules.map((rule) => (
+                <option key={rule.id} value={rule.id}>{rule.name}</option>
+              ))}
+            </select>
+          </label>
+          <div className="row-actions">
+            <button disabled={!activeRule || selectedMatches.length === 0} onClick={() => void applyRule()} type="button">
+              Apply selected
+            </button>
+            <button
+              className="button-muted"
+              disabled={!lastApplication}
+              onClick={() => void undoLastApplication()}
+              type="button"
+            >
+              Undo last apply
+            </button>
+          </div>
+        </div>
+        <p className="fine-print">
+          Preview is based on currently loaded transactions and selected date/search filters. Applying a rule updates
+          the chosen transactions explicitly and stores one local undo snapshot.
+        </p>
+        {ruleStatus ? <p className="status-copy">{ruleStatus}</p> : null}
+        <CollapsibleBlock defaultOpen={false} meta={`${matches.length} matches`} title="Rule impact preview">
+          <div className="settings-row-list rule-preview-list">
+            {matches.slice(0, 25).map((transaction) => (
+              <label className="settings-row rule-preview-row" key={transaction.id}>
+                <input
+                  checked={selectedIds.includes(transaction.id)}
+                  onChange={(event) =>
+                    setSelectedIds((current) =>
+                      event.target.checked
+                        ? [...new Set([...current, transaction.id])]
+                        : current.filter((id) => id !== transaction.id),
+                    )
+                  }
+                  type="checkbox"
+                />
+                <div>
+                  <strong>{transaction.merchant_name || transaction.description}</strong>
+                  <small>
+                    {transaction.date} · {titleCase(transaction.normalized_group)} to {activeRule ? titleCase(activeRule.action) : "-"} · {money(transaction.amount)}
+                  </small>
+                </div>
+              </label>
+            ))}
+            {matches.length === 0 ? <p className="empty-copy">No matching transactions in the current loaded view.</p> : null}
+          </div>
+        </CollapsibleBlock>
       </div>
       <div className="settings-row-list">
         {controlState.rules.map((rule) => (
@@ -2383,7 +2570,11 @@ function MerchantSettings({
   };
   return (
     <section>
-      <CardHeader title="Merchants" subtitle="Clean display names and default groups for imported merchants." />
+      <CardHeader title="Merchants" subtitle="Merge aliases, split display names back out, and tune report grouping." />
+      <p className="fine-print">
+        Set the same display name on multiple merchants to merge them in reports. Use Split to restore the original
+        imported merchant label without changing raw transaction history.
+      </p>
       <div className="settings-row-list">
         {merchants.map((merchant) => (
           <div className="settings-row merchant-settings-row" key={merchant.sourceName}>
@@ -2407,6 +2598,13 @@ function MerchantSettings({
               type="button"
             >
               {merchant.ignored ? "Restore" : "Ignore"}
+            </button>
+            <button
+              className="button-link button-link-small"
+              onClick={() => updateMerchant(merchant.sourceName, { displayName: merchant.sourceName })}
+              type="button"
+            >
+              Split
             </button>
           </div>
         ))}
@@ -2651,14 +2849,19 @@ function BudgetPageCard({
   insights,
   onControlStateChange,
   periodLabel,
+  planning,
+  upcoming,
 }: {
   controlState: PlanningControlState;
   insights: InsightsResponse | null;
   onControlStateChange: (state: PlanningControlState | ((current: PlanningControlState) => PlanningControlState)) => void;
   periodLabel: string;
+  planning: PlanningOverview | null;
+  upcoming: UpcomingCommitmentsResponse | null;
 }) {
   const rows = budgetRows(controlState, insights);
   const totals = budgetTotals(rows, insights);
+  const spendingPlan = spendingPlanTotals(controlState, insights, upcoming, planning);
   const updateBudget = (group: string, value: string) => {
     const plannedAmount = Math.max(0, numberFromInput(value));
     onControlStateChange((current) => {
@@ -2671,14 +2874,42 @@ function BudgetPageCard({
       };
     });
   };
+  const updateRollover = (group: string, value: string) => {
+    const rolloverAmount = numberFromInput(value);
+    onControlStateChange((current) => {
+      const exists = current.rollovers.some((row) => row.group === group);
+      return {
+        ...current,
+        rollovers: exists
+          ? current.rollovers.map((row) => (row.group === group ? { ...row, rolloverAmount } : row))
+          : [...current.rollovers, { group, rolloverAmount }],
+      };
+    });
+  };
 
   return (
     <article className="card budget-page-card">
       <div className="budget-toolbar">
         <CardHeader title="Budget" subtitle={`${periodLabel} · plan, actual, remaining`} />
-        <a className="button-link button-link-secondary" href="#/transactions">
-          Review actuals
-        </a>
+        <div className="report-controls">
+          <div className="report-tabs" role="tablist" aria-label="Budget mode">
+            {(["category", "flexible", "rollover"] as const).map((mode) => (
+              <button
+                aria-selected={controlState.budgetMode === mode}
+                className={controlState.budgetMode === mode ? "active" : ""}
+                key={mode}
+                onClick={() => onControlStateChange((current) => ({ ...current, budgetMode: mode }))}
+                role="tab"
+                type="button"
+              >
+                {titleCase(mode)}
+              </button>
+            ))}
+          </div>
+          <a className="button-link button-link-secondary" href="#/transactions">
+            Review actuals
+          </a>
+        </div>
       </div>
       <div className="budget-summary-grid">
         <Metric label="Income actual" value={money(String(totals.incomeActual))} />
@@ -2686,19 +2917,29 @@ function BudgetPageCard({
         <Metric label="Actual outflow" value={money(String(totals.actualOutflow))} />
         <Metric label="Remaining" value={money(String(totals.remaining))} />
       </div>
+      {controlState.budgetMode === "flexible" ? (
+        <div className="spending-plan-strip">
+          <Metric label="Income" value={money(String(spendingPlan.income))} />
+          <Metric label="Bills/subscriptions" value={money(String(spendingPlan.obligations))} />
+          <Metric label="Savings goals" value={money(String(spendingPlan.goalContributions))} />
+          <Metric label="Left to spend" value={money(String(spendingPlan.leftToSpend))} />
+        </div>
+      ) : null}
       <p className="fine-print">
-        Formula: remaining = planned outflow - actual outflow. Actuals are imported transactions for this selected period.
+        Formula: remaining = planned outflow - actual outflow{controlState.budgetMode === "rollover" ? " + rollover" : ""}. Actuals are imported transactions for this selected period.
       </p>
       <div className="budget-table" role="table" aria-label="Monthly budget">
         <div className="budget-row budget-row-header" role="row">
           <span>Group</span>
           <span>Planned</span>
           <span>Actual</span>
+          {controlState.budgetMode === "rollover" ? <span>Rollover</span> : null}
           <span>Remaining</span>
           <span>Status</span>
         </div>
         {rows.map((row) => {
-          const remaining = row.plannedAmount - row.actualAmount;
+          const rollover = controlState.rollovers.find((item) => item.group === row.group)?.rolloverAmount ?? 0;
+          const remaining = row.plannedAmount - row.actualAmount + (controlState.budgetMode === "rollover" ? rollover : 0);
           return (
             <div className="budget-row" key={row.group} role="row">
               <div>
@@ -2716,6 +2957,18 @@ function BudgetPageCard({
                 defaultValue={row.plannedAmount ? row.plannedAmount.toFixed(2) : ""}
               />
               <span>{money(String(row.actualAmount))}</span>
+              {controlState.budgetMode === "rollover" ? (
+                <input
+                  aria-label={`Rollover amount for ${titleCase(row.group)}`}
+                  inputMode="decimal"
+                  onBlur={(event) => updateRollover(row.group, event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") updateRollover(row.group, event.currentTarget.value);
+                  }}
+                  placeholder="0.00"
+                  defaultValue={rollover ? rollover.toFixed(2) : ""}
+                />
+              ) : null}
               <span className={remaining >= 0 ? "positive-text" : "negative-text"}>{money(String(remaining))}</span>
               <span className={`status-pill status-${remaining >= 0 ? "ready" : "stale"}`}>
                 {remaining >= 0 ? "On track" : "Over"}
@@ -3191,25 +3444,54 @@ function CashflowCard({
 }
 
 function CashflowPlanningCard({
+  controlState,
   dashboard,
   forecast,
   includeCandidates,
   insights,
+  onControlStateChange,
   periodLabel,
   upcoming,
 }: {
+  controlState: PlanningControlState;
   dashboard: DashboardSummary | null;
   forecast: ForecastResponse | null;
   includeCandidates: boolean;
   insights: InsightsResponse | null;
+  onControlStateChange: (state: PlanningControlState | ((current: PlanningControlState) => PlanningControlState)) => void;
   periodLabel: string;
   upcoming: UpcomingCommitmentsResponse | null;
 }) {
+  const [scenarioForm, setScenarioForm] = useState({
+    incomeAdjustment: "",
+    name: "",
+    notes: "",
+    outflowAdjustment: "",
+  });
   const totals = reportTotals(insights);
   const pressure = Number(dashboard?.flexible_spend_actual ?? 0) + Number(upcoming?.expected_total ?? 0);
   const cash = Number(dashboard?.cash_on_hand ?? 0);
   const pressureRatio = cash > 0 ? Math.min(100, (pressure / cash) * 100) : 0;
   const nextItems = (upcoming?.items ?? []).slice(0, 5);
+  const baselineEnding = Number(forecast?.projected_ending_balance ?? dashboard?.available_after_commitments ?? 0);
+  const bestScenario = controlState.scenarios[0];
+  const addScenario = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    onControlStateChange((current) => ({
+      ...current,
+      scenarios: [
+        {
+          id: makeLocalId("scenario"),
+          incomeAdjustment: numberFromInput(scenarioForm.incomeAdjustment),
+          name: scenarioForm.name.trim() || "What-if scenario",
+          notes: scenarioForm.notes.trim(),
+          outflowAdjustment: numberFromInput(scenarioForm.outflowAdjustment),
+        },
+        ...current.scenarios,
+      ].slice(0, 5),
+    }));
+    setScenarioForm({ incomeAdjustment: "", name: "", notes: "", outflowAdjustment: "" });
+  };
 
   return (
     <article className="card cashflow-planner-card">
@@ -3242,6 +3524,81 @@ function CashflowPlanningCard({
             amount: money(item.expected_amount),
           }))}
         />
+      </CollapsibleBlock>
+      <CollapsibleBlock meta={`${controlState.scenarios.length} scenarios`} title="What-if scenarios">
+        <form className="control-form scenario-form" onSubmit={addScenario}>
+          <label>
+            Scenario
+            <input
+              onChange={(event) => setScenarioForm({ ...scenarioForm, name: event.target.value })}
+              placeholder="Lower grocery spend, extra income..."
+              value={scenarioForm.name}
+            />
+          </label>
+          <label>
+            Income change
+            <input
+              inputMode="decimal"
+              onChange={(event) => setScenarioForm({ ...scenarioForm, incomeAdjustment: event.target.value })}
+              placeholder="250"
+              value={scenarioForm.incomeAdjustment}
+            />
+          </label>
+          <label>
+            Outflow change
+            <input
+              inputMode="decimal"
+              onChange={(event) => setScenarioForm({ ...scenarioForm, outflowAdjustment: event.target.value })}
+              placeholder="-150"
+              value={scenarioForm.outflowAdjustment}
+            />
+          </label>
+          <label>
+            Notes
+            <input
+              onChange={(event) => setScenarioForm({ ...scenarioForm, notes: event.target.value })}
+              placeholder="Assumption"
+              value={scenarioForm.notes}
+            />
+          </label>
+          <div className="form-actions">
+            <button type="submit">Add scenario</button>
+          </div>
+        </form>
+        <div className="scenario-list">
+          {controlState.scenarios.map((scenario) => {
+            const ending = baselineEnding + scenario.incomeAdjustment - scenario.outflowAdjustment;
+            return (
+              <div className="scenario-row" key={scenario.id}>
+                <div>
+                  <strong>{scenario.name}</strong>
+                  <small>{scenario.notes || "No notes"} · baseline {money(String(baselineEnding))}</small>
+                </div>
+                <Metric label="Scenario ending" value={money(String(ending))} />
+                <Metric label="Change" value={money(String(ending - baselineEnding))} />
+                <button
+                  className="button-link button-link-small button-danger"
+                  onClick={() =>
+                    onControlStateChange((current) => ({
+                      ...current,
+                      scenarios: current.scenarios.filter((item) => item.id !== scenario.id),
+                    }))
+                  }
+                  type="button"
+                >
+                  Delete
+                </button>
+              </div>
+            );
+          })}
+          {controlState.scenarios.length === 0 ? <p className="empty-copy">Add a scenario to compare baseline against a what-if change.</p> : null}
+        </div>
+        {bestScenario ? (
+          <p className="fine-print">
+            Active comparison: {bestScenario.name} changes projected ending cash by{" "}
+            {money(String(bestScenario.incomeAdjustment - bestScenario.outflowAdjustment))}.
+          </p>
+        ) : null}
       </CollapsibleBlock>
     </article>
   );
@@ -3288,6 +3645,48 @@ function PlanningSnapshotCard({
       <div className="card-actions">
         <a className="button-link" href="#/budget">Open budget</a>
         <a className="button-link button-link-secondary" href="#/goals">Manage goals</a>
+      </div>
+    </article>
+  );
+}
+
+function SpendingPlanCard({
+  controlState,
+  dashboard,
+  insights,
+  planning,
+  upcoming,
+}: {
+  controlState: PlanningControlState;
+  dashboard: DashboardSummary | null;
+  insights: InsightsResponse | null;
+  planning: PlanningOverview | null;
+  upcoming: UpcomingCommitmentsResponse | null;
+}) {
+  const plan = spendingPlanTotals(controlState, insights, upcoming, planning);
+  return (
+    <article className="card spending-plan-card">
+      <CardHeader title="Spending Plan" subtitle="Income minus bills, goals, and flexible spend." />
+      <div className="spending-plan-hero">
+        <span>Left to spend</span>
+        <strong className={plan.leftToSpend >= 0 ? "positive-text" : "negative-text"}>{money(String(plan.leftToSpend))}</strong>
+        <small>{dashboard?.confidence === "ready" ? "Balance-backed planning" : "Enter balances for stronger confidence"}</small>
+      </div>
+      <div className="spending-plan-stack" aria-label="Spending plan waterfall">
+        <span style={{ background: "#2f7d5c", width: `${planScale(plan.income, plan)}%` }} />
+        <span style={{ background: "#d43c95", width: `${planScale(plan.obligations, plan)}%` }} />
+        <span style={{ background: "#d99a2b", width: `${planScale(plan.goalContributions, plan)}%` }} />
+        <span style={{ background: "#2587a6", width: `${planScale(Math.max(0, plan.leftToSpend), plan)}%` }} />
+      </div>
+      <div className="budget-summary-grid">
+        <Metric label="Income" value={money(String(plan.income))} />
+        <Metric label="Bills/subscriptions" value={money(String(plan.obligations))} />
+        <Metric label="Savings goals" value={money(String(plan.goalContributions))} />
+        <Metric label="Flexible actual" value={money(String(plan.flexibleActual))} />
+      </div>
+      <div className="card-actions">
+        <a className="button-link" href="#/budget">Tune budget</a>
+        <a className="button-link button-link-secondary" href="#/cash-flow">Scenario plan</a>
       </div>
     </article>
   );
@@ -3379,12 +3778,15 @@ function TransactionFilterBar({
 }
 
 function InsightsCard({
+  controlState,
   insights,
   periodLabel,
 }: {
+  controlState?: PlanningControlState;
   insights: InsightsResponse | null;
   periodLabel?: string;
 }) {
+  const merchants = mergedMerchants(insights?.top_merchants ?? [], controlState).slice(0, 5);
   return (
     <article className="card">
       <CardHeader
@@ -3405,18 +3807,109 @@ function InsightsCard({
           }))}
         />
       </CollapsibleBlock>
-      {(insights?.top_merchants.length ?? 0) > 0 ? (
-        <CollapsibleBlock meta={`${insights?.top_merchants.length ?? 0} merchants`} title="Top merchants">
+      {merchants.length > 0 ? (
+        <CollapsibleBlock meta={`${merchants.length} merchants`} title="Top merchants">
           <CompactList
             empty="No merchant spend in range."
-            rows={(insights?.top_merchants ?? []).slice(0, 5).map((merchant) => ({
-              title: merchant.merchant_name,
+            rows={merchants.map((merchant) => ({
+              title: merchant.label,
               meta: `${merchant.transaction_count} transactions`,
-              amount: money(merchant.outflow_total),
+              amount: money(String(merchant.value)),
             }))}
           />
         </CollapsibleBlock>
       ) : null}
+    </article>
+  );
+}
+
+function ExportsCard({
+  controlState,
+  insights,
+  periodLabel,
+  planning,
+  transactions,
+}: {
+  controlState: PlanningControlState;
+  insights: InsightsResponse | null;
+  periodLabel: string;
+  planning: PlanningOverview | null;
+  transactions: TransactionsResponse | null;
+}) {
+  const rows = budgetRows(controlState, insights);
+  const exportTransactions = () => {
+    downloadCsv(
+      "transactions-export.csv",
+      ["date", "merchant", "account", "group", "type", "amount", "reviewed"],
+      (transactions?.transactions ?? []).map((transaction) => [
+        transaction.date,
+        transaction.merchant_name || transaction.description,
+        `${transaction.provider} ${transaction.account_name}`,
+        transaction.normalized_group,
+        transaction.transaction_type,
+        transaction.amount,
+        String(transaction.reviewed),
+      ]),
+    );
+  };
+  const exportBudget = () => {
+    downloadCsv(
+      "budget-export.csv",
+      ["period", "group", "planned", "actual", "remaining", "mode"],
+      rows.map((row) => [
+        periodLabel,
+        row.group,
+        row.plannedAmount.toFixed(2),
+        row.actualAmount.toFixed(2),
+        (row.plannedAmount - row.actualAmount).toFixed(2),
+        controlState.budgetMode,
+      ]),
+    );
+  };
+  const exportMonthlyReview = () => {
+    const review = planning?.monthly_review;
+    downloadCsv(
+      "monthly-review-export.csv",
+      ["start", "end", "income", "outflows", "net", "reviewed", "unreviewed", "decisions"],
+      review
+        ? [[
+            review.start_date,
+            review.end_date,
+            review.income_total,
+            review.outflow_total,
+            review.net_total,
+            String(review.reviewed_count),
+            String(review.unreviewed_count),
+            String(review.decision_count),
+          ]]
+        : [],
+    );
+  };
+  const exportReport = () => {
+    downloadCsv(
+      "report-summary-export.csv",
+      ["period", "group", "transactions", "inflow", "outflow", "net"],
+      (insights?.category_groups ?? []).map((group) => [
+        periodLabel,
+        group.group,
+        String(group.transaction_count),
+        group.inflow_total,
+        group.outflow_total,
+        group.net_total,
+      ]),
+    );
+  };
+
+  return (
+    <article className="card export-card">
+      <CardHeader title="Exports" subtitle="Download the current local view as CSV." />
+      <div className="export-button-grid">
+        <button onClick={exportTransactions} type="button">Transactions CSV</button>
+        <button onClick={exportBudget} type="button">Budget CSV</button>
+        <button onClick={exportMonthlyReview} type="button">Monthly review CSV</button>
+        <button onClick={exportReport} type="button">Report CSV</button>
+      </div>
+      <p className="fine-print">Exports use the currently loaded period, filters, and local planning settings.</p>
     </article>
   );
 }
@@ -3626,6 +4119,7 @@ function dayNumber(isoDate: string) {
 const planningControlStorageKey = "personal-finance-studio.phase-1-75-controls";
 
 const defaultPlanningControlState: PlanningControlState = {
+  budgetMode: "category",
   budgetRows: [
     { group: "debt", plannedAmount: 0 },
     { group: "fixed", plannedAmount: 0 },
@@ -3640,6 +4134,7 @@ const defaultPlanningControlState: PlanningControlState = {
   ],
   goals: [],
   merchants: [],
+  rollovers: [],
   rules: [
     {
       action: "fixed",
@@ -3649,6 +4144,8 @@ const defaultPlanningControlState: PlanningControlState = {
       tag: "Subscription",
     },
   ],
+  ruleApplications: [],
+  scenarios: [],
   tags: [
     { color: "#365bdc", id: "tag-tax", name: "Tax" },
     { color: "#2aaed1", id: "tag-reimburse", name: "Reimburse" },
@@ -3727,6 +4224,108 @@ function budgetTotals(
     plannedOutflow,
     remaining: plannedOutflow - actualOutflow,
   };
+}
+
+function spendingPlanTotals(
+  controlState: PlanningControlState,
+  insights: InsightsResponse | null,
+  upcoming: UpcomingCommitmentsResponse | null,
+  planning: PlanningOverview | null,
+) {
+  const totals = reportTotals(insights);
+  const obligations = Math.abs(Number(upcoming?.expected_total ?? 0));
+  const goalContributions =
+    controlState.goals.reduce((sum, goal) => sum + goal.monthlyContribution, 0) +
+    (planning?.goals ?? []).reduce((sum, goal) => sum + Number(goal.monthly_contribution), 0);
+  const flexibleActual = (insights?.category_groups ?? [])
+    .filter((group) => group.group === "flexible")
+    .reduce((sum, group) => sum + Math.abs(Number(group.outflow_total)), 0);
+  return {
+    flexibleActual,
+    goalContributions,
+    income: totals.income,
+    leftToSpend: totals.income - obligations - goalContributions - flexibleActual,
+    obligations,
+  };
+}
+
+function planScale(value: number, plan: ReturnType<typeof spendingPlanTotals>) {
+  const max = Math.max(plan.income, plan.obligations, plan.goalContributions, Math.abs(plan.leftToSpend), 1);
+  return Math.max(6, Math.min(100, (Math.abs(value) / max) * 100));
+}
+
+function ruleMatches(rule: RuleSetting, transactions: TransactionsResponse["transactions"]) {
+  const condition = rule.condition.trim().toLowerCase();
+  if (!condition) return [];
+  return transactions.filter((transaction) =>
+    `${transaction.merchant_name} ${transaction.description} ${transaction.source_category}`
+      .toLowerCase()
+      .includes(condition),
+  );
+}
+
+function transactionTypeForGroup(group: string, transaction: TransactionsResponse["transactions"][number]) {
+  if (group === "income") return "income";
+  if (group === "debt") return "debt_payment";
+  if (group === "transfer") return "internal_transfer_candidate";
+  if (group === "ignored") return "ignored";
+  return transaction.amount.startsWith("-") ? "spending" : "income";
+}
+
+function merchantDisplayName(sourceName: string, controlState?: PlanningControlState) {
+  const setting = controlState?.merchants.find((merchant) => merchant.sourceName === sourceName);
+  if (!setting || setting.ignored) return setting?.ignored ? "" : sourceName;
+  return setting.displayName.trim() || sourceName;
+}
+
+function mergedMerchants(
+  merchants: MerchantInsight[],
+  controlState?: PlanningControlState,
+): Array<{ label: string; transaction_count: number; value: number }> {
+  const groups = merchants.reduce<Record<string, { label: string; transaction_count: number; value: number }>>((acc, merchant) => {
+    const label = merchantDisplayName(merchant.merchant_name, controlState);
+    if (!label) return acc;
+    const existing = acc[label] ?? { label, transaction_count: 0, value: 0 };
+    existing.transaction_count += merchant.transaction_count;
+    existing.value += Math.abs(Number(merchant.outflow_total));
+    acc[label] = existing;
+    return acc;
+  }, {});
+  return Object.values(groups).sort((a, b) => b.value - a.value);
+}
+
+function mergedMerchantBreakdowns(
+  insights: InsightsResponse | null,
+  groupName: string,
+  controlState?: PlanningControlState,
+): Array<{ label: string; transaction_count: number; value: number }> {
+  const groups = (insights?.merchant_breakdowns ?? [])
+    .filter((merchant) => merchant.group === groupName)
+    .reduce<Record<string, { label: string; transaction_count: number; value: number }>>((acc, merchant) => {
+      const label = merchantDisplayName(merchant.merchant_name, controlState);
+      if (!label) return acc;
+      const existing = acc[label] ?? { label, transaction_count: 0, value: 0 };
+      existing.transaction_count += merchant.transaction_count;
+      existing.value += Math.abs(Number(merchant.outflow_total));
+      acc[label] = existing;
+      return acc;
+    }, {});
+  return Object.values(groups).sort((a, b) => b.value - a.value);
+}
+
+function downloadCsv(filename: string, headers: string[], rows: string[][]) {
+  const body = [headers, ...rows]
+    .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))
+    .join("\n");
+  const blob = new Blob([body], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }
 
 function merchantSettingsRows(controlState: PlanningControlState, insights: InsightsResponse | null): MerchantSetting[] {
@@ -4027,6 +4626,7 @@ function reportGroups(
   insights: InsightsResponse | null,
   groupBy: "category" | "merchant",
   view: "cash-flow" | "income" | "spending",
+  controlState?: PlanningControlState,
 ): ReportGroup[] {
   if (view === "income") {
     const income = (insights?.category_groups ?? []).find((group) => group.group === "income");
@@ -4056,14 +4656,15 @@ function reportGroups(
   }
 
   if (groupBy === "merchant") {
-    const topMerchants = (insights?.top_merchants ?? [])
+    const merged = mergedMerchants(insights?.top_merchants ?? [], controlState);
+    const topMerchants = merged
       .map((merchant, index) => ({
         children: [],
         color: paletteColor(index),
-        id: `merchant-${slugId(merchant.merchant_name)}`,
-        label: merchant.merchant_name,
+        id: `merchant-${slugId(merchant.label)}`,
+        label: merchant.label,
         transactionCount: merchant.transaction_count,
-        value: Math.abs(Number(merchant.outflow_total)),
+        value: merchant.value,
       }))
       .filter((group) => group.value > 0)
       .sort((a, b) => b.value - a.value)
@@ -4088,7 +4689,7 @@ function reportGroups(
   return (insights?.category_groups ?? [])
     .filter((group) => !["income", "transfer", "ignored"].includes(group.group))
     .map((group) => {
-      const children = merchantBreakdownForGroup(insights, group.group);
+      const children = merchantBreakdownForGroup(insights, group.group, controlState);
       return {
         children,
         color: categoryColor(group.group),
@@ -4103,15 +4704,18 @@ function reportGroups(
     .slice(0, 6);
 }
 
-function merchantBreakdownForGroup(insights: InsightsResponse | null, groupName: string): ReportGroupChild[] {
-  const merchants = (insights?.merchant_breakdowns ?? [])
-    .filter((merchant) => merchant.group === groupName)
+function merchantBreakdownForGroup(
+  insights: InsightsResponse | null,
+  groupName: string,
+  controlState?: PlanningControlState,
+): ReportGroupChild[] {
+  const merchants = mergedMerchantBreakdowns(insights, groupName, controlState)
     .map((merchant, index) => ({
       color: paletteColor(index),
-      id: `${groupName}-${slugId(merchant.merchant_name)}`,
-      label: merchant.merchant_name,
+      id: `${groupName}-${slugId(merchant.label)}`,
+      label: merchant.label,
       transactionCount: merchant.transaction_count,
-      value: Math.abs(Number(merchant.outflow_total)),
+      value: merchant.value,
     }))
     .filter((merchant) => merchant.value > 0)
     .sort((a, b) => b.value - a.value);

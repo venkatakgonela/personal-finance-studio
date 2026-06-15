@@ -7,8 +7,9 @@ ai-eos-metadata:
 
 # TASK-015: Phase 2 Household Expansion
 
-**Status:** Planned  
+**Status:** Complete locally  
 **Started:** 2026-06-15
+**Completed:** 2026-06-15
 
 ## Objective
 
@@ -60,14 +61,40 @@ Business entity imports and the local assistant are intentionally Phase 2.1, not
 
 ## Acceptance Criteria
 
-- [ ] Rule preview/apply/undo works without losing imported source values.
-- [ ] Merchant alias/merge/split controls affect display/report grouping without corrupting raw data.
-- [ ] Cashflow scenarios compare baseline and what-if outcomes.
-- [ ] Budget supports category, flexible, and rollover modes with auditable math.
-- [ ] Spending plan shows left-to-spend from income, bills, subscriptions, and goals.
-- [ ] CSV exports download useful filtered data.
-- [ ] Browser route health, layout overflow, and key Phase 2 flows are covered by E2E tests.
-- [ ] Backend and frontend quality gates pass.
+- [x] Rule preview/apply/undo works without losing imported source values.
+- [x] Merchant alias/merge/split controls affect display/report grouping without corrupting raw data.
+- [x] Cashflow scenarios compare baseline and what-if outcomes.
+- [x] Budget supports category, flexible, and rollover modes with auditable math.
+- [x] Spending plan shows left-to-spend from income, bills, subscriptions, and goals.
+- [x] CSV exports download useful filtered data.
+- [x] Browser route health, layout overflow, and key Phase 2 flows are covered by E2E tests.
+- [x] Backend and frontend quality gates pass.
+
+## Delivered
+
+- Added explicit rule impact preview, selected transaction apply, and latest-application undo in
+  Settings > Rules.
+- Added merchant display aliasing/merge, ignore/restore, and split-back-to-source behavior in
+  Settings > Merchants.
+- Updated Reports and Insights to use cleaned merchant display labels while preserving raw imported
+  transaction text.
+- Added flexible and rollover budget modes with rollover amount inputs and visible formulas.
+- Added Dashboard Spending Plan: income minus bills/subscriptions, savings goals, and flexible spend.
+- Added Cash Flow what-if scenarios with income/outflow adjustments and baseline comparison.
+- Added Reports export controls for transactions, budget, monthly review, and category reports.
+- Added backend normalization coverage so rule-applied group labels map to expected finance groups.
+
+## Validation
+
+Commands run successfully:
+
+```bash
+uv run pytest tests/test_phase2_household_expansion.py
+cd frontend && npm run lint
+cd frontend && npm run test -- --run
+cd frontend && npm run build
+cd frontend && npm run test:e2e -- --grep "phase 2 household|all primary routes"
+```
 
 ## Phase 2.1 Boundary
 
