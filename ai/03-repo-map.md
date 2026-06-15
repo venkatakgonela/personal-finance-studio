@@ -18,7 +18,8 @@ ai-eos-metadata:
 - `docker-compose.yml`: local PostgreSQL runtime.
 - `pyproject.toml`: Python project, dependencies, pytest and ruff configuration.
 - `alembic/`: database migration environment.
-- `ai/`: planning, architecture, specs, tasks, roadmap, and operational context.
+- `ai/`: planning, architecture, specs, tasks, roadmap, epics, features, agent profiles, context
+  packs, skills, run records, and operational context.
 
 ## Backend
 
@@ -57,6 +58,15 @@ ai-eos-metadata:
 - `tests/test_api.py`: FastAPI endpoint smoke, filter coverage, and imported-data reset coverage.
 - `tests/test_phase1_completion.py`: completion-slice regression coverage for transaction review, forecast, bill payment, insights, and Phase 1.5 planning overview.
 - `tests/test_phase2_household_expansion.py`: Phase 2 category normalization guard for rule-applied group labels.
+
+## AI-EOS Operating Context
+
+- `ai/epics/`: roadmap-level phase groupings derived from the charter, roadmap, specs, and backlog.
+- `ai/features/`: feature-level records mapped to epics, source tasks, acceptance criteria, and verification anchors.
+- `ai/agents/`: specialized agent role profiles for finance architecture, backend data, frontend product, and quality/release work.
+- `ai/context-packs/`: task-scoped context loading policies for default, backend-data, frontend-UI, product-planning, and Phase 2.1 work.
+- `ai/skills/`: reusable work-mode guidance for feature development, regression testing, database migration, UI changes, refactoring, and documentation.
+- `ai/runs/`: run templates and execution records, including the AI-EOS alignment run.
 
 ## Generated/Ignored Runtime Areas
 

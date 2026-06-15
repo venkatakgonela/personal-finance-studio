@@ -1,0 +1,13 @@
+# ai-eos-metadata:
+#   purpose: "Agent run configuration settings"
+#   how_to_use: "Read by agent runners to execute tasks and load context packs"
+#   generated_by: "Genesis"
+#   regeneration: "Skipped by default. Overwritten only with --force."
+
+id: "RUN-001"
+name: "Personal Finance Studio maintenance run"
+goal: "Use task-scoped context, preserve local-first finance boundaries, and run relevant quality gates."
+agent_role: "Codex implementation agent"
+context_pack: "ai/context-packs/context-pack-default.md"
+tasks:
+  - "ai/tasks/TASK-000-template.md"

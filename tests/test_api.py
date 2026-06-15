@@ -52,7 +52,9 @@ def test_snoop_commit_endpoint(api_client, db_session: Session) -> None:
     assert payload["created_account_count"] == 2
 
 
-def test_reset_imported_data_endpoint_clears_finance_records(api_client, db_session: Session) -> None:
+def test_reset_imported_data_endpoint_clears_finance_records(
+    api_client, db_session: Session
+) -> None:
     client = TestClient(api_client)
 
     with (FIXTURES / "snoop_minimal.csv").open("rb") as csv_file:
