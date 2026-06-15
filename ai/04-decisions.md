@@ -27,6 +27,10 @@ ai-eos-metadata:
 | ADR-014 | Use local-first editable planning preferences for Phase 1.75 | Accepted | 2026-06-15 |
 | ADR-015 | Split Phase 2 household expansion from Phase 2.1 business and assistant work | Accepted | 2026-06-15 |
 | ADR-016 | Move dense finance explanations into contextual help tooltips | Accepted | 2026-06-15 |
+| ADR-017 | Model overdraft capacity separately from liabilities | Accepted | 2026-06-15 |
+| ADR-018 | Implement FreeAgent as read-only manual-token integration first | Accepted | 2026-06-15 |
+| ADR-019 | Keep dashboard fact-led and move assumption editing to Budget | Accepted | 2026-06-15 |
+| ADR-020 | Use library-backed dashboard sorting and lightweight transitions | Accepted | 2026-06-15 |
 
 ## ADR-001 - Use Entity-Scoped Household and Business Model
 
@@ -158,3 +162,31 @@ ai-eos-metadata:
 - **Consequences**: Screens stay calmer and less crowded while still explaining finance semantics.
   Tooltip buttons must use neutral accessible names so they do not interfere with form labels or
   action buttons, and tooltip stacking/placement becomes part of the design-system regression scope.
+
+## ADR-017 - Model Overdraft Capacity Separately From Liabilities
+
+- **Status**: Accepted
+- **Context**: UK current accounts can have authorized overdrafts. A negative balance is a liability, but the unused overdraft can still be available capacity for bill payments. Treating the negative balance as purely unavailable understated short-term payment capacity; treating it as cash ignored liability.
+- **Decision**: Add `accounts.overdraft_limit` and centralize account math in `app/services/account_balances.py`. `available_for_bills = max(current_balance + overdraft_limit, 0)` for cash-style accounts, while `liability_balance` remains the absolute negative balance. Credit cards, loans, and BNPL remain liabilities and do not contribute bill-payment capacity.
+- **Consequences**: Dashboard Cash Position and planning goals can use available capacity without hiding debt. Accounts UI must show both "Available" and "Liability" so the user sees the tradeoff.
+
+## ADR-018 - Implement FreeAgent As Read-Only Manual-Token Integration First
+
+- **Status**: Accepted
+- **Context**: FreeAgent provides bank accounts and bank transactions through OAuth, but full browser callback/token exchange adds extra security and UX complexity. The user can validate the API using Postman/OAuth Playground first.
+- **Decision**: Implement a read-only manual-token phase: encrypted local credential storage, status/validation endpoints, bank account listing, selected-account date-range import, incremental cursor support, provider-tagged transaction dedupe, and production/sandbox/custom API modes. Do not upload, delete, or mutate FreeAgent data.
+- **Consequences**: The app can ingest live FreeAgent bank data now while preserving a safe boundary. Refresh token is optional and distinct from access token. Full OAuth callback, token refresh UX, and import preview remain future hardening work.
+
+## ADR-019 - Keep Dashboard Fact-Led And Move Assumption Editing To Budget
+
+- **Status**: Accepted
+- **Context**: The Spending Plan card initially exposed many planning assumptions directly on Dashboard. That made the Dashboard a workbench, consumed prime real estate, and risked confusing cash facts with planning scenarios.
+- **Decision**: Dashboard shows fact-led summaries only: Cash Position, Safe to Spend, period surplus evidence, bills, activity, review, and risk. Assumption editing for income changes, one-off exclusions, lifestyle allowance, known costs, safety buffer, and lookback baseline lives on Budget.
+- **Consequences**: Dashboard remains calm and decision-oriented. Budget owns scenario/assumption work. Safe to Spend is cash-capped and should never imply that period surplus is immediately spendable.
+
+## ADR-020 - Use Library-Backed Dashboard Sorting And Lightweight Transitions
+
+- **Status**: Accepted
+- **Context**: A hand-rolled widget drag system was functional but not smooth enough for a dashboard. Large, uneven cards caused visual smearing and unpredictable reorder behavior.
+- **Decision**: Use `@dnd-kit/core`, `@dnd-kit/sortable`, and `@dnd-kit/utilities` for dashboard widget sorting with `DragOverlay`, keyboard/pointer sensors, always-on measuring, and grid swap behavior. Use `@formkit/auto-animate` for small list/collapsible transitions. Do not adopt heavy UI/chart libraries until a route requires a broader rewrite.
+- **Consequences**: Dashboard personalization has smoother motion, better accessibility, and less custom drag code. Bundle size increases modestly. Performance and regressions must be checked with browser smoke tests for overlay presence, reorder completion, and overflow.

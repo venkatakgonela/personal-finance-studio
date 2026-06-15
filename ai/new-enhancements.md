@@ -18,7 +18,7 @@ ai-eos-metadata:
 | Settings backup/restore export | Local-first preferences need a way to be backed up and moved between browsers/devices. | Phase 2.1 |
 | Guided first-run checklist | Import, balances, decisions, budget, and dashboard trust could be presented as a single onboarding journey. | Phase 2.1 |
 | Data quality score | A single confidence score based on freshness, balances, unreviewed transactions, open decisions, and stale commitments would help users know whether to trust numbers. | Phase 2.1 |
-| FreeAgent read-only bank data fetch | Fetch Business bank account balances and bank transactions from FreeAgent via OAuth as a sandbox-first integration before wider Open Banking work. | Phase 3 |
+| FreeAgent OAuth hardening | Manual-token FreeAgent import works; full browser OAuth callback, token refresh UX, sync-health detail, and pre-commit preview remain. | Phase 3 |
 | Bank/Open Banking integration evaluation | CSV import is useful but manual. Optional Open Banking could reduce effort if privacy/consent is acceptable. | Phase 3 |
 
 ## Product Enhancements
@@ -32,7 +32,8 @@ ai-eos-metadata:
 
 ### Data Import
 
-- Add FreeAgent sandbox-first OAuth integration for read-only Business bank account balances and bank transactions.
+- Add full FreeAgent browser OAuth callback and automatic refresh-token flow.
+- Add FreeAgent pre-commit preview with row counts, date range, duplicate count, and selected account confirmation before import.
 - Add import history with rollback for the latest import batch.
 - Add CSV mapping UI for non-Snoop formats.
 - Add duplicate import explanation page with skipped/duplicate transaction details.
@@ -46,6 +47,7 @@ ai-eos-metadata:
 - Add account grouping for cash, savings, credit, loans, BNPL, investments, and ignored accounts.
 - Add balance history chart per account.
 - Add "needs balance review" filter.
+- Add overdraft review reminders when account balance is negative and the overdraft limit is absent/stale.
 
 ### Transactions
 
@@ -74,6 +76,7 @@ ai-eos-metadata:
 - Add envelope-style allocation for flexible spending.
 - Add yearly budget view and month-by-month comparison.
 - Add budget alerts when actual spend crosses a threshold.
+- Promote safe-spend assumptions from localStorage to server-backed preferences once backup/restore or multi-device persistence is needed.
 
 ### Goals And Sinking Funds
 
@@ -112,6 +115,7 @@ ai-eos-metadata:
 - Add report annotations.
 - Add compare periods: this month vs last month, this year vs last year.
 - Add drill-through from Sankey nodes to filtered transactions.
+- Consider Recharts/Nivo only when chart interactivity requirements exceed current D3/SVG implementation; avoid broad chart rewrites for cosmetic-only changes.
 
 ### Settings And Rules
 
@@ -121,6 +125,8 @@ ai-eos-metadata:
 - Add merchant alias conflict detection.
 - Add category hierarchy and custom icons/colors.
 - Add tag transaction counts and tag-filter drilldowns.
+- Add dashboard layout export/import when local preferences remain browser-scoped.
+- Add dashboard widget sizing/resizing only if fixed widget ordering is no longer enough; prefer keeping cards content-driven until a clear resizing need exists.
 
 ### Local Assistant
 
@@ -151,9 +157,10 @@ ai-eos-metadata:
 ## Product Risks To Track
 
 - Local-first preferences can be lost if browser storage is cleared.
+- Dashboard layout, custom widgets, budget assumptions, goals, rules, merchants, tags, and rollovers are browser-local until server-backed preferences are implemented.
 - Business context is visible but not yet data-isolated.
 - CSV imports require users to obtain/export data manually.
-- Forecast quality depends on current balances and recurring bill detection.
+- Forecast quality depends on current balances, overdraft limits, recurring bill detection, and explicit safe-spend assumptions.
 - Dashboard arithmetic can feel inconsistent unless every metric clearly states its date window.
 - Reports are only as good as transaction classification and merchant cleanup.
 
@@ -165,7 +172,7 @@ ai-eos-metadata:
 4. Date-window-aware dashboard summary.
 5. Guided first-run onboarding.
 6. Data quality score.
-7. Bill editing and reminder workflow.
-8. Split transactions and bulk transaction editing.
-9. Longer-range cashflow projections.
-10. Read-only local assistant.
+7. FreeAgent OAuth callback/refresh and import preview hardening.
+8. Bill editing and reminder workflow.
+9. Split transactions and bulk transaction editing.
+10. Longer-range cashflow projections.

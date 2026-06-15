@@ -29,14 +29,23 @@ ai-eos-metadata:
   `updated_since`.
 - [x] Transaction fetch is read-only and never uploads, deletes, explains, or mutates FreeAgent data.
 - [x] FreeAgent records are provider-tagged and deduplicated independently from Snoop imports.
+- [x] UI masks client secret, access token, and refresh token by default and explains that refresh token is optional but distinct from access token.
+- [x] Access/refresh token values are normalized when users paste `Bearer ...` or header-shaped values.
 - [ ] Full browser OAuth callback and token exchange are not implemented yet; this phase uses manually obtained tokens.
 - [ ] Pre-commit transaction preview is not implemented yet; the UI asks account/date/incremental questions before import.
+- [ ] Automatic token refresh UX is not implemented yet.
 
 ## 3. Source Artifacts
 
 - [SPEC-004: FreeAgent Bank Data Fetch](file:///ai/specs/SPEC-004-freeagent-bank-data-fetch.md)
 - [TASK-016: Plan FreeAgent Bank Data Fetch](file:///ai/tasks/TASK-016-plan-freeagent-bank-data-fetch.md)
 - [Context Pack: FreeAgent API](file:///ai/context-packs/context-pack-freeagent-api.md)
+- `app/routes/freeagent.py`
+- `app/services/freeagent_client.py`
+- `app/services/freeagent_import.py`
+- `app/services/secret_store.py`
+- `app/models/integration.py`
+- `frontend/src/App.tsx` FreeAgent route/card
 - [FreeAgent Quick Start](https://dev.freeagent.com/docs/quick_start)
 - [FreeAgent OAuth](https://dev.freeagent.com/docs/oauth)
 - [FreeAgent Bank Accounts](https://dev.freeagent.com/docs/bank_accounts)

@@ -12,6 +12,7 @@ ai-eos-metadata:
 - **Entity**: A separate financial universe, such as Household or Business.
 - **Profile**: A person or role inside an entity, such as primary user, spouse, child, or director.
 - **Account**: A bank account, savings pot, credit card, loan, BNPL account, or other financial container.
+- **Overdraft Limit**: Authorized current-account borrowing capacity. It can increase short-term payment capacity but does not erase the liability created by a negative balance.
 - **Transaction**: Imported or manually entered money movement.
 - **Internal Transfer**: Movement between owned accounts that should not count as spending or income.
 - **Commitment**: A recurring or planned obligation, such as bill, subscription, credit-card payment, loan payment, BNPL installment, or annual cost.
@@ -19,6 +20,9 @@ ai-eos-metadata:
 - **Flexible Spend**: Money available for variable categories such as groceries, eating out, shopping, fuel, and adhoc spending.
 - **Sinking Fund**: Money set aside over time for non-monthly costs such as car insurance, school costs, Christmas, MOT, or annual subscriptions.
 - **Decision Queue**: A small list of high-impact confirmations that improve forecast accuracy.
+- **Safe To Spend**: A cash-capped planning number. It is the lower of current available cash capacity and assumption-adjusted period surplus.
+- **Period Surplus**: Selected-period income minus tracked/planned outflows. It is evidence, not automatically spendable cash.
+- **Integration Connection**: Locally stored external API configuration and encrypted OAuth material, currently used for FreeAgent.
 
 ## 2. Core Entities
 
@@ -47,6 +51,7 @@ ai-eos-metadata:
 - `source_account_name`
 - `account_type`: `current`, `savings`, `pot`, `credit_card`, `loan`, `bnpl`, `unknown`
 - `current_balance`
+- `overdraft_limit`
 - `balance_as_of`
 - `include_in_cash_on_hand`
 - `include_in_forecast`
@@ -69,6 +74,30 @@ ai-eos-metadata:
 - `transaction_type`: `spending`, `income`, `internal_transfer`, `debt_payment`, `refund`, `ignored`, `needs_review`
 - `fingerprint`
 - `import_id`
+
+FreeAgent-imported transactions are normalized into the same transaction table but remain provider-tagged through source/provider metadata and fingerprints so they can dedupe independently from Snoop CSV imports.
+
+### Integration Connection
+
+- `id`
+- `provider`: e.g. `freeagent`
+- `environment`: `production`, `sandbox`, or `custom`
+- `base_url`
+- `auth_url`
+- `token_url`
+- `client_id`
+- `encrypted_client_secret`
+- `encrypted_access_token`
+- `encrypted_refresh_token`
+- `status`
+- `validation_message`
+- `company_name`
+- `company_url`
+- `selected_bank_account_url`
+- `selected_bank_account_name`
+- `sync_cursor_updated_since`
+- `last_validated_at`
+- `last_synced_at`
 
 ### Category
 
@@ -158,7 +187,12 @@ erDiagram
 - Household-level bills should use `owner_profile_id = null` and `shared_scope = household`.
 - Credit limits are not available money.
 - Loans and BNPL are liabilities, not cash.
+- Authorized overdraft on current accounts can count toward available bill-payment capacity, but negative balances still create liabilities.
+- Credit cards, loans, and BNPL must never be counted as cash availability, even if they have an available credit limit.
 - Internal transfers are excluded from spending and income reports but remain visible in account history.
 - Available money must distinguish cash on hand from available after commitments.
+- Dashboard Safe To Spend must be capped by cash capacity and should not equal period surplus unless cash capacity also supports it.
+- Planning assumptions belong to Budget, while Dashboard displays concise fact-led summaries and links to assumption tuning.
 - Variable commitments must retain actual payment history and show estimates as estimates.
 - Annual and irregular commitments must be supported for sinking-fund planning.
+- OAuth tokens and client secrets must be encrypted at rest and never displayed unmasked by default.

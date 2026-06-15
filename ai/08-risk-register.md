@@ -7,7 +7,7 @@ ai-eos-metadata:
 
 # Risk Register - Personal Finance Studio
 
-**Last reviewed:** 2026-06-14
+**Last reviewed:** 2026-06-15
 
 | Risk | Impact | Mitigation | Current Status |
 |---|---|---|
@@ -21,5 +21,8 @@ ai-eos-metadata:
 | LLM gives incorrect finance answer | Bad decisions | Keep LLM out of Phase 1; future LLM uses deterministic query results | Mitigated by deferral |
 | Frontend runs while backend is down | User sees `Failed to fetch` and tests miss it | E2E checks FastAPI health before UI tests | Mitigated in Playwright config |
 | Filters silently stop working | Ledger/reporting becomes misleading | Backend API filter tests and Playwright filter tests | Mitigated for current transaction filters |
-| FreeAgent OAuth tokens leak | External finance data exposed | Store tokens only in approved local secret storage, never log tokens or Authorization headers, and keep sandbox-first development | Planned for Phase 3 |
-| FreeAgent Business data mixes into Household views | Reporting and privacy errors | Entity-scope all FreeAgent records to Business and keep preview-only until Business scoping is confirmed | Planned for Phase 3 |
+| FreeAgent OAuth tokens leak | External finance data exposed | Encrypt tokens/client secret at rest, mask sensitive UI fields, strip bearer prefixes, never log Authorization headers, keep `.gitignore` coverage for key files | Partially mitigated; manual-token phase implemented |
+| FreeAgent Business data mixes into Household views | Reporting and privacy errors | Entity-scope all FreeAgent records; keep Business context backend isolation as Phase 2.1 before broad Business use | Partially mitigated; records are entity-scoped but Business UI/data isolation remains future work |
+| Overdraft capacity gives false confidence | User spends beyond safe headroom | Show available capacity and liability separately; Safe to Spend is cash-capped and assumptions live on Budget | Partially mitigated; requires user-entered overdraft limit and safety buffer discipline |
+| Dashboard widget preferences are lost | User loses custom layout/widgets | Keep layout local-first for now; add server-backed preferences and backup/restore in Phase 2.1/3 | Open |
+| Motion reduces accessibility or performance | UI feels distracting or hard to use | Use reduced-motion CSS, lightweight auto-animate, and browser smoke tests for overflow/drag behavior | Partially mitigated |

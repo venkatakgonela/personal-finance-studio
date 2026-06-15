@@ -7,19 +7,21 @@ ai-eos-metadata:
 
 # EPIC-004: Integrations And Hardening
 
-**Status:** Not Started  
+**Status:** Started  
 **Owner:** Kiran Gonela  
 **Roadmap source:** [Phase 3 - Integrations](file:///ai/roadmap/ROADMAP.md)
 
 ## 1. Description
 
-Evaluate optional Open Banking, sync health, backup/restore, longer-range planning, packaging, and
-advanced reliability controls after the local-first household and business foundations are stable.
+Evaluate optional Open Banking, FreeAgent hardening, sync health, backup/restore, longer-range planning,
+packaging, and advanced reliability controls after the local-first household and business foundations
+are stable. The first FreeAgent read-only manual-token import slice is implemented; full OAuth and
+sync hardening remain.
 
 ## 2. Included Features
 
 - [ ] [FEATURE-009: Open Banking And Sync Evaluation](file:///ai/features/FEATURE-009-open-banking-and-sync-evaluation.md)
-- [ ] [FEATURE-010: FreeAgent Bank Data Fetch](file:///ai/features/FEATURE-010-freeagent-bank-data-fetch.md)
+- [x] [FEATURE-010: FreeAgent Bank Data Fetch](file:///ai/features/FEATURE-010-freeagent-bank-data-fetch.md) - manual-token import phase
 
 ## 3. Source Artifacts
 
@@ -33,5 +35,7 @@ advanced reliability controls after the local-first household and business found
 
 - Keep Open Banking optional and explicitly approved.
 - Keep FreeAgent integration read-only until explicit import/commit approval.
+- Keep OAuth tokens encrypted and masked; never commit local key material.
+- Keep manual-token FreeAgent phase separated from full OAuth callback/refresh hardening.
 - Preserve local-first privacy defaults.
 - Add observability and auditability before expanding automated data flows.

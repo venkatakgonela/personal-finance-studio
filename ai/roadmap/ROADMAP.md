@@ -8,7 +8,7 @@ ai-eos-metadata:
 # Project Roadmap - Personal Finance Studio
 
 **Last reviewed:** 2026-06-15
-**Current phase:** Phase 2 household expansion implemented locally; Phase 2.1 is next.
+**Current phase:** Phase 2 household expansion plus selected Phase 3 integration hardening implemented locally; Phase 2.1 and remaining integration hardening are next.
 
 ## Milestones
 
@@ -18,9 +18,9 @@ ai-eos-metadata:
 | Phase 1 | Household Snoop import, transactions, transfers, commitments, forecast, dashboard | Complete locally |
 | Phase 1.5 | Goals foundation, monthly review, richer reports, subscription review | Complete locally |
 | Phase 1.75 | Editable planning control plane: goals, budgets, taxonomy/rules, import center, richer dashboard/cashflow | Complete locally |
-| Phase 2 | Rule application, merchant cleanup, scenarios, budget modes, spending plan, exports | Complete locally |
+| Phase 2 | Rule application, merchant cleanup, scenarios, budget modes, spending plan, dashboard personalization, exports | Complete locally |
 | Phase 2.1 | Business entity imports, Tide/NatWest CSV, local LLM assistant | Not Started |
-| Phase 3 | Optional Open Banking, sync health, advanced planning | Not Started |
+| Phase 3 | Optional Open Banking, FreeAgent hardening, sync health, advanced planning | Started |
 
 ## Phase 1 - Household Control Center
 
@@ -131,6 +131,8 @@ imported transactions, commitments, accounts, or explicit user-entered plan valu
 - [x] PocketSmith-style cashflow scenario planning: what-if income/outflow changes, long-range projections, and scenario comparison.
 - [x] Monarch-style budget modes: category budgeting, flexible budgeting, rollover handling, and shared household review.
 - [x] Simplifi-style spending plan: income minus bills, subscriptions, savings goals, and left-to-spend.
+- [x] Cash-constrained Safe to Spend: dashboard headline capped by account/overdraft capacity, with assumptions edited on Budget.
+- [x] Dashboard personalization: local widget order, visibility, custom widgets, Settings > Dashboard customization, and `dnd-kit` sortable grid.
 - [x] Exportable reports and CSV exports for budget, transactions, and monthly review.
 
 ## Phase 2 Completion Notes
@@ -145,6 +147,12 @@ imported transactions, commitments, accounts, or explicit user-entered plan valu
   formulas, responsive row spacing, and no hidden/clipped values on narrower dashboard widths.
 - Dashboard includes a Spending Plan card that explains left-to-spend as income minus obligations,
   savings goals, and flexible actuals.
+- Dashboard now shows Safe to Spend as a cash-capped summary and treats period surplus as evidence.
+  Income/job-change/known-cost/buffer assumptions live in Budget to keep Dashboard concise.
+- Dashboard cards are local-first widgets. Users can reorder with `dnd-kit`, hide/show cards, add
+  custom widgets, and reset layout from Settings > Dashboard.
+- Small collapsibles and compact lists use `@formkit/auto-animate` for lower-friction transitions
+  while preserving reduced-motion safety.
 - Dashboard semantics now separate Cash Position, Spending Plan, Period Activity, Planning Risk, and
   Review Actions so balances, selected-period activity, and forecast/review work are not mixed.
 - Shared help tooltips now explain card headers and important metrics across primary routes, with
@@ -169,7 +177,9 @@ imported transactions, commitments, accounts, or explicit user-entered plan valu
 
 ## Phase 3 - Integrations
 
-- FreeAgent API read-only bank account balance and transaction fetch evaluation.
+- [x] FreeAgent API read-only bank account balance and transaction fetch, manual-token phase.
+- [ ] FreeAgent full browser OAuth callback/token exchange and automatic refresh.
+- [ ] FreeAgent pre-commit import preview and richer sync health.
 - Open Banking provider evaluation.
 - Connection freshness dashboard.
 - Optional cross-device/cloud strategy if explicitly approved.
