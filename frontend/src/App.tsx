@@ -19,6 +19,7 @@ import {
   useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { useAutoAnimate } from "@formkit/auto-animate/react";
 import {
   sankey as createSankey,
   sankeyLinkHorizontal,
@@ -5338,12 +5339,17 @@ function CompactList({
   rows: Array<{ title: string; meta: string; amount: string; action?: ReactNode }>;
   empty: string;
 }) {
+  const [parent] = useAutoAnimate<HTMLDivElement>({
+    duration: 180,
+    easing: "ease-out",
+  });
+
   if (rows.length === 0) {
     return <p className="empty-copy">{empty}</p>;
   }
 
   return (
-    <div className="compact-list">
+    <div className="compact-list" ref={parent}>
       {rows.map((row) => (
         <div className="compact-row" key={`${row.title}-${row.meta}-${row.amount}`}>
           <div>
@@ -5370,8 +5376,13 @@ function CollapsibleBlock({
   title: string;
 }) {
   const [open, setOpen] = useState(defaultOpen);
+  const [parent] = useAutoAnimate<HTMLElement>({
+    duration: 180,
+    easing: "ease-out",
+  });
+
   return (
-    <section className="collapsible-block">
+    <section className="collapsible-block" ref={parent}>
       <button
         aria-expanded={open}
         className="collapsible-block-header"
