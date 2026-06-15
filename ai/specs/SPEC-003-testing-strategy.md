@@ -1,6 +1,6 @@
 # SPEC-003: Testing Strategy
 
-**Author:** Kiran Gonela / Codex  
+**Author:** Product owner / Codex  
 **Status:** Phase 2 implemented locally
 **Date:** 2026-06-15
 

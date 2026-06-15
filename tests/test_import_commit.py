@@ -17,14 +17,14 @@ def test_commit_snoop_csv_creates_household_accounts_and_transactions(
     result = commit_snoop_csv(contents, source_filename="snoop_minimal.csv", session=db_session)
 
     assert result.entity_name == "Household"
-    assert result.profile_name == "Kiran"
+    assert result.profile_name == "Primary user"
     assert result.row_count == 5
     assert result.imported_transaction_count == 5
     assert result.skipped_duplicate_count == 0
     assert result.created_account_count == 2
 
     assert db_session.scalar(select(Entity).where(Entity.name == "Household")) is not None
-    assert db_session.scalar(select(Profile).where(Profile.name == "Kiran")) is not None
+    assert db_session.scalar(select(Profile).where(Profile.name == "Primary user")) is not None
     assert len(db_session.scalars(select(Account)).all()) == 2
     assert len(db_session.scalars(select(Transaction)).all()) == 5
     assert len(db_session.scalars(select(ImportLog)).all()) == 1

@@ -7,7 +7,7 @@ ai-eos-metadata:
 
 # Project Charter - Personal Finance Studio
 
-**Owner:** Kiran Gonela  
+**Owner:** Product owner  
 **Type:** Local-first finance app
 **Current Status:** Phase 2 Household Expansion is implemented locally; Phase 2.1 business/assistant expansion is next.
 
@@ -64,10 +64,10 @@ The product should answer, clearly and calmly:
 
 ## 5. Users
 
-- Primary user: Kiran, managing household finances.
+- Primary user: an individual managing household finances.
 - Future users/profiles: spouse, kids, household-level ownership, business entity.
 
 ## 6. Stakeholders
 
-- Product Owner: Kiran Gonela
+- Product Owner: Household finance product owner
 - Technical Lead: Codex-assisted development

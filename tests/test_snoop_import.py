@@ -29,8 +29,8 @@ def test_preview_detects_accounts_and_suggested_credit_card_type() -> None:
     preview = preview_snoop_csv(contents, source_filename="snoop_minimal.csv")
 
     accounts = {(account.provider, account.name): account for account in preview.accounts}
-    assert accounts[("HSBC Personal", "GONELA V S K")].transaction_count == 4
-    assert accounts[("Barclays Personal Banking", "20574483475794")].transaction_count == 1
+    assert accounts[("HSBC Personal", "Household Current")].transaction_count == 4
+    assert accounts[("Barclays Personal Banking", "Household Savings")].transaction_count == 1
 
 
 def test_preview_normalizes_snoop_categories_into_planning_groups() -> None:

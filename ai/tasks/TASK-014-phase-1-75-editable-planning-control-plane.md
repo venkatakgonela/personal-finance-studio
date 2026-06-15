@@ -97,7 +97,7 @@ proves useful.
 - Added budget planned/actual/remaining table and summary totals using backend insight actuals.
 - Added Settings workbench sections for Categories, Merchants, Rules, Tags, Data, and System Status.
 - Replaced passive topbar `Local data` label with an `Import data` action, then moved lower-frequency
-  Import and Settings access into the bottom-left Kiran/Household menu to reduce sidebar noise.
+  Import and Settings access into the bottom-left Workspace/Household menu to reduce sidebar noise.
 - Added Dashboard Planning Snapshot.
 - Added Cash Flow Plan with projected ending cash, lowest point, cash pressure, and dated events.
 - Added Phase 1.75 E2E coverage.
@@ -108,7 +108,7 @@ proves useful.
   form, and navigation rhythm as the rest of the app.
 - Normalized Settings creation buttons (`Create category`, `Create rule`, `New tag`) to the same
   compact primary action style.
-- Added profile menu chevron state so the bottom-left Kiran/Household control visibly opens and closes.
+- Added profile menu chevron state so the bottom-left Workspace/Household control visibly opens and closes.
 
 ## Validation
 

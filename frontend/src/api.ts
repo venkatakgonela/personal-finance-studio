@@ -207,7 +207,7 @@ export type DashboardSummary = {
   available_after_commitments: string | null;
   flexible_spend_remaining: string | null;
   flexible_spend_actual: string;
-  flexible_spend_allowance: string;
+  flexible_spend_allowance: string | null;
   lowest_projected_balance: string | null;
   cash_balance_account_count: number;
   missing_balance_account_count: number;

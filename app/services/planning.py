@@ -135,6 +135,15 @@ def planning_goals(
     review: MonthlyReviewSummary,
 ) -> list[PlanningGoal]:
     cash_on_hand = known_cash_on_hand(session, entity_id)
+    has_planning_evidence = bool(commitments) or cash_on_hand > 0 or (
+        Decimal(review.income_total) != Decimal("0.00")
+        or Decimal(review.outflow_total) != Decimal("0.00")
+        or review.reviewed_count > 0
+        or review.unreviewed_count > 0
+    )
+    if not has_planning_evidence:
+        return []
+
     fixed_monthly = sum(
         (
             monthly_equivalent(commitment)

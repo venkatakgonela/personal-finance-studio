@@ -45,7 +45,7 @@ def test_snoop_commit_endpoint(api_client, db_session: Session) -> None:
     assert response.status_code == 200
     payload = response.json()
     assert payload["entity_name"] == "Household"
-    assert payload["profile_name"] == "Kiran"
+    assert payload["profile_name"] == "Primary user"
     assert payload["imported_transaction_count"] == 5
     assert payload["created_account_count"] == 2
 

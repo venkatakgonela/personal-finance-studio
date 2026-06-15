@@ -177,7 +177,7 @@ const navItems = routeItems.filter((item) => item.route !== "import" && item.rou
 type RouteId = (typeof routeItems)[number]["route"];
 
 const pageTitles: Record<RouteId, { eyebrow: string; title: string }> = {
-  dashboard: { eyebrow: "Household workspace", title: "Good day, Kiran." },
+  dashboard: { eyebrow: "Household workspace", title: "Good day." },
   accounts: { eyebrow: "Accounts", title: "Review balances and account roles." },
   transactions: { eyebrow: "Transactions", title: "Understand where the money moved." },
   "cash-flow": { eyebrow: "Cash flow", title: "See what is coming next." },
@@ -761,9 +761,9 @@ function Sidebar({ currentRoute }: { currentRoute: RouteId }) {
           onClick={() => setMenuOpen((open) => !open)}
           type="button"
         >
-          <span>K</span>
+          <span>W</span>
           <div>
-            <strong>Kiran</strong>
+            <strong>Workspace</strong>
             <small>{entityContext === "household" ? "Household" : "Business preview"}</small>
           </div>
           <b className="profile-chevron" aria-hidden="true" />
@@ -3665,6 +3665,8 @@ function PlanningSnapshotCard({
   const totals = budgetTotals(rows, insights);
   const customGoal = controlState.goals[0];
   const derivedGoal = planning?.goals[0];
+  const hasBudgetPlan = rows.some((row) => row.plannedAmount > 0 || Math.abs(row.actualAmount) > 0);
+  const hasGoals = controlState.goals.length > 0 || (planning?.goals.length ?? 0) > 0;
   const monthlySetAside =
     controlState.goals.reduce((sum, goal) => sum + goal.monthlyContribution, 0) +
     (planning?.goals ?? []).reduce((sum, goal) => sum + Number(goal.monthly_contribution), 0);
@@ -3678,40 +3680,46 @@ function PlanningSnapshotCard({
   return (
     <article className="card planning-snapshot-card">
       <CardHeader title="Budget & Goals" subtitle="Planned spending and savings progress." />
-      <div className="planning-snapshot-grid">
-        <div className="snapshot-row snapshot-row-budget-used">
-          <div>
-            <span>Budget used</span>
-            <small>
-              {totals.plannedOutflow > 0
-                ? `${money(String(totals.actualOutflow))} of ${money(String(totals.plannedOutflow))}`
-                : "Create a budget to track usage"}
-            </small>
+      {hasBudgetPlan || hasGoals ? (
+        <div className="planning-snapshot-grid">
+          <div className="snapshot-row snapshot-row-budget-used">
+            <div>
+              <span>Budget used</span>
+              <small>
+                {totals.plannedOutflow > 0
+                  ? `${money(String(totals.actualOutflow))} of ${money(String(totals.plannedOutflow))}`
+                  : "Create a budget to track usage"}
+              </small>
+            </div>
+            <strong className={budgetUsedPercent > 100 ? "negative-text" : ""}>{budgetUsedPercent}%</strong>
           </div>
-          <strong className={budgetUsedPercent > 100 ? "negative-text" : ""}>{budgetUsedPercent}%</strong>
-        </div>
-        <div className="snapshot-row">
-          <div>
-            <span>Remaining</span>
-            <small>{totals.remaining >= 0 ? "Still available in budget" : "Over planned budget"}</small>
+          <div className="snapshot-row">
+            <div>
+              <span>Remaining</span>
+              <small>{totals.remaining >= 0 ? "Still available in budget" : "Over planned budget"}</small>
+            </div>
+            <strong className={totals.remaining >= 0 ? "positive-text" : "negative-text"}>{money(String(totals.remaining))}</strong>
           </div>
-          <strong className={totals.remaining >= 0 ? "positive-text" : "negative-text"}>{money(String(totals.remaining))}</strong>
-        </div>
-        <div className="snapshot-row">
-          <div>
-            <span>Primary goal</span>
-            <small>{customGoal?.name ?? derivedGoal?.name ?? "Create a savings target"}</small>
+          <div className="snapshot-row">
+            <div>
+              <span>Primary goal</span>
+              <small>{customGoal?.name ?? derivedGoal?.name ?? "Create a savings target"}</small>
+            </div>
+            <strong>{goalProgressValue.toFixed(0)}%</strong>
           </div>
-          <strong>{goalProgressValue.toFixed(0)}%</strong>
-        </div>
-        <div className="snapshot-row">
-          <div>
-            <span>Monthly set-aside</span>
-            <small>{goalCount} active {goalCount === 1 ? "goal" : "goals"}</small>
+          <div className="snapshot-row">
+            <div>
+              <span>Monthly set-aside</span>
+              <small>{goalCount} active {goalCount === 1 ? "goal" : "goals"}</small>
+            </div>
+            <strong>{monthlySetAside ? money(String(monthlySetAside)) : "-"}</strong>
           </div>
-          <strong>{monthlySetAside ? money(String(monthlySetAside)) : "-"}</strong>
         </div>
-      </div>
+      ) : (
+        <p className="empty-copy">
+          Import transactions, create a budget, or add a goal to unlock this planning snapshot.
+        </p>
+      )}
       <div className="card-actions">
         <a className="button-link" href="#/budget">Open budget</a>
         <a className="button-link button-link-secondary" href="#/goals">Manage goals</a>
@@ -3737,55 +3745,64 @@ function SpendingPlanCard({
   const planSegments = spendingPlanSegments(plan);
   const allocated = plan.obligations + plan.goalContributions + plan.flexibleActual;
   const leftLabel = plan.leftToSpend >= 0 ? "Left to spend" : "Over planned income";
+  const hasPlanData = plan.income > 0 || allocated > 0;
   return (
     <article className="card spending-plan-card">
       <CardHeader title="Left to Spend" subtitle="What remains after committed and tracked spend." />
-      <div className="spending-plan-hero">
-        <span>{leftLabel}</span>
-        <strong className={plan.leftToSpend >= 0 ? "positive-text" : "negative-text"}>{money(String(plan.leftToSpend))}</strong>
-        {dashboard?.confidence === "ready" ? (
-          <small>Current period estimate from imported income, bills, goals, and flexible spend.</small>
-        ) : (
-          <small>
-            Current period estimate. Add balances in <a href="#/accounts">Accounts</a> to improve confidence.
-          </small>
-        )}
-      </div>
-      <p className="spending-plan-formula">
-        Imported income funds the plan. The bar shows expected bills/subscriptions, monthly goal
-        set-asides, flexible spend already tracked, and the remaining amount.
-      </p>
-      <div
-        className="spending-plan-stack"
-        aria-label={`Left to spend allocation. Income ${money(String(plan.income))}, bills and subscriptions ${money(String(plan.obligations))}, savings goals ${money(String(plan.goalContributions))}, flexible actual ${money(String(plan.flexibleActual))}, ${leftLabel.toLowerCase()} ${money(String(plan.leftToSpend))}.`}
-      >
-        {planSegments.length > 0 ? (
-          planSegments.map((segment) => (
-            <span
-              className="spending-plan-segment"
-              key={segment.label}
-              style={{ background: segment.color, width: `${segment.percent}%` }}
-              title={`${segment.label}: ${money(String(segment.value))}`}
-            />
-          ))
-        ) : (
-          <span className="spending-plan-segment spending-plan-empty" />
-        )}
-      </div>
-      <div className="spending-plan-legend" aria-label="Spending plan legend">
-        {planSegments.map((segment) => (
-          <span key={segment.label}>
-            <i style={{ background: segment.color }} />
-            {segment.label}
-          </span>
-        ))}
-      </div>
-      <div className="budget-summary-grid">
-        <Metric label="Bills/subscriptions" value={money(String(plan.obligations))} />
-        <Metric label="Savings goals" value={money(String(plan.goalContributions))} />
-        <Metric label="Flexible actual" value={money(String(plan.flexibleActual))} />
-        <Metric label="Allocated total" value={money(String(allocated))} />
-      </div>
+      {hasPlanData ? (
+        <>
+          <div className="spending-plan-hero">
+            <span>{leftLabel}</span>
+            <strong className={plan.leftToSpend >= 0 ? "positive-text" : "negative-text"}>{money(String(plan.leftToSpend))}</strong>
+            {dashboard?.confidence === "ready" ? (
+              <small>Current period estimate from imported income, bills, goals, and flexible spend.</small>
+            ) : (
+              <small>
+                Current period estimate. Add balances in <a href="#/accounts">Accounts</a> to improve confidence.
+              </small>
+            )}
+          </div>
+          <p className="spending-plan-formula">
+            Imported income funds the plan. The bar shows expected bills/subscriptions, monthly goal
+            set-asides, flexible spend already tracked, and the remaining amount.
+          </p>
+          <div
+            className="spending-plan-stack"
+            aria-label={`Left to spend allocation. Income ${money(String(plan.income))}, bills and subscriptions ${money(String(plan.obligations))}, savings goals ${money(String(plan.goalContributions))}, flexible actual ${money(String(plan.flexibleActual))}, ${leftLabel.toLowerCase()} ${money(String(plan.leftToSpend))}.`}
+          >
+            {planSegments.length > 0 ? (
+              planSegments.map((segment) => (
+                <span
+                  className="spending-plan-segment"
+                  key={segment.label}
+                  style={{ background: segment.color, width: `${segment.percent}%` }}
+                  title={`${segment.label}: ${money(String(segment.value))}`}
+                />
+              ))
+            ) : (
+              <span className="spending-plan-segment spending-plan-empty" />
+            )}
+          </div>
+          <div className="spending-plan-legend" aria-label="Spending plan legend">
+            {planSegments.map((segment) => (
+              <span key={segment.label}>
+                <i style={{ background: segment.color }} />
+                {segment.label}
+              </span>
+            ))}
+          </div>
+          <div className="budget-summary-grid">
+            <Metric label="Bills/subscriptions" value={money(String(plan.obligations))} />
+            <Metric label="Savings goals" value={money(String(plan.goalContributions))} />
+            <Metric label="Flexible actual" value={money(String(plan.flexibleActual))} />
+            <Metric label="Allocated total" value={money(String(allocated))} />
+          </div>
+        </>
+      ) : (
+        <p className="empty-copy">
+          Import income and bills, then tune a budget to calculate what is genuinely left to spend.
+        </p>
+      )}
       <div className="card-actions">
         <a className="button-link" href="#/budget">Tune budget</a>
         <a className="button-link button-link-secondary" href="#/cash-flow">Scenario plan</a>
@@ -4188,7 +4205,7 @@ function getPageTitle(route: RouteId) {
   if (route !== "dashboard") return pageTitles[route];
   return {
     ...pageTitles.dashboard,
-    title: `${timeOfDayGreeting()}, Kiran.`,
+    title: `${timeOfDayGreeting()}.`,
   };
 }
 
@@ -4278,14 +4295,14 @@ function dayNumber(isoDate: string) {
   return new Intl.DateTimeFormat("en-GB", { day: "numeric" }).format(dateFromIso(isoDate));
 }
 
-const planningControlStorageKey = "personal-finance-studio.phase-1-75-controls";
+const planningControlStorageKey = "personal-finance-studio.phase-2-controls";
 
 const defaultPlanningControlState: PlanningControlState = {
   budgetMode: "category",
   budgetRows: [
     { group: "debt", plannedAmount: 0 },
     { group: "fixed", plannedAmount: 0 },
-    { group: "flexible", plannedAmount: 500 },
+    { group: "flexible", plannedAmount: 0 },
     { group: "non_monthly", plannedAmount: 0 },
   ],
   categories: [

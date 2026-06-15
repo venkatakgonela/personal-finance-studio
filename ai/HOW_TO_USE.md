@@ -7,13 +7,18 @@ ai-eos-metadata:
 
 # How To Use Personal Finance Studio
 
+This is the quick operating guide. For the full product explanation, feature inventory, onboarding
+model, workflows, and end-to-end user guide, see `ai/PRODUCT_GUIDE.md`. For future missing pieces
+and good-to-have ideas, see `ai/new-enhancements.md`. For demo/video scripts, see
+`ai/walkthroughs/README.md`.
+
 ## New User Flow
 
 1. Start the local stack from the project root.
    - `./scripts/dev-local.sh`
-   - If the UI shows API offline, open `Settings` from the Kiran/Household menu and use `Check API again`.
+   - If the UI shows API offline, open `Settings` from the Workspace/Household menu and use `Check API again`.
 
-2. Open `Kiran / Household` in the bottom-left menu, then choose `Import data`.
+2. Open `Workspace / Household` in the bottom-left menu, then choose `Import data`.
 
 3. Import a Snoop CSV.
    - Choose the CSV.
@@ -83,7 +88,7 @@ ai-eos-metadata:
 
 ## Settings And Cleanup
 
-1. Open `Kiran / Household`, then `Settings`.
+1. Open `Workspace / Household`, then `Settings`.
 2. Use `Categories` and `Tags` for local planning labels.
 3. Use `Rules` to preview matching transactions, apply to selected rows, and undo the latest rule application.
 4. Use `Merchants` to rename, merge, ignore, restore, or split merchant labels for reports.

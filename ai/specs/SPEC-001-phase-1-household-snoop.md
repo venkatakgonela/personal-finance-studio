@@ -1,6 +1,6 @@
 # SPEC-001: Phase 1 Household Snoop Import & Finance Control Center
 
-**Author:** Kiran Gonela / Codex  
+**Author:** Product owner / Codex  
 **Status:** Implemented locally  
 **Date:** 2026-06-14
 

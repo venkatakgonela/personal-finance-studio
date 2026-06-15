@@ -16,7 +16,7 @@ from app.services.snoop_import import (
 )
 
 HOUSEHOLD_ENTITY_NAME = "Household"
-DEFAULT_PROFILE_NAME = "Kiran"
+DEFAULT_PROFILE_NAME = "Primary user"
 
 
 def commit_snoop_csv(

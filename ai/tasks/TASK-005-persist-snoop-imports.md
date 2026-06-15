@@ -21,7 +21,7 @@ Move from Snoop preview-only behavior to an idempotent persisted import foundati
 - [x] Add initial Alembic migration.
 - [x] Add entity/profile/account/import/transaction models.
 - [x] Add idempotent Snoop import commit endpoint.
-- [x] Create Household and Kiran defaults during import.
+- [x] Create Household and Primary user defaults during import.
 - [x] Upsert detected accounts.
 - [x] Skip duplicate transaction fingerprints.
 - [x] Add persistence and API tests.

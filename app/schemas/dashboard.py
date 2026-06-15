@@ -8,7 +8,7 @@ class DashboardSummary(BaseModel):
     available_after_commitments: str | None
     flexible_spend_remaining: str | None
     flexible_spend_actual: str
-    flexible_spend_allowance: str
+    flexible_spend_allowance: str | None
     lowest_projected_balance: str | None
     cash_balance_account_count: int
     missing_balance_account_count: int

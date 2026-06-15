@@ -11,7 +11,7 @@ const account = {
   net_total: "2861.01",
   outflow_total: "-388.99",
   provider: "HSBC Personal",
-  source_account_name: "GONELA V S K",
+  source_account_name: "Household Current",
   transaction_count: 4,
 };
 
@@ -47,7 +47,7 @@ const incomeTransaction = {
 const decision = {
   amount: "340.00",
   decision_type: "internal_transfer",
-  detail: "2026-06-10 · Kiran Barclays -> Household account",
+  detail: "2026-06-10 · Current account -> Household account",
   id: "decision-1",
   reason: "Opposite signed transactions for the same amount on 2026-06-10.",
   status: "candidate",
@@ -148,7 +148,7 @@ const planningOverview = {
 test("real local stack loads dashboard data without fetch errors", async ({ page }) => {
   await page.goto("/");
 
-  await expect(page.getByRole("heading", { name: /Good (morning|afternoon|evening), Kiran\./ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Good (morning|afternoon|evening)\./ })).toBeVisible();
   await expect(page.getByText("Failed to fetch")).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Spending Pulse" })).toBeVisible();
 });
@@ -157,11 +157,11 @@ test("renders the dashboard with the polished visual system", async ({ page }) =
   await mockAppApis(page);
   await page.goto("/");
 
-  await expect(page.getByRole("heading", { name: /Good (morning|afternoon|evening), Kiran\./ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Good (morning|afternoon|evening)\./ })).toBeVisible();
   await expect(page.getByRole("navigation", { name: "Primary navigation" }).getByRole("link")).toHaveCount(13);
   await expect(page.getByLabel("Date range", { exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: /API online|API checking/ })).toBeVisible();
-  await expect(page.getByRole("button", { name: /Kiran Household/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Workspace Household/ })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Spending Pulse" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Decision Queue" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Bills This Month" })).toBeVisible();
@@ -169,7 +169,7 @@ test("renders the dashboard with the polished visual system", async ({ page }) =
   await expect(page.getByText("Failed to fetch")).toHaveCount(0);
   const dashboard = page.getByLabel("Personal Finance Studio dashboard");
   await expect(dashboard.locator(".decision-table-header")).toHaveCount(0);
-  await expect(dashboard.locator(".decision-card-compact .compact-row")).toHaveCount(3);
+  await expect(dashboard.locator(".decision-card-compact .compact-row")).toHaveCount(1);
 
   const visualSystem = await page.evaluate(() => {
     const h1 = getComputedStyle(document.querySelector("h1") as HTMLElement);
@@ -186,9 +186,9 @@ test("renders the dashboard with the polished visual system", async ({ page }) =
     };
   });
 
-  expect(visualSystem.h1Font).toContain("Fraunces");
-  expect(visualSystem.h1Weight).toBe("760");
-  expect(visualSystem.metricFont).toContain("Geist Mono");
+  expect(visualSystem.h1Font).toContain("Inter");
+  expect(visualSystem.h1Weight).toBe("800");
+  expect(visualSystem.metricFont).toContain("Inter");
   expect(visualSystem.cardRadius).toBe("8px");
   expect(visualSystem.buttonRadius).toBe("8px");
 
@@ -274,8 +274,8 @@ test("supports phase 1.75 editable planning controls", async ({ page }) => {
   await page.getByRole("button", { name: "Merchants" }).click();
   await expect(page.getByLabel("Display name for Morrisons")).toBeVisible();
 
-  await page.getByRole("button", { name: /Kiran Household/ }).click();
-  await expect(page.getByRole("button", { name: /Kiran Household/ })).toHaveAttribute("aria-expanded", "true");
+  await page.getByRole("button", { name: /Workspace Household/ }).click();
+  await expect(page.getByRole("button", { name: /Workspace Household/ })).toHaveAttribute("aria-expanded", "true");
   await page.getByRole("menuitem", { name: "Import data" }).click();
   await expect(page).toHaveURL(/#\/import/);
   await expect(page.getByRole("heading", { name: "Getting Started" })).toBeVisible();
@@ -317,6 +317,8 @@ test("supports phase 2 household expansion workflows", async ({ page }) => {
   await page.goto("/#/budget");
   await page.getByRole("tab", { name: "Flexible" }).click();
   await expect(page.getByText("Left to spend")).toBeVisible();
+  await page.getByLabel("Planned amount for Flexible").fill("500");
+  await page.getByLabel("Planned amount for Flexible").press("Enter");
   await page.getByRole("tab", { name: "Rollover" }).click();
   await page.getByLabel("Rollover amount for Flexible").fill("25");
   await page.getByLabel("Rollover amount for Flexible").press("Enter");
@@ -698,7 +700,7 @@ async function mockAppApis(
       },
     });
   });
-  await page.route("**/api/decisions", async (route) => {
+  await page.route("**/api/decisions**", async (route) => {
     await route.fulfill({
       contentType: "application/json",
       json: {

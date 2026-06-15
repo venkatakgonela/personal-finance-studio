@@ -1,6 +1,6 @@
 # SPEC-002: Screen Plan & Design System
 
-**Author:** Kiran Gonela / Codex  
+**Author:** Product owner / Codex  
 **Status:** Phase 2 implemented locally
 **Date:** 2026-06-15
 
@@ -41,8 +41,8 @@ language; warm colours are reserved for warnings or exceptions.
 
 ## 3. Typography
 
-- Current implementation uses Inter for body/controls, Fraunces for page/card headings and brand
-  lockup, and Geist Mono for financial values.
+- Current implementation uses Inter across headings, body, controls, and financial values to match
+  the Monarch-like clean SaaS typography direction.
 - Keep numeric values tabular via `font-variant-numeric: tabular-nums`.
 - Do not introduce one-off highlight fonts; typography changes must update the shared CSS tokens.
 
@@ -292,7 +292,7 @@ affordance; Phase 2.1 owns backend entity scoping, separate ledgers, and busines
 - Implemented Phase 1.75 UI cleanup: removed duplicated status cards, normalized Settings menu
   styling, made Goals a cleaner full-width planning page, and aligned Budget to the app's row/table
   rhythm.
-- Implemented profile-menu cleanup: Kiran/Household now sits at the bottom-left, opens Import and
+- Implemented profile-menu cleanup: Workspace/Household now sits at the bottom-left, opens Import and
   Settings actions, and uses a rotating chevron for clear expanded/collapsed state.
 - Implemented Phase 2 household expansion: rule preview/apply/undo, merchant alias/merge/split,
   cashflow scenarios, category/flexible/rollover budget modes, dashboard Spending Plan, and report

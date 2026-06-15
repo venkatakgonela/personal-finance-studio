@@ -73,7 +73,13 @@ def get_dashboard_summary(
     available_after_commitments = (
         trusted_cash - upcoming_confirmed_total if trusted_cash is not None else None
     )
-    flexible_spend_remaining = FLEXIBLE_SPEND_ALLOWANCE - flexible_spend_actual
+    has_imported_data = bool(accounts) or count_rows(session, Transaction, entity_id) > 0
+    flexible_spend_allowance = FLEXIBLE_SPEND_ALLOWANCE if has_imported_data else None
+    flexible_spend_remaining = (
+        flexible_spend_allowance - flexible_spend_actual
+        if flexible_spend_allowance is not None
+        else None
+    )
     lowest_projected_balance = (
         min(trusted_cash, available_after_commitments)
         if trusted_cash is not None and available_after_commitments is not None
@@ -90,9 +96,9 @@ def get_dashboard_summary(
         entity_name=entity.name,
         cash_on_hand=format_optional_money(cash_on_hand if accounts_with_balances else None),
         available_after_commitments=format_optional_money(available_after_commitments),
-        flexible_spend_remaining=format_money(flexible_spend_remaining),
+        flexible_spend_remaining=format_optional_money(flexible_spend_remaining),
         flexible_spend_actual=format_money(flexible_spend_actual),
-        flexible_spend_allowance=format_money(FLEXIBLE_SPEND_ALLOWANCE),
+        flexible_spend_allowance=format_optional_money(flexible_spend_allowance),
         lowest_projected_balance=format_optional_money(lowest_projected_balance),
         cash_balance_account_count=len(accounts_with_balances),
         missing_balance_account_count=missing_balance_count,

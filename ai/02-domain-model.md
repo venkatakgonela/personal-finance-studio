@@ -10,7 +10,7 @@ ai-eos-metadata:
 ## 1. Domain Glossary
 
 - **Entity**: A separate financial universe, such as Household or Business.
-- **Profile**: A person or role inside an entity, such as Kiran, spouse, child, or director.
+- **Profile**: A person or role inside an entity, such as primary user, spouse, child, or director.
 - **Account**: A bank account, savings pot, credit card, loan, BNPL account, or other financial container.
 - **Transaction**: Imported or manually entered money movement.
 - **Internal Transfer**: Movement between owned accounts that should not count as spending or income.

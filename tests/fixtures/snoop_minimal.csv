@@ -1,6 +1,6 @@
 Date,Merchant Name,Description,Amount,Category,Notes,Account Provider,Account Name,Status,Sub Type
-2026-06-14,Morrisons,MORRISONS MILTON - MILTON KEYNES GB,-48.99,Groceries,,HSBC Personal,GONELA V S K,Pending,
-2026-06-10,,Kiran Barclays Barclays Kiran,-340,Internal Transfers,,HSBC Personal,GONELA V S K,,
-2026-06-10,Gonela V S K,GONELA V S K Barclays Kiran BGC,340,Internal Transfers,,Barclays Personal Banking,20574483475794,,
-2026-06-10,Barclaycard,N Gonela BARCLAYCARD,2000,Finances,,HSBC Personal,GONELA V S K,,
-2026-06-09,Salary,Weekly Salary,1250,Income,,HSBC Personal,GONELA V S K,,
+2026-06-14,Morrisons,MORRISONS MILTON - MILTON KEYNES GB,-48.99,Groceries,,HSBC Personal,Household Current,Pending,
+2026-06-10,,Current Account Transfer,-340,Internal Transfers,,HSBC Personal,Household Current,,
+2026-06-10,Household Savings,Household Savings BGC,340,Internal Transfers,,Barclays Personal Banking,Household Savings,,
+2026-06-10,Barclaycard,Household BARCLAYCARD,2000,Finances,,HSBC Personal,Household Current,,
+2026-06-09,Salary,Weekly Salary,1250,Income,,HSBC Personal,Household Current,,

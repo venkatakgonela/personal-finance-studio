@@ -162,7 +162,7 @@ def transfer_confidence(outflow: Transaction, inflow: Transaction, gap_days: int
 def shared_description_token(outflow: Transaction, inflow: Transaction) -> bool:
     left = token_set(f"{outflow.merchant_name} {outflow.description}")
     right = token_set(f"{inflow.merchant_name} {inflow.description}")
-    ignored = {"the", "and", "bgc", "kiran", "gonela", "barclays", "hsbc"}
+    ignored = {"the", "and", "bgc", "bank", "payment", "transfer"}
     return bool((left - ignored) & (right - ignored))
 
 

@@ -74,7 +74,7 @@ describe("App", () => {
       accounts: [
         {
           provider: "HSBC Personal",
-          name: "GONELA V S K",
+          name: "Household Current",
           transaction_count: 4,
           inflow_total: "3250.00",
           outflow_total: "-388.99",

@@ -110,7 +110,7 @@ imported transactions, commitments, accounts, or explicit user-entered plan valu
 - Cash Flow now includes a richer Cash Flow Plan card with projected ending cash, lowest point, cash pressure, and dated cash events.
 - Duplicate status cards were removed: data freshness is owned by Import, and system/API status is owned by Settings.
 - Dashboard, Settings, Goals, and Budget received a final UI rhythm pass after Phase 1.75 feature implementation.
-- Import and Settings now live behind the bottom-left Kiran/Household profile menu, reducing primary
+- Import and Settings now live behind the bottom-left Workspace/Household profile menu, reducing primary
   sidebar noise while keeping operational actions close to the local workspace identity.
 - Settings creation actions now share one compact primary-button style, and the profile-menu chevron
   rotates on open/close for clear state feedback.
