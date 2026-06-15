@@ -218,6 +218,11 @@ const defaultDashboardWidgetIds = [
   "cashflow",
 ];
 
+const dashboardDropAnimation = {
+  duration: 320,
+  easing: "cubic-bezier(0.34, 1.56, 0.64, 1)",
+};
+
 const routeItems = [
   { label: "Dashboard", route: "dashboard" },
   { label: "Accounts", route: "accounts" },
@@ -1535,7 +1540,7 @@ function DashboardWidgets({
             })}
           </section>
         </SortableContext>
-        <DragOverlay adjustScale={false} dropAnimation={{ duration: 220, easing: "cubic-bezier(0.2, 0, 0, 1)" }}>
+        <DragOverlay adjustScale={false} dropAnimation={dashboardDropAnimation}>
           {activeWidget && activeWidgetId ? (
             <DashboardWidgetOverlay title={dashboardWidgetTitle(activeWidgetId, controlState)}>
               {activeWidget}
@@ -1561,13 +1566,21 @@ function SortableDashboardWidget({
   const {
     attributes,
     isDragging,
+    isOver,
     listeners,
     setNodeRef,
     transform,
     transition,
   } = useSortable({ id: widgetId });
+  const dashboardTransform = transform
+    ? {
+        ...transform,
+        scaleX: isDragging ? 0.985 : transform.scaleX,
+        scaleY: isDragging ? 0.985 : transform.scaleY,
+      }
+    : null;
   const style = {
-    transform: CSS.Transform.toString(transform),
+    transform: CSS.Transform.toString(dashboardTransform),
     transition,
   };
 
@@ -1577,6 +1590,7 @@ function SortableDashboardWidget({
         "dashboard-widget-shell",
         wide ? "dashboard-widget-wide" : "",
         isDragging ? "is-dragging" : "",
+        isOver && !isDragging ? "is-drop-target" : "",
       ].filter(Boolean).join(" ")}
       ref={setNodeRef}
       style={style}
@@ -1587,13 +1601,16 @@ function SortableDashboardWidget({
         {...attributes}
         {...listeners}
         aria-label={`Drag ${title} widget to rearrange`}
+        title={`Drag ${title} widget`}
       >
         <span className="drag-handle" aria-hidden="true">
           <i />
           <i />
           <i />
+          <i />
+          <i />
+          <i />
         </span>
-        <span className="drag-instruction">Arrange</span>
       </button>
       {children}
     </div>
