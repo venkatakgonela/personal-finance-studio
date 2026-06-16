@@ -372,6 +372,20 @@ const transactionTypes = [
   "ignored",
 ];
 
+const transactionGroupTokens: Array<{ group: string; tokens: string[] }> = [
+  { group: "transfer", tokens: ["internal transfer", "transfer", "self-bills", "savings"] },
+  { group: "debt", tokens: ["credit", "loan", "finance", "bnpl", "klarna", "card", "mortgage", "debt"] },
+  { group: "non_monthly", tokens: ["annual", "yearly", "non monthly", "non_monthly", "dvla", "mot", "car tax", "insurance"] },
+  {
+    group: "fixed",
+    tokens: ["bill", "bills", "fixed", "utilities", "subscription", "subscriptions", "insurance", "rent", "tax", "council", "mobile", "broadband"],
+  },
+  {
+    group: "flexible",
+    tokens: ["flexible", "groceries", "shopping", "eating", "restaurant", "restaurants", "transport", "fuel", "entertainment", "cash"],
+  },
+];
+
 export function App() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<ImportPreview | null>(null);
@@ -1310,7 +1324,6 @@ function AppPage({
           dashboard={dashboard}
           insights={insights}
           onControlStateChange={onControlStateChange}
-          periodLabel={periodLabel}
           planning={planning}
           upcoming={upcoming}
         />
@@ -3281,6 +3294,7 @@ function TransactionsCard({
     `${transaction.merchant_name} ${transaction.description} ${transaction.provider} ${transaction.source_category}`,
   );
   const rows = filteredRows.slice(0, expandedLimit);
+  const intelligence = transactionIntelligence(filteredRows);
   const chooseRecurringSource = (transaction: TransactionSummary) => {
     setRecurringDraft(commitmentDraftFromTransaction(transaction));
   };
@@ -3310,6 +3324,7 @@ function TransactionsCard({
         title="Transactions"
         subtitle={transactions ? `${transactions.total_count} non-transfer rows` : "Most recent"}
       />
+      <TransactionIntelligenceSummary stats={intelligence} />
       {transactionFilters && setTransactionFilters ? (
         <TransactionFilterBar
           accounts={accounts}
@@ -4226,7 +4241,6 @@ function BudgetPageCard({
   dashboard,
   insights,
   onControlStateChange,
-  periodLabel,
   planning,
   upcoming,
 }: {
@@ -4234,7 +4248,6 @@ function BudgetPageCard({
   dashboard: DashboardSummary | null;
   insights: InsightsResponse | null;
   onControlStateChange: (state: PlanningControlState | ((current: PlanningControlState) => PlanningControlState)) => void;
-  periodLabel: string;
   planning: PlanningOverview | null;
   upcoming: UpcomingCommitmentsResponse | null;
 }) {
@@ -4635,6 +4648,29 @@ function StaleCommitmentsCard({ planning }: { planning: PlanningOverview | null 
   );
 }
 
+function TransactionIntelligenceSummary({
+  stats,
+}: {
+  stats: ReturnType<typeof transactionIntelligence>;
+}) {
+  return (
+    <section className="transaction-intelligence" aria-label="Transaction intelligence summary">
+      <div className="transaction-intelligence-copy">
+        <span className="eyebrow">Review workbench</span>
+        <strong>{stats.reviewed} reviewed · {stats.needsReview} need review</strong>
+        <small>
+          Review turns imported rows into decision-grade evidence for Budget, Reports, Cash Flow, and Recurring Bills.
+        </small>
+      </div>
+      <div className="transaction-intelligence-metrics">
+        <Metric label="Possible bills" value={String(stats.possibleBills)} />
+        <Metric label="Possible transfers" value={String(stats.possibleTransfers)} />
+        <Metric label="Needs classification" value={money(String(stats.amountNeedingReview))} />
+      </div>
+    </section>
+  );
+}
+
 function TransactionReviewRow({
   onCreateRecurring,
   onTransactionUpdate,
@@ -4646,21 +4682,36 @@ function TransactionReviewRow({
 }) {
   const [transactionType, setTransactionType] = useState(transaction.transaction_type);
   const canCreateRecurring = isRecurringSourceTransaction(transaction);
+  const groupReason = transactionGroupExplanation(transaction);
+  const reviewLabel = transaction.reviewed ? "User confirmed" : transaction.transaction_type === "needs_review" ? "Needs decision" : "Awaiting review";
   return (
     <div className="transaction-row" role="row">
       <div className="transaction-merchant" role="cell">
         <strong>{transaction.merchant_name || transaction.description}</strong>
         <small>{transaction.description || transaction.source_category}</small>
+        <div className="transaction-source-pill">
+          <span>Bank label</span>
+          <strong>{transaction.source_category}</strong>
+        </div>
       </div>
       <span className="transaction-date" role="cell">{transaction.date}</span>
       <span className="transaction-account" role="cell">
         <strong>{transaction.account_name}</strong>
         <small>{transaction.provider}</small>
       </span>
-      <span className="transaction-group" role="cell">{titleCase(transaction.normalized_group)}</span>
+      <div className="transaction-meaning" role="cell">
+        <span className={`transaction-group transaction-group-${transaction.normalized_group}`}>
+          {titleCase(transaction.normalized_group)}
+        </span>
+        <small>App interpretation</small>
+        <p>{groupReason}</p>
+      </div>
       <span className="amount transaction-amount" role="cell">{money(transaction.amount)}</span>
       {onTransactionUpdate ? (
         <div className="transaction-review" role="cell">
+          <span className={`transaction-review-state ${transaction.reviewed ? "is-reviewed" : "is-open"}`}>
+            {reviewLabel}
+          </span>
           <select
             aria-label={`Review type for ${transaction.merchant_name || transaction.description}`}
             onChange={(event) => setTransactionType(event.target.value)}
@@ -5507,6 +5558,59 @@ function isRecurringSourceTransaction(transaction: TransactionSummary) {
   if (transaction.is_transfer_candidate) return false;
   if (["income", "internal_transfer_candidate", "ignored"].includes(transaction.transaction_type)) return false;
   return transaction.status === "posted";
+}
+
+function transactionIntelligence(transactions: TransactionSummary[]) {
+  return transactions.reduce(
+    (stats, transaction) => {
+      const amount = Math.abs(Number(transaction.amount));
+      const needsReview = !transaction.reviewed || transaction.transaction_type === "needs_review";
+      return {
+        amountNeedingReview: stats.amountNeedingReview + (needsReview && Number.isFinite(amount) ? amount : 0),
+        needsReview: stats.needsReview + (needsReview ? 1 : 0),
+        possibleBills: stats.possibleBills + (isRecurringSourceTransaction(transaction) ? 1 : 0),
+        possibleTransfers:
+          stats.possibleTransfers +
+          (transaction.is_transfer_candidate || transaction.normalized_group === "transfer" ? 1 : 0),
+        reviewed: stats.reviewed + (transaction.reviewed ? 1 : 0),
+      };
+    },
+    {
+      amountNeedingReview: 0,
+      needsReview: 0,
+      possibleBills: 0,
+      possibleTransfers: 0,
+      reviewed: 0,
+    },
+  );
+}
+
+function transactionGroupExplanation(transaction: TransactionSummary) {
+  const text = `${transaction.source_category} ${transaction.merchant_name} ${transaction.description}`.toLowerCase();
+  if (transaction.transaction_type === "internal_transfer" || transaction.transaction_type === "internal_transfer_candidate") {
+    return "Grouped as Transfer because the transaction type marks owned-account movement.";
+  }
+  if (transaction.transaction_type === "ignored") {
+    return "Grouped as Ignored because your review type excludes it from planning.";
+  }
+  if (transaction.transaction_type === "debt_payment") {
+    return "Grouped as Debt because your review type marks a debt payment.";
+  }
+  if (Number(transaction.amount) > 0) {
+    return "Grouped as Income because the amount is an inflow.";
+  }
+
+  const matchedRule = transactionGroupTokens.find((rule) => rule.tokens.some((token) => text.includes(token)));
+  if (matchedRule) {
+    const matchedToken = matchedRule.tokens.find((token) => text.includes(token));
+    return `Grouped as ${titleCase(matchedRule.group)} because the bank label or merchant text contains "${matchedToken}".`;
+  }
+
+  if (Number(transaction.amount) < 0) {
+    return "Grouped as Flexible by default because it is an outflow without a stronger bill, debt, or transfer signal.";
+  }
+
+  return "Grouped as Income by default because no stronger classification signal was found.";
 }
 
 function guessCommitmentTypeFromTransaction(transaction: TransactionSummary) {

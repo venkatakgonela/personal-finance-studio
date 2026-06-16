@@ -30,7 +30,7 @@ yet an Open Banking app, tax product, investment platform, or cloud collaboratio
 | Import Center | Imports Snoop CSV files, previews rows/accounts/categories, commits data, reruns transfer and bill detection. | Clean onboarding starts with trusted data. Previewing prevents accidental bad imports. |
 | API/System Status | Shows whether the local backend is online and how to retry. | Users need to know when a problem is service availability rather than finance data. |
 | Accounts | Lists detected accounts, account types, imported net movement, and editable current balances. | Accurate balances power cash-on-hand, forecast confidence, and available-money planning. |
-| Transactions Ledger | Searchable/filterable transaction table with date, account, group, type, reviewed state, save actions, and "Make recurring" for eligible outflows. | Transactions are the source evidence for every report, budget actual, review workflow, and transaction-backed recurring commitment. |
+| Transactions Ledger | Review workbench with search/filtering, review coverage, possible bill/transfer signals, source bank labels, app interpretation, user decision type, deterministic "why this group?" explanations, and "Make recurring" for eligible outflows. | Transactions are the source evidence for every report, budget actual, review workflow, and transaction-backed recurring commitment. |
 | Internal Transfer Detection | Finds likely money movements between own accounts and routes them to Decision Queue. | Transfers should not inflate income or spending. |
 | Recurring Bills Detection | Commitment inbox for detected, transaction-backed, manually added, categorized, and finite bills/subscriptions/BNPL plans. | Forecasting and safe spend only work if future obligations are visible, meaningful to the household, and time-boxed correctly. |
 | Decision Queue | Review inbox for high-impact confirmations such as transfers and recurring candidates. | Keeps noisy automation under user control and improves accounting accuracy. |
@@ -118,9 +118,12 @@ Expected result: reports stop double-counting transfers and future bills become 
 
 Open `Transactions`.
 
-Filter by date, account, group, type, reviewed status, or search. Update transaction type/group when
-needed and mark rows reviewed. For any real posted outflow, use `Make recurring` to create a
-commitment from the transaction evidence without leaving the ledger.
+Filter by date, account, group, type, reviewed status, or search. Use the review workbench summary to
+see reviewed coverage, possible bills, possible transfers, and the value still needing
+classification. Each row separates the raw bank label, app interpretation, and your review decision;
+use the "why this group?" explanation to understand what signal drove the deterministic grouping.
+Update transaction type when needed and mark rows reviewed. For any real posted outflow, use `Make
+recurring` to create a commitment from the transaction evidence without leaving the ledger.
 
 Expected result: budget actuals and reports reflect cleaner transaction meaning.
 

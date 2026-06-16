@@ -43,6 +43,9 @@ ai-eos-metadata:
   manual-entry paths; finite BNPL/payment plans need either a payment count or an end date.
 - Transactions is also an evidence-entry point: eligible posted outflows should expose a direct
   `Make recurring` action that opens a review form before creating the commitment.
+- Transactions should read as a review workbench, not a passive ledger: keep source bank labels,
+  app-derived group interpretation, user review type, review coverage, possible bills/transfers,
+  and "why this group?" explanations visibly distinct.
 - Recurring commitment forms must separate user-friendly reference naming from source evidence,
   and include an editable category so raw bank labels do not become the household planning model.
 - Commitment category inputs should offer the curated household taxonomy: utilities, council tax,

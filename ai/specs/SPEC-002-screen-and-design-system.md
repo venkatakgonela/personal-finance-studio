@@ -147,6 +147,13 @@ affordance; Phase 2.1 owns backend entity scoping, separate ledgers, and busines
 
 - Ledger with global search, selected date window, account filter, category group filter, transaction type filter, reviewed/unreviewed filter, posted status filter, amount/date/account/group columns, type edit, and reviewed save action.
 - Mark as internal transfer, debt payment, refund, ignored, or needs review.
+- Present Transactions as an evidence review workbench: top summary should show reviewed/unreviewed
+  coverage, possible bills, possible transfers, and the amount still needing classification.
+- Each row should separate raw `Bank label`, deterministic `App interpretation`, and `Your decision`
+  review type so users can understand what came from the provider versus what the app inferred or
+  the user confirmed.
+- App interpretation should include a concise "why this group?" explanation based on the same
+  deterministic category/type/amount signals used by the backend grouping rules.
 - Header and row columns must share the same grid template so resizing does not create column wobble.
 
 ### Bills & Commitments

@@ -17,15 +17,23 @@
 
 ## Core Context
 
-- Charter: `ai/00-project-charter.md`
+- Default context policy: `ai/context-packs/context-pack-default.md`
+- Repo map: `ai/03-repo-map.md`
 - Architecture: `ai/01-architecture.md`
 - Domain model: `ai/02-domain-model.md`
 - Decisions: `ai/04-decisions.md`
 - Roadmap: `ai/roadmap/ROADMAP.md`
-- Phase 1 spec: `ai/specs/SPEC-001-phase-1-household-snoop.md`
-- Design spec: `ai/specs/SPEC-002-screen-and-design-system.md`
 - Testing strategy: `ai/specs/SPEC-003-testing-strategy.md`
+- Load specialized context packs only when relevant:
+  `ai/context-packs/context-pack-backend-data.md`,
+  `ai/context-packs/context-pack-frontend-ui.md`,
+  `ai/context-packs/context-pack-product-planning.md`,
+  `ai/context-packs/context-pack-freeagent-api.md`, or
+  `ai/context-packs/context-pack-phase-2-1.md`.
 
-## Planning Boundary
+## Delivery Boundary
 
-Current mode is documentation and planning. Implementation begins only when the user explicitly says to build.
+Current mode is iterative local implementation and stabilization. For future work, do not implement
+app code until the user explicitly asks to build, fix, update, or continue a feature. When work is
+approved, load the smallest relevant context pack, make the smallest coherent change, and run the
+documented quality gate that matches the touched surface.

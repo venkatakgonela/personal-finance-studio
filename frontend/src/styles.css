@@ -2462,9 +2462,47 @@ input[aria-invalid="true"] {
   background: white;
 }
 
+.transaction-intelligence {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) minmax(320px, 1.2fr);
+  gap: var(--space-sm);
+  align-items: stretch;
+  margin: var(--space-sm) 0;
+  padding: var(--space-sm);
+  border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--line));
+  border-radius: var(--radius-card);
+  background:
+    linear-gradient(135deg, rgba(234, 246, 248, 0.78), rgba(255, 252, 245, 0.96)),
+    white;
+}
+
+.transaction-intelligence-copy {
+  display: grid;
+  gap: var(--space-xxs);
+  align-content: center;
+  min-width: 0;
+}
+
+.transaction-intelligence-copy strong {
+  color: var(--text);
+  font-size: 1rem;
+}
+
+.transaction-intelligence-copy small {
+  max-width: 58ch;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.transaction-intelligence-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-xs);
+}
+
 .transaction-table-header,
 .transaction-row {
-  --transaction-grid: minmax(180px, 1.35fr) 96px minmax(140px, 0.9fr) 96px 104px minmax(202px, 0.85fr) minmax(118px, 0.55fr);
+  --transaction-grid: minmax(180px, 1.25fr) 96px minmax(140px, 0.85fr) minmax(150px, 0.95fr) 104px minmax(202px, 0.85fr) minmax(118px, 0.55fr);
   display: grid;
   grid-template-columns: var(--transaction-grid);
   align-items: center;
@@ -2546,6 +2584,39 @@ input[aria-invalid="true"] {
   min-width: 0;
 }
 
+.transaction-source-pill {
+  display: inline-flex;
+  max-width: 100%;
+  gap: var(--space-xxs);
+  align-items: center;
+  margin-top: var(--space-xs);
+  padding: 0.22rem 0.42rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--card-muted);
+  color: var(--muted);
+}
+
+.transaction-source-pill span,
+.transaction-source-pill strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.transaction-source-pill span {
+  color: var(--soft);
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.transaction-source-pill strong {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
 .transaction-merchant strong,
 .transaction-merchant small,
 .transaction-account strong,
@@ -2558,6 +2629,61 @@ input[aria-invalid="true"] {
 
 .transaction-amount {
   justify-self: end;
+}
+
+.transaction-meaning {
+  display: grid;
+  gap: var(--space-xxs);
+  min-width: 0;
+}
+
+.transaction-meaning small {
+  margin-top: 0;
+  color: var(--soft);
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.transaction-meaning p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.transaction-group {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  align-items: center;
+  padding: 0.22rem 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--card-muted);
+  color: var(--ink);
+}
+
+.transaction-group-income {
+  border-color: color-mix(in srgb, var(--positive) 35%, var(--line));
+  background: var(--positive-soft);
+  color: var(--positive);
+}
+
+.transaction-group-debt,
+.transaction-group-needs_review {
+  border-color: color-mix(in srgb, var(--amber) 42%, var(--line));
+  background: color-mix(in srgb, var(--amber) 12%, white);
+  color: #7a5618;
+}
+
+.transaction-group-transfer,
+.transaction-group-ignored {
+  border-color: var(--line-strong);
+  background: var(--card-muted);
+  color: var(--muted);
 }
 
 .transaction-recurring-action {
@@ -2622,6 +2748,32 @@ input[aria-invalid="true"] {
   gap: var(--space-xs);
   align-items: center;
   min-width: 0;
+}
+
+.transaction-review-state {
+  grid-column: 1 / -1;
+  width: fit-content;
+  padding: 0.18rem 0.46rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--card-muted);
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.transaction-review-state.is-reviewed {
+  border-color: color-mix(in srgb, var(--positive) 28%, var(--line));
+  background: var(--positive-soft);
+  color: var(--positive);
+}
+
+.transaction-review-state.is-open {
+  border-color: color-mix(in srgb, var(--amber) 35%, var(--line));
+  background: color-mix(in srgb, var(--amber) 10%, white);
+  color: #7a5618;
 }
 
 .transaction-review select {
@@ -5600,6 +5752,14 @@ button.collapsible-block-header:focus {
   .transaction-table {
     border: 0;
     background: transparent;
+  }
+
+  .transaction-intelligence {
+    grid-template-columns: 1fr;
+  }
+
+  .transaction-intelligence-metrics {
+    grid-template-columns: 1fr;
   }
 
   .transaction-table-header {

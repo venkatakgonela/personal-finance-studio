@@ -611,12 +611,18 @@ test("sends transaction filters to the API and updates the table", async ({ page
   await page.goto("/#/transactions");
 
   await expect(page.getByRole("heading", { name: "Transactions" })).toBeVisible();
+  await expect(page.getByLabel("Transaction intelligence summary")).toContainText("0 reviewed · 2 need review");
+  await expect(page.getByLabel("Transaction intelligence summary")).toContainText("Possible bills");
+  await expect(page.getByText('Grouped as Flexible because the bank label or merchant text contains "groceries".')).toBeVisible();
+  await expect(page.locator(".transaction-source-pill span").first()).toHaveText("Bank label");
+  await expect(page.locator(".transaction-meaning small").first()).toHaveText("App interpretation");
   await expect(page.locator(".transaction-row")).toHaveCount(2);
 
   await page.getByLabel("Category group filter").selectOption("income");
 
   await expect(page.locator(".transaction-row")).toHaveCount(1);
-  await expect(page.locator(".transaction-merchant strong")).toHaveText("Salary");
+  await expect(page.locator(".transaction-merchant > strong")).toHaveText("Salary");
+  await expect(page.getByText("Grouped as Income because the amount is an inflow.")).toBeVisible();
   expect(transactionRequests.some((url) => url.includes("normalized_group=income"))).toBe(true);
   expect(transactionRequests.some((url) => url.includes("start_date=") && url.includes("end_date="))).toBe(true);
 

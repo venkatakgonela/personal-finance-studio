@@ -23,6 +23,9 @@ ai-eos-metadata:
 - [x] Import commit persists accounts, transactions, and import logs without duplicate rows.
 - [x] Imported raw files are parsed and discarded rather than retained.
 - [x] Transactions remain auditable back to imported merchant/description values.
+- [x] Transactions page acts as a review workbench with review coverage, possible bill/transfer
+  signals, source bank label, app group interpretation, user review type, and deterministic
+  "why this group?" explanations.
 
 ## 3. Source Tasks
 
