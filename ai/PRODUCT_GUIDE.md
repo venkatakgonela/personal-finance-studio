@@ -186,10 +186,16 @@ Success condition: Budget answers "what is safe?", "what is planned?", "what cha
 
 1. Open Recurring.
 2. Run detection to find transaction-pattern candidates.
-3. Confirm, ignore, or edit detected candidates.
+3. Confirm, ignore, or edit detected candidates. Editing keeps the source label but lets you change
+   your reference name, category, expected/planning amount, type, frequency, and next due date.
 4. If detection misses a real bill but a valid outflow exists, use `Make recurring` from Transactions
    or Add from transaction evidence in Recurring.
-5. Set a household reference name and category; keep the bank transaction as source evidence.
+5. Set a household reference name and category; keep the bank transaction/source label as evidence.
+   Categories should describe household meaning, not just bank text: Credit cards, Vehicle loan,
+   Vehicle insurance, Vehicle maintenance, Utilities, Telecoms, Council tax, Kids tuition & school
+   fees, Education & childcare, Family support, Healthcare, Subscriptions, or Annual / irregular costs.
+   Older detected rows use their current bank label as evidence until renamed, then keep that label.
+   If a transaction suggestion is not recurring, choose `Not recurring` to dismiss it from advice.
 6. If no transaction exists yet, use Add a bill or subscription.
 7. For BNPL or temporary plans, fill optional Payment count or End date.
 8. Check Calendar, Cash Flow, Budget, and Dashboard after saving.

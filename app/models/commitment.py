@@ -19,6 +19,7 @@ class Commitment(Base):
     owner_profile_id: Mapped[str | None] = mapped_column(ForeignKey("profiles.id"), nullable=True)
     shared_scope: Mapped[str] = mapped_column(String(40), nullable=False, default="household")
     name: Mapped[str] = mapped_column(String(180), nullable=False)
+    source_label: Mapped[str | None] = mapped_column(String(240), nullable=True)
     commitment_type: Mapped[str] = mapped_column(String(40), nullable=False, default="bill")
     category: Mapped[str] = mapped_column(String(120), nullable=False, default="Bills")
     frequency: Mapped[str] = mapped_column(String(40), nullable=False, default="custom")

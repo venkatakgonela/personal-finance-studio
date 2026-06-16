@@ -124,8 +124,9 @@ FreeAgent-imported transactions are normalized into the same transaction table b
 - `entity_id`
 - `owner_profile_id` nullable
 - `shared_scope`: `household`, `profile`, `business`
-- `name`
-- `category`
+- `name`: user-friendly household reference label, e.g. `AQUA CC Kiran`
+- `source_label`: raw imported transaction/vendor label, e.g. `AQUA CREDIT CARD///`
+- `category`: household planning category, e.g. `Credit cards`, `Vehicle insurance`, `Kids tuition & school fees`, `Utilities`
 - `commitment_type`: `bill`, `subscription`, `loan_payment`, `credit_card_payment`, `bnpl_installment`, `income`, `sinking_fund`, `one_off`
 - `frequency`: `weekly`, `monthly`, `quarterly`, `annual`, `custom`, `one_off`
 - `expected_amount`
@@ -136,7 +137,14 @@ FreeAgent-imported transactions are normalized into the same transaction table b
 - `source`
 - `status`
 
-Commitments can be detected, manually entered, or created from a source transaction. Transaction-backed commitments preserve imported transaction evidence while allowing the user to rename the commitment and assign a meaningful category for planning.
+Commitments can be detected, manually entered, or created from a source transaction. Transaction-backed commitments preserve imported transaction evidence while allowing the user to add a separate reference name, assign a meaningful category, and update the planning amount when the real payment is variable.
+
+Commitment classification uses four distinct layers:
+
+- **Cashflow group**: safety behavior such as `fixed`, `debt`, `non_monthly`, or `flexible`.
+- **Commitment type**: payment mechanics such as bill, subscription, credit card, loan, BNPL, or irregular obligation.
+- **Household category**: human planning meaning such as Home & utilities, Council tax, Vehicle loan, Vehicle maintenance, Education & childcare, Kids tuition & school fees, Family support, Healthcare, Credit cards, or BNPL / pay later.
+- **Source label**: immutable-ish raw imported bank/vendor evidence.
 
 ### Bill Instance
 

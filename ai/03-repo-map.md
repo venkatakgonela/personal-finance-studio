@@ -8,7 +8,7 @@ ai-eos-metadata:
 # Repo Map - Personal Finance Studio
 
 **Last reviewed:** 2026-06-16
-**Current repository status:** Phase 2 household expansion, FreeAgent paginated OAuth import/refresh, overdraft semantics, dashboard personalization, budget control tower, and transaction-backed categorized commitments complete locally.
+**Current repository status:** Phase 2 household expansion, FreeAgent paginated OAuth import/refresh, overdraft semantics, dashboard personalization, budget control tower, and source-labelled transaction-backed categorized commitments complete locally.
 
 ## Root
 
@@ -26,18 +26,18 @@ ai-eos-metadata:
 - `app/main.py`: FastAPI app factory, CORS, `/health`, and route registration.
 - `app/config.py`: environment-driven settings.
 - `app/db.py`: SQLAlchemy engine/session setup.
-- `app/models/`: SQLAlchemy entities for Household/Profile, accounts, transactions, import logs, internal transfer matches, categorized commitments with optional finite end controls, bill instances, and integration connections.
+- `app/models/`: SQLAlchemy entities for Household/Profile, accounts, transactions, import logs, internal transfer matches, source-labelled categorized commitments with optional finite end controls, bill instances, and integration connections.
 - `app/schemas/`: Pydantic response/request schemas for all API surfaces, including reset/data
   management responses.
 - `app/routes/`: FastAPI routers for imports, accounts, transactions, transfers, commitments, calendar, forecast, dashboard, insights, planning, decisions, and FreeAgent integrations.
-- `app/services/`: deterministic finance logic for parsing/imports, category normalization, transfer detection, commitment detection/manual/transaction-backed creation/finite BNPL planning, account balance/overdraft semantics, dashboard math, calendar/upcoming, forecast, insights, Phase 1.5 planning overview, transaction review, Decision Queue actions, encrypted secret handling, FreeAgent paginated API import/OAuth refresh, and imported-data reset.
+- `app/services/`: deterministic finance logic for parsing/imports, category normalization, transfer detection, commitment detection/manual/transaction-backed creation/finite BNPL planning, curated household commitment-category inference, account balance/overdraft semantics, dashboard math, calendar/upcoming, forecast, insights, Phase 1.5 planning overview, transaction review, Decision Queue actions, encrypted secret handling, FreeAgent paginated API import/OAuth refresh, and imported-data reset.
 
 ## Frontend
 
 - `frontend/src/App.tsx`: current route shell, Phase 1/1.5 UI components, Phase 1.75 editable
   planning controls, Phase 2 rule/merchant/scenario/Budget Control Tower/export workflows, URL-hash state
   persistence, shared contextual help tooltips, first-run import personalization, calendar planner,
-  FreeAgent import workflow, safe-spend assumptions, dashboard widget personalization, transaction-ledger `Make recurring` flow, and D3 Sankey report model/rendering.
+  FreeAgent import workflow, safe-spend assumptions, dashboard widget personalization, transaction-ledger `Make recurring` flow, recurring advice dismissal, and D3 Sankey report model/rendering.
 - `frontend/src/api.ts`: typed API client for backend routes, query params, and in-flight GET request de-duplication.
 - `frontend/src/styles.css`: design tokens, layout, tables, filters, contextual help tooltip
   placement/stacking, dashboard widget/drag overlay styling, auto-animated section/list motion, and responsive styles.

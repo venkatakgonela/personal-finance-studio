@@ -4,6 +4,7 @@ from pydantic import BaseModel
 class CommitmentSummary(BaseModel):
     id: str
     name: str
+    source_label: str | None
     commitment_type: str
     category: str
     frequency: str
@@ -18,6 +19,7 @@ class CommitmentSummary(BaseModel):
 
 class CommitmentCreate(BaseModel):
     name: str
+    source_label: str | None = None
     commitment_type: str = "bill"
     category: str | None = None
     frequency: str = "monthly"

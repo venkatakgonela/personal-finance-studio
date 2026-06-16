@@ -141,6 +141,7 @@ export type TransferDetectionResult = {
 export type CommitmentSummary = {
   id: string;
   name: string;
+  source_label: string | null;
   commitment_type: string;
   category: string;
   frequency: string;
@@ -155,6 +156,7 @@ export type CommitmentSummary = {
 
 export type CommitmentCreate = {
   name: string;
+  source_label?: string | null;
   commitment_type: string;
   category?: string | null;
   frequency: string;

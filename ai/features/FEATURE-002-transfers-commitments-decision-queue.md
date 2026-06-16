@@ -35,10 +35,12 @@ ai-eos-metadata:
 Recurring uses a "commitment inbox" model:
 
 - Detection proposes candidates from transaction patterns.
-- User confirmation decides whether a candidate becomes a protected bill.
+- User confirmation decides whether a candidate becomes a protected bill; user rejection/ignore
+  prevents false recurring assumptions from entering planning.
 - Transaction-backed creation lets the user pick a valid outflow from either Recurring or the
-  Transactions ledger, rename it for household reference, categorize it, and preserve source
-  evidence.
+  Transactions ledger, add a separate household reference, categorize it, edit the planning amount,
+  and preserve source evidence/source label.
+- Transaction advice can be dismissed locally when the user knows a transaction is not recurring.
 - Manual entry remains the fallback when detection misses a real recurring commitment with no
   usable imported transaction.
 - Finite plans, especially BNPL and short loan/payment plans, can be capped by payment count or end date.

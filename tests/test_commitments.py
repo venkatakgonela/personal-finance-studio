@@ -1,14 +1,17 @@
+from datetime import date
+from decimal import Decimal
 from pathlib import Path
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import BillInstance, Commitment, Transaction
-from app.schemas.commitments import CommitmentCreate
+from app.models import Account, BillInstance, Commitment, Entity, Transaction
+from app.schemas.commitments import CommitmentCreate, CommitmentUpdate
 from app.services.commitments import (
     create_manual_commitment,
     detect_recurring_commitments,
     list_commitments,
+    update_commitment,
 )
 from app.services.import_commit import commit_snoop_csv
 
@@ -177,6 +180,7 @@ def test_create_commitment_from_transaction_keeps_source_evidence(db_session: Se
     )
 
     assert summary.source == "transaction"
+    assert summary.source_label == "Netflix"
     assert summary.category == "Streaming"
     assert summary.instance_count == 2
     instances = db_session.scalars(
@@ -187,3 +191,118 @@ def test_create_commitment_from_transaction_keeps_source_evidence(db_session: Se
     assert instances[0].matched_transaction_id == transaction
     assert instances[0].status == "paid"
     assert instances[1].status == "planned"
+
+
+def test_update_commitment_allows_reference_category_and_amount_edits(
+    db_session: Session,
+) -> None:
+    contents = (FIXTURES / "snoop_recurring.csv").read_bytes()
+    import_result = commit_snoop_csv(
+        contents,
+        source_filename="snoop_recurring.csv",
+        session=db_session,
+    )
+    detected = detect_recurring_commitments(db_session, import_result.entity_id).commitments[0]
+
+    summary = update_commitment(
+        db_session,
+        import_result.entity_id,
+        detected.id,
+        CommitmentUpdate(
+            name="Netflix family",
+            category="Streaming",
+            expected_amount="19.99",
+            next_due_date="2026-07-02",
+        ),
+    )
+
+    assert summary.name == "Netflix family"
+    assert summary.source_label == "Netflix"
+    assert summary.category == "Streaming"
+    assert summary.expected_amount == "19.99"
+    assert summary.next_due_date == "2026-07-02"
+
+
+def test_legacy_detected_commitment_preserves_bank_label_on_first_rename(
+    db_session: Session,
+) -> None:
+    contents = (FIXTURES / "snoop_recurring.csv").read_bytes()
+    import_result = commit_snoop_csv(
+        contents,
+        source_filename="snoop_recurring.csv",
+        session=db_session,
+    )
+    detected = detect_recurring_commitments(db_session, import_result.entity_id).commitments[0]
+    commitment = db_session.get(Commitment, detected.id)
+    assert commitment is not None
+    commitment.source_label = None
+    db_session.commit()
+
+    before = list_commitments(db_session, import_result.entity_id).commitments[0]
+    assert before.source_label == "Netflix"
+
+    summary = update_commitment(
+        db_session,
+        import_result.entity_id,
+        detected.id,
+        CommitmentUpdate(name="Netflix family"),
+    )
+
+    assert summary.name == "Netflix family"
+    assert summary.source_label == "Netflix"
+
+
+def test_transaction_backed_commitments_infer_household_categories(
+    db_session: Session,
+) -> None:
+    entity = Entity(name="Household", type="household")
+    db_session.add(entity)
+    db_session.flush()
+    account = Account(
+        entity_id=entity.id,
+        provider="Test",
+        display_name="Current",
+        source_account_name="Current",
+        account_type="current",
+    )
+    db_session.add(account)
+    db_session.flush()
+
+    rows = [
+        ("AQUA CREDIT CARD///", "Flexible", "debt_payment", "Credit cards"),
+        ("DVLA-V27GSR///", "Flexible", "spending", "Vehicle tax"),
+        ("JOTUTORIALS LTD", "Flexible", "spending", "Kids tuition & school fees"),
+        ("British Gas", "Bills", "spending", "Utilities"),
+    ]
+
+    for index, row in enumerate(rows, start=1):
+        merchant, category, transaction_type, expected_category = row
+        transaction = Transaction(
+            entity_id=entity.id,
+            account_id=account.id,
+            transaction_date=date(2026, 6, index),
+            merchant_name=merchant,
+            description=merchant,
+            amount=Decimal("-10.00"),
+            direction="out",
+            source_category=category,
+            transaction_type=transaction_type,
+            fingerprint=f"category-{index}",
+        )
+        db_session.add(transaction)
+        db_session.flush()
+
+        summary = create_manual_commitment(
+            db_session,
+            entity.id,
+            CommitmentCreate(
+                name=merchant,
+                commitment_type="bill",
+                frequency="monthly",
+                expected_amount="10.00",
+                next_due_date="2026-07-01",
+                source_transaction_id=transaction.id,
+            ),
+        )
+
+        assert summary.category == expected_category

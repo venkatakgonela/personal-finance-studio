@@ -109,10 +109,71 @@ type CommitmentDraft = {
   name: string;
   nextDueDate: string;
   occurrenceCount: string;
+  sourceLabel: string;
   sourceTransactionId: string;
   sourceTransactionLabel: string;
   type: string;
 };
+const commitmentCategoryOptions = [
+  "Home & utilities",
+  "Utilities",
+  "Council tax",
+  "Rent / mortgage",
+  "Telecoms",
+  "Insurance",
+  "Vehicle loan",
+  "Vehicle insurance",
+  "Vehicle maintenance",
+  "Vehicle tax",
+  "Education & childcare",
+  "Kids tuition & school fees",
+  "Healthcare",
+  "Family support",
+  "Debt payments",
+  "Credit cards",
+  "BNPL / pay later",
+  "Subscriptions",
+  "Annual / irregular costs",
+  "Taxes",
+  "Savings & goals",
+];
+const genericCommitmentCategories = new Set([
+  "",
+  "bill",
+  "bills",
+  "debt",
+  "finances",
+  "fixed",
+  "flexible",
+  "general",
+  "needs review",
+  "needs_review",
+  "non monthly",
+  "non_monthly",
+  "uncategorized",
+]);
+const commitmentCategoryRules: Array<{ category: string; tokens: string[] }> = [
+  { category: "Kids tuition & school fees", tokens: ["school", "tuition", "tutor", "tutorial", "nursery", "childcare"] },
+  { category: "Council tax", tokens: ["council tax"] },
+  { category: "Rent / mortgage", tokens: ["rent", "mortgage"] },
+  {
+    category: "Utilities",
+    tokens: ["british gas", "e.on", "eon", "electric", "energy", "gas", "octopus", "thames water", "utilita", "utilities", "water"],
+  },
+  { category: "Telecoms", tokens: ["broadband", "bt ", "ee ", "mobile", "o2", "three", "virgin media", "vodafone"] },
+  { category: "Vehicle loan", tokens: ["car loan", "car finance", "vehicle loan", "vehicle finance", "motor finance"] },
+  { category: "Vehicle insurance", tokens: ["car insurance", "vehicle insurance", "motor insurance"] },
+  { category: "Vehicle maintenance", tokens: ["garage", "mot", "service", "tyre", "vehicle repair", "car repair"] },
+  { category: "Vehicle tax", tokens: ["dvla", "road tax", "vehicle tax"] },
+  { category: "Credit cards", tokens: ["amex", "american exp", "aqua", "barclaycard", "credit card", "vanquis"] },
+  { category: "BNPL / pay later", tokens: ["bnpl", "clearpay", "klarna", "pay later", "pay in 3"] },
+  { category: "Debt payments", tokens: ["finance", "loan", "updraft"] },
+  { category: "Insurance", tokens: ["insurance"] },
+  { category: "Healthcare", tokens: ["dental", "health", "medical", "optical", "pharmacy"] },
+  { category: "Family support", tokens: ["family", "support"] },
+  { category: "Subscriptions", tokens: ["apple", "netflix", "prime", "spotify", "subscription", "youtube"] },
+  { category: "Annual / irregular costs", tokens: ["annual", "non monthly", "non_monthly", "yearly"] },
+];
 type AccountRow = AccountsResponse["accounts"][number];
 type AccountGroup = {
   accounts: AccountRow[];
@@ -851,8 +912,48 @@ export function App() {
           transferResult={transferResult}
           upcoming={upcoming}
         />
+        <CommitmentCategoryDatalist />
       </main>
     </div>
+  );
+}
+
+function CommitmentCategoryDatalist() {
+  return (
+    <datalist id="commitment-category-options">
+      {commitmentCategoryOptions.map((category) => (
+        <option key={category} value={category} />
+      ))}
+    </datalist>
+  );
+}
+
+function CommitmentCategorySuggestionSelect({
+  ariaLabel,
+  onChange,
+  value,
+}: {
+  ariaLabel: string;
+  onChange: (value: string) => void;
+  value: string;
+}) {
+  const selectedValue = commitmentCategoryOptions.includes(value) ? value : "";
+  return (
+    <select
+      aria-label={ariaLabel}
+      className="category-suggestion-select"
+      onChange={(event) => {
+        if (event.target.value) onChange(event.target.value);
+      }}
+      value={selectedValue}
+    >
+      <option value="">Suggested categories</option>
+      {commitmentCategoryOptions.map((category) => (
+        <option key={category} value={category}>
+          {category}
+        </option>
+      ))}
+    </select>
   );
 }
 
@@ -3197,6 +3298,7 @@ function TransactionsCard({
       occurrence_count: recurringDraft.occurrenceCount
         ? Math.max(1, Number(recurringDraft.occurrenceCount) || 1)
         : null,
+      source_label: recurringDraft.sourceLabel,
       source_transaction_id: recurringDraft.sourceTransactionId,
       status: "confirmed",
     });
@@ -3238,19 +3340,27 @@ function TransactionsCard({
               />
             </label>
             <label>
-              Category
+              Budget category
               <input
                 aria-label="Transaction recurring category"
+                list="commitment-category-options"
                 onChange={(event) =>
                   setRecurringDraft((current) => current && { ...current, category: event.target.value })
                 }
-                placeholder="Bills, Subscriptions, Debt..."
+                placeholder="e.g. Credit cards, Utilities, Kids tuition..."
                 required
+                value={recurringDraft.category}
+              />
+              <CommitmentCategorySuggestionSelect
+                ariaLabel="Transaction recurring suggested household category"
+                onChange={(category) =>
+                  setRecurringDraft((current) => current && { ...current, category })
+                }
                 value={recurringDraft.category}
               />
             </label>
             <label>
-              Type
+              Payment kind
               <select
                 aria-label="Transaction recurring type"
                 onChange={(event) =>
@@ -4810,19 +4920,28 @@ function RecurringCard({
   const today = new Date().toISOString().slice(0, 10);
   const [manualOpen, setManualOpen] = useState(false);
   const [editingCommitment, setEditingCommitment] = useState<{
+    amount: string;
     category: string;
+    frequency: string;
     id: string;
     name: string;
+    nextDueDate: string;
+    status: string;
+    type: string;
   } | null>(null);
+  const [dismissedAdviceIds, setDismissedAdviceIds] = useState<string[]>(() =>
+    readDismissedRecurringAdviceIds(),
+  );
   const [transactionOpen, setTransactionOpen] = useState(true);
   const [manualForm, setManualForm] = useState({
     amount: "",
-    category: "Bills",
+    category: "Home & utilities",
     endDate: "",
     frequency: "monthly",
     name: "",
     nextDueDate: today,
     occurrenceCount: "",
+    sourceLabel: "",
     sourceTransactionId: "",
     sourceTransactionLabel: "",
     type: "bill",
@@ -4831,13 +4950,30 @@ function RecurringCard({
     `${commitment.name} ${commitment.category} ${commitment.frequency} ${commitment.commitment_type}`,
   ).slice(0, limit);
   const transactionRows = filterByQuery(
-    (transactions?.transactions ?? []).filter(isRecurringSourceTransaction),
+    (transactions?.transactions ?? []).filter(
+      (transaction) =>
+        isRecurringSourceTransaction(transaction) && !dismissedAdviceIds.includes(transaction.id),
+    ),
     query,
     (transaction) => `${transaction.merchant_name} ${transaction.description} ${transaction.account_name}`,
   ).slice(0, 8);
+  const dismissedAdviceCount = (transactions?.transactions ?? []).filter((transaction) =>
+    dismissedAdviceIds.includes(transaction.id),
+  ).length;
   const chooseSourceTransaction = (transaction: TransactionSummary) => {
     setManualForm((current) => ({ ...current, ...commitmentDraftFromTransaction(transaction) }));
     setManualOpen(true);
+  };
+  const dismissSourceTransaction = (transactionId: string) => {
+    setDismissedAdviceIds((current) => {
+      const next = Array.from(new Set([...current, transactionId]));
+      writeDismissedRecurringAdviceIds(next);
+      return next;
+    });
+  };
+  const restoreDismissedAdvice = () => {
+    setDismissedAdviceIds([]);
+    writeDismissedRecurringAdviceIds([]);
   };
   const saveManualCommitment = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -4851,17 +4987,19 @@ function RecurringCard({
       name: manualForm.name,
       next_due_date: manualForm.nextDueDate,
       occurrence_count: manualForm.occurrenceCount ? Math.max(1, Number(manualForm.occurrenceCount) || 1) : null,
+      source_label: manualForm.sourceLabel || null,
       source_transaction_id: manualForm.sourceTransactionId || null,
       status: "confirmed",
     });
     setManualForm({
       amount: "",
-      category: "Bills",
+      category: "Home & utilities",
       endDate: "",
       frequency: "monthly",
       name: "",
       nextDueDate: today,
       occurrenceCount: "",
+      sourceLabel: "",
       sourceTransactionId: "",
       sourceTransactionLabel: "",
       type: "bill",
@@ -4869,35 +5007,50 @@ function RecurringCard({
   };
   const startCommitmentEdit = (commitment: CommitmentsResponse["commitments"][number]) => {
     setEditingCommitment({
-      category: commitment.category || "Bills",
+      amount: commitment.expected_amount,
+      category: commitment.category || "Home & utilities",
+      frequency: commitment.frequency,
       id: commitment.id,
       name: commitment.name,
+      nextDueDate: commitment.next_due_date ?? today,
+      status: commitment.status,
+      type: commitment.commitment_type,
     });
   };
   const saveCommitmentEdit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!onCommitmentUpdate || !editingCommitment) return;
     await onCommitmentUpdate(editingCommitment.id, {
+      commitment_type: editingCommitment.type,
       category: editingCommitment.category,
+      expected_amount: editingCommitment.amount,
+      frequency: editingCommitment.frequency,
       name: editingCommitment.name,
+      next_due_date: editingCommitment.nextDueDate,
+      status: editingCommitment.status === "candidate" ? "confirmed" : editingCommitment.status,
     });
     setEditingCommitment(null);
   };
   return (
-    <article className="card">
-      <CardHeader
-        title="Recurring"
-        subtitle={commitments ? `${commitments.total_count} commitments and candidates` : "No upcoming transactions"}
-      />
-      <div className="commitment-inbox-intro">
-        <strong>Commitment inbox</strong>
-        <p>
-          Detection finds patterns, but you stay in control. Add missed bills manually, and give BNPL or
-          short-term plans a stop date or payment count so they do not recur forever.
-        </p>
+    <article className="card recurring-workbench-card">
+      <div className="recurring-hero">
+        <div>
+          <p className="eyebrow">Commitment Inbox</p>
+          <h2>Bills should use your words, not just bank text.</h2>
+          <p>
+            Keep the original transaction label as evidence, add your own reference name, and protect
+            only the recurring items you trust.
+          </p>
+        </div>
+        <div className="recurring-hero-stats">
+          <span>Total commitments</span>
+          <strong>{commitments?.total_count ?? 0}</strong>
+          <small>{dismissedAdviceCount} transaction advice item(s) dismissed locally</small>
+        </div>
       </div>
-      {onCommitmentCreate ? (
-        <section className="manual-commitment-panel transaction-source-panel">
+      <div className="recurring-action-grid">
+        {onCommitmentCreate ? (
+          <section className="manual-commitment-panel transaction-source-panel">
           <button
             aria-expanded={transactionOpen}
             className="manual-commitment-toggle"
@@ -4907,7 +5060,7 @@ function RecurringCard({
             <span className={`group-chevron ${transactionOpen ? "open" : ""}`} aria-hidden="true" />
             <span>
               <strong>Add from transaction evidence</strong>
-              <small>Pick a real outflow, then adjust frequency, amount, and end rules before protecting it.</small>
+              <small>Pick a real outflow, keep the source label, then add your bill reference.</small>
             </span>
           </button>
           {transactionOpen ? (
@@ -4922,20 +5075,43 @@ function RecurringCard({
                       </small>
                     </div>
                     <span className="amount">{money(transaction.amount)}</span>
-                    <button className="button-link button-link-small" onClick={() => chooseSourceTransaction(transaction)} type="button">
-                      Use transaction
-                    </button>
+                    <div className="row-actions">
+                      <button className="button-link button-link-small" onClick={() => chooseSourceTransaction(transaction)} type="button">
+                        Use transaction
+                      </button>
+                      <button
+                        className="button-link button-link-small button-link-secondary"
+                        onClick={() => dismissSourceTransaction(transaction.id)}
+                        type="button"
+                      >
+                        Not recurring
+                      </button>
+                    </div>
                   </div>
                 ))}
+                {dismissedAdviceCount > 0 ? (
+                  <button className="button-link button-link-secondary" onClick={restoreDismissedAdvice} type="button">
+                    Restore {dismissedAdviceCount} dismissed advice item(s)
+                  </button>
+                ) : null}
               </div>
             ) : (
-              <p className="empty-copy">No eligible outflow transactions in the selected period. Change the date range or search.</p>
+              <div className="empty-advice-panel">
+                <p className="empty-copy">No eligible outflow advice in the selected period.</p>
+                {dismissedAdviceCount > 0 ? (
+                  <button className="button-link button-link-secondary" onClick={restoreDismissedAdvice} type="button">
+                    Restore dismissed advice
+                  </button>
+                ) : (
+                  <small>Change the date range or search to review more transactions.</small>
+                )}
+              </div>
             )
           ) : null}
-        </section>
-      ) : null}
-      {onCommitmentCreate ? (
-        <section className="manual-commitment-panel">
+          </section>
+        ) : null}
+        {onCommitmentCreate ? (
+          <section className="manual-commitment-panel">
           <button
             aria-expanded={manualOpen}
             className="manual-commitment-toggle"
@@ -4945,20 +5121,21 @@ function RecurringCard({
             <span className={`group-chevron ${manualOpen ? "open" : ""}`} aria-hidden="true" />
             <span>
               <strong>Add a bill or subscription</strong>
-              <small>Manual fallback for missed bills, BNPL plans, and short-term commitments.</small>
+              <small>Create a commitment when there is no imported transaction evidence yet.</small>
             </span>
           </button>
           {manualOpen ? (
             <form className="manual-commitment-form" onSubmit={(event) => void saveManualCommitment(event)}>
               {manualForm.sourceTransactionLabel ? (
                 <div className="source-transaction-callout">
-                  <strong>Based on transaction</strong>
+                  <strong>Source transaction</strong>
                   <span>{manualForm.sourceTransactionLabel}</span>
                   <button
                     className="button-link button-link-small"
                     onClick={() =>
                       setManualForm((current) => ({
                         ...current,
+                        sourceLabel: "",
                         sourceTransactionId: "",
                         sourceTransactionLabel: "",
                       }))
@@ -4970,7 +5147,7 @@ function RecurringCard({
                 </div>
               ) : null}
               <label>
-                Reference name
+                Your reference name
                 <input
                   aria-label="Commitment name"
                   onChange={(event) => setManualForm((current) => ({ ...current, name: event.target.value }))}
@@ -4980,17 +5157,23 @@ function RecurringCard({
                 />
               </label>
               <label>
-                Category
+                Budget category
                 <input
                   aria-label="Commitment category"
+                  list="commitment-category-options"
                   onChange={(event) => setManualForm((current) => ({ ...current, category: event.target.value }))}
-                  placeholder="Bills, Subscriptions, Debt..."
+                  placeholder="e.g. Vehicle insurance, Utilities, Kids tuition..."
                   required
+                  value={manualForm.category}
+                />
+                <CommitmentCategorySuggestionSelect
+                  ariaLabel="Commitment suggested household category"
+                  onChange={(category) => setManualForm((current) => ({ ...current, category }))}
                   value={manualForm.category}
                 />
               </label>
               <label>
-                Type
+                Payment kind
                 <select
                   aria-label="Commitment type"
                   onChange={(event) => setManualForm((current) => ({ ...current, type: event.target.value }))}
@@ -5069,84 +5252,218 @@ function RecurringCard({
               </div>
             </form>
           ) : null}
-        </section>
-      ) : null}
+          </section>
+        ) : null}
+      </div>
       {rows.length === 0 ? (
         <p className="empty-copy">Detect bills to populate recurring candidates.</p>
       ) : (
-        <CollapsibleBlock meta={`${rows.length} shown`} title="Recurring candidates">
-          <div className="compact-list">
+        <section className="recurring-candidate-panel">
+          <div className="recurring-section-heading">
+            <div>
+              <strong>Detected recurring candidates</strong>
+              <small>Edit your reference, budget category, payment kind, and planning amount before confirming.</small>
+            </div>
+            <span>{rows.length} shown</span>
+          </div>
+          <div className="recurring-candidate-list">
             {rows.map((commitment) => (
-              <div className="compact-row" key={commitment.id}>
+              <div
+                className={`compact-row recurring-candidate-row ${
+                  editingCommitment?.id === commitment.id ? "is-editing" : ""
+                }`}
+                key={commitment.id}
+              >
                 {editingCommitment?.id === commitment.id ? (
                   <form className="commitment-inline-edit" onSubmit={(event) => void saveCommitmentEdit(event)}>
-                    <label>
-                      Reference name
-                      <input
-                        aria-label={`Reference name for ${commitment.name}`}
-                        onChange={(event) =>
-                          setEditingCommitment((current) =>
-                            current ? { ...current, name: event.target.value } : current,
-                          )
-                        }
-                        required
-                        value={editingCommitment.name}
-                      />
-                    </label>
-                    <label>
-                      Category
-                      <input
-                        aria-label={`Category for ${commitment.name}`}
-                        onChange={(event) =>
-                          setEditingCommitment((current) =>
-                            current ? { ...current, category: event.target.value } : current,
-                          )
-                        }
-                        required
-                        value={editingCommitment.category}
-                      />
-                    </label>
-                    <button className="button-link button-link-small" type="submit">Save details</button>
-                    <button
-                      className="button-link button-link-small button-link-secondary"
-                      onClick={() => setEditingCommitment(null)}
-                      type="button"
-                    >
-                      Cancel
-                    </button>
+                    <div className="commitment-edit-header">
+                      <span className="commitment-edit-icon" aria-hidden="true">◌</span>
+                      <div>
+                        <strong>{editingCommitment.name || commitment.name}</strong>
+                        {commitment.source_label ? (
+                          <small>
+                            <b>{commitment.source_label}</b>
+                          </small>
+                        ) : null}
+                        <small>
+                          {editingCommitment.category} · {editingCommitment.frequency} · next {formatShortDay(editingCommitment.nextDueDate)}
+                        </small>
+                      </div>
+                      <span className="commitment-edit-amount">{money(editingCommitment.amount)}</span>
+                      <div className="row-actions commitment-header-actions">
+                        {commitment.status === "candidate" && onCommitmentUpdate ? (
+                          <>
+                            <button
+                              className="button-link button-link-small"
+                              onClick={() => void onCommitmentUpdate(commitment.id, { status: "confirmed" })}
+                              type="button"
+                            >
+                              ✓ Confirm
+                            </button>
+                            <button
+                              className="button-link button-link-small button-link-secondary"
+                              onClick={() => void onCommitmentUpdate(commitment.id, { status: "rejected" })}
+                              type="button"
+                            >
+                              Ignore
+                            </button>
+                          </>
+                        ) : null}
+                      </div>
+                    </div>
+                    <div className="commitment-edit-grid">
+                      <label>
+                        Your reference
+                        <input
+                          aria-label={`Reference name for ${commitment.name}`}
+                          onChange={(event) =>
+                            setEditingCommitment((current) =>
+                              current ? { ...current, name: event.target.value } : current,
+                            )
+                          }
+                          required
+                          value={editingCommitment.name}
+                        />
+                      </label>
+                      <label>
+                        Budget category
+                        <CommitmentCategorySuggestionSelect
+                          ariaLabel={`Suggested household category - ${commitment.name}`}
+                          onChange={(category) =>
+                            setEditingCommitment((current) =>
+                              current ? { ...current, category } : current,
+                            )
+                          }
+                          value={editingCommitment.category}
+                        />
+                        <input
+                          aria-label={`Category for ${commitment.name}`}
+                          className="category-custom-input"
+                          onChange={(event) =>
+                            setEditingCommitment((current) =>
+                              current ? { ...current, category: event.target.value } : current,
+                            )
+                          }
+                          required
+                          value={editingCommitment.category}
+                        />
+                      </label>
+                      <label>
+                        Payment kind
+                        <select
+                          aria-label={`Type for ${commitment.name}`}
+                          onChange={(event) =>
+                            setEditingCommitment((current) =>
+                              current ? { ...current, type: event.target.value } : current,
+                            )
+                          }
+                          value={editingCommitment.type}
+                        >
+                          <option value="bill">Essential bill</option>
+                          <option value="subscription">Subscription</option>
+                          <option value="credit_card_payment">Credit card payment</option>
+                          <option value="loan_payment">Loan payment</option>
+                          <option value="bnpl">Buy Now Pay Later</option>
+                          <option value="non_monthly">Irregular obligation</option>
+                        </select>
+                      </label>
+                      <label>
+                        Frequency
+                        <select
+                          aria-label={`Frequency for ${commitment.name}`}
+                          onChange={(event) =>
+                            setEditingCommitment((current) =>
+                              current ? { ...current, frequency: event.target.value } : current,
+                            )
+                          }
+                          value={editingCommitment.frequency}
+                        >
+                          <option value="weekly">Weekly</option>
+                          <option value="fortnightly">Fortnightly</option>
+                          <option value="monthly">Monthly</option>
+                          <option value="quarterly">Quarterly</option>
+                          <option value="annual">Annual</option>
+                          <option value="custom">One-off/custom</option>
+                        </select>
+                      </label>
+                      <label>
+                        Planning amount
+                        <input
+                          aria-label={`Planning amount for ${commitment.name}`}
+                          inputMode="decimal"
+                          onChange={(event) =>
+                            setEditingCommitment((current) =>
+                              current ? { ...current, amount: event.target.value } : current,
+                            )
+                          }
+                          required
+                          value={editingCommitment.amount}
+                        />
+                      </label>
+                      <label>
+                        Next due date
+                        <input
+                          aria-label={`Next due date for ${commitment.name}`}
+                          onChange={(event) =>
+                            setEditingCommitment((current) =>
+                              current ? { ...current, nextDueDate: event.target.value } : current,
+                            )
+                          }
+                          required
+                          type="date"
+                          value={editingCommitment.nextDueDate}
+                        />
+                      </label>
+                    </div>
+                    <div className="commitment-edit-footer">
+                      <button className="button-link button-link-small" type="submit">
+                        ✓ Save & confirm
+                      </button>
+                      <button
+                        className="button-link button-link-small button-link-secondary"
+                        onClick={() => setEditingCommitment(null)}
+                        type="button"
+                      >
+                        Cancel
+                      </button>
+                    </div>
                   </form>
                 ) : (
-                  <div>
-                    <strong>{commitment.name}</strong>
+                  <div className="candidate-summary">
+                    <div className="candidate-title-line">
+                      <strong>{commitment.name}</strong>
+                      <span className={`status-pill status-${commitment.status}`}>{commitment.status}</span>
+                    </div>
+                    {commitment.source_label ? <em>Source: {commitment.source_label}</em> : null}
                     <small>
-                      {commitment.category} · {commitment.frequency} · next {commitment.next_due_date ?? "unknown"} · {commitment.status}
+                      {commitment.category} · {commitment.frequency} · next {commitment.next_due_date ?? "unknown"}
                       {commitment.occurrence_count ? ` · ${commitment.occurrence_count} payment plan` : ""}
                       {commitment.end_date ? ` · ends ${commitment.end_date}` : ""}
                     </small>
                   </div>
                 )}
-                <span className="amount">{money(commitment.expected_amount)}</span>
-                {onCommitmentUpdate ? (
+                {editingCommitment?.id !== commitment.id ? (
+                  <span className="amount">{money(commitment.expected_amount)}</span>
+                ) : null}
+                {onCommitmentUpdate && editingCommitment?.id !== commitment.id ? (
                   <div className="row-actions">
-                    {editingCommitment?.id !== commitment.id ? (
-                      <button onClick={() => startCommitmentEdit(commitment)} type="button">
-                        Edit details
-                      </button>
-                    ) : null}
+                    <button onClick={() => startCommitmentEdit(commitment)} type="button">
+                      Edit details
+                    </button>
                     {commitment.status === "candidate" ? (
                       <>
-                    <button
-                      onClick={() => void onCommitmentUpdate(commitment.id, { status: "confirmed" })}
-                      type="button"
-                    >
-                      Confirm
-                    </button>
-                    <button
-                      onClick={() => void onCommitmentUpdate(commitment.id, { status: "rejected" })}
-                      type="button"
-                    >
-                      Ignore
-                    </button>
+                        <button
+                          onClick={() => void onCommitmentUpdate(commitment.id, { status: "confirmed" })}
+                          type="button"
+                        >
+                          Confirm
+                        </button>
+                        <button
+                          onClick={() => void onCommitmentUpdate(commitment.id, { status: "rejected" })}
+                          type="button"
+                        >
+                          Ignore
+                        </button>
                       </>
                     ) : null}
                   </div>
@@ -5154,7 +5471,7 @@ function RecurringCard({
               </div>
             ))}
           </div>
-        </CollapsibleBlock>
+        </section>
       )}
     </article>
   );
@@ -5181,19 +5498,41 @@ function guessCommitmentTypeFromTransaction(transaction: TransactionSummary) {
   return "bill";
 }
 
+function guessCommitmentCategoryFromTransaction(transaction: TransactionSummary) {
+  const text = `${transaction.source_category} ${transaction.merchant_name} ${transaction.description}`.toLowerCase();
+  const matchedRule = commitmentCategoryRules.find((rule) => rule.tokens.some((token) => text.includes(token)));
+  if (matchedRule) return matchedRule.category;
+  if (transaction.transaction_type === "debt_payment") return "Debt payments";
+  if (!genericCommitmentCategories.has(transaction.source_category.trim().toLowerCase())) {
+    return transaction.source_category;
+  }
+  return titleForCommitmentType(guessCommitmentTypeFromTransaction(transaction));
+}
+
 function commitmentDraftFromTransaction(transaction: TransactionSummary): CommitmentDraft {
+  const sourceLabel = transaction.merchant_name || transaction.description || "Imported transaction";
   return {
     amount: transactionAmountForInput(transaction.amount),
-    category: transaction.source_category || titleCase(transaction.normalized_group) || "Bills",
+    category: guessCommitmentCategoryFromTransaction(transaction),
     endDate: "",
     frequency: "monthly",
-    name: friendlyCommitmentName(transaction.merchant_name || transaction.description),
+    name: friendlyCommitmentName(sourceLabel),
     nextDueDate: addMonthsIso(transaction.date, 1),
     occurrenceCount: "",
+    sourceLabel,
     sourceTransactionId: transaction.id,
     sourceTransactionLabel: `${transaction.date} · ${transaction.account_name} · ${money(transaction.amount)}`,
     type: guessCommitmentTypeFromTransaction(transaction),
   };
+}
+
+function titleForCommitmentType(type: string) {
+  if (type === "credit_card_payment") return "Credit cards";
+  if (type === "loan_payment") return "Debt payments";
+  if (type === "bnpl") return "BNPL / pay later";
+  if (type === "subscription") return "Subscriptions";
+  if (type === "non_monthly") return "Annual / irregular costs";
+  return "Home & utilities";
 }
 
 function friendlyCommitmentName(label: string) {
@@ -6399,6 +6738,7 @@ function dayNumber(isoDate: string) {
 const planningControlStorageKey = "personal-finance-studio.phase-2-controls";
 const oldPlanningControlStorageKey = "personal-finance-studio.phase-1-75-controls";
 const userNameStorageKey = "personal-finance-studio.user-name";
+const dismissedRecurringAdviceStorageKey = "personal-finance-studio.dismissed-recurring-advice";
 
 const defaultPlanningControlState: PlanningControlState = {
   budgetMode: "category",
@@ -6411,8 +6751,18 @@ const defaultPlanningControlState: PlanningControlState = {
   categories: [
     { group: "income", id: "category-paychecks", name: "Paychecks", type: "income" },
     { group: "fixed", id: "category-home", name: "Home & utilities", type: "expense" },
+    { group: "fixed", id: "category-council-tax", name: "Council tax", type: "expense" },
+    { group: "fixed", id: "category-insurance", name: "Insurance", type: "expense" },
+    { group: "fixed", id: "category-telecoms", name: "Telecoms", type: "expense" },
+    { group: "fixed", id: "category-education", name: "Education & childcare", type: "expense" },
+    { group: "fixed", id: "category-family-support", name: "Family support", type: "expense" },
     { group: "flexible", id: "category-groceries", name: "Groceries", type: "expense" },
+    { group: "non_monthly", id: "category-vehicle-maintenance", name: "Vehicle maintenance", type: "expense" },
+    { group: "non_monthly", id: "category-annual-irregular", name: "Annual / irregular costs", type: "expense" },
     { group: "debt", id: "category-debt", name: "Debt payments", type: "expense" },
+    { group: "debt", id: "category-credit-cards", name: "Credit cards", type: "expense" },
+    { group: "debt", id: "category-vehicle-loan", name: "Vehicle loan", type: "expense" },
+    { group: "debt", id: "category-bnpl", name: "BNPL / pay later", type: "expense" },
   ],
   customDashboardWidgets: [],
   dashboardWidgetOrder: [...defaultDashboardWidgetIds],
@@ -6505,6 +6855,28 @@ function writeUserName(name: string) {
   }
 }
 
+function readDismissedRecurringAdviceIds(): string[] {
+  try {
+    const raw = window.localStorage.getItem(dismissedRecurringAdviceStorageKey);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed.filter((item) => typeof item === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeDismissedRecurringAdviceIds(ids: string[]) {
+  try {
+    if (ids.length === 0) {
+      window.localStorage.removeItem(dismissedRecurringAdviceStorageKey);
+    } else {
+      window.localStorage.setItem(dismissedRecurringAdviceStorageKey, JSON.stringify(ids));
+    }
+  } catch {
+    // Dismissed suggestions are convenience state only.
+  }
+}
+
 function cleanUserName(name: string) {
   return name.trim().replace(/\s+/g, " ").slice(0, 40);
 }
@@ -6514,6 +6886,7 @@ function clearLocalWorkspacePreferences() {
     window.localStorage.removeItem(planningControlStorageKey);
     window.localStorage.removeItem(oldPlanningControlStorageKey);
     window.localStorage.removeItem(userNameStorageKey);
+    window.localStorage.removeItem(dismissedRecurringAdviceStorageKey);
   } catch {
     // Reset still succeeds server-side if localStorage is unavailable.
   }

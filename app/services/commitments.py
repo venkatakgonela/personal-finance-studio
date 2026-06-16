@@ -80,6 +80,64 @@ FIXED_LABEL_TOKENS = {
     "vodafone",
     "youtube",
 }
+GENERIC_COMMITMENT_CATEGORIES = {
+    "",
+    "bill",
+    "bills",
+    "debt",
+    "finances",
+    "fixed",
+    "flexible",
+    "general",
+    "needs review",
+    "needs_review",
+    "non monthly",
+    "non_monthly",
+    "uncategorized",
+}
+COMMITMENT_CATEGORY_RULES = [
+    (
+        "Kids tuition & school fees",
+        ("school", "tuition", "tutor", "tutorial", "nursery", "childcare"),
+    ),
+    ("Council tax", ("council tax",)),
+    ("Rent / mortgage", ("rent", "mortgage")),
+    (
+        "Utilities",
+        (
+            "british gas",
+            "e.on",
+            "eon",
+            "electric",
+            "energy",
+            "gas",
+            "octopus",
+            "thames water",
+            "utilita",
+            "utilities",
+            "water",
+        ),
+    ),
+    (
+        "Telecoms",
+        ("broadband", "bt ", "ee ", "mobile", "o2", "three", "virgin media", "vodafone"),
+    ),
+    (
+        "Vehicle loan",
+        ("car loan", "car finance", "vehicle loan", "vehicle finance", "motor finance"),
+    ),
+    ("Vehicle insurance", ("car insurance", "vehicle insurance", "motor insurance")),
+    ("Vehicle maintenance", ("garage", "mot", "service", "tyre", "vehicle repair", "car repair")),
+    ("Vehicle tax", ("dvla", "road tax", "vehicle tax")),
+    ("Credit cards", ("amex", "american exp", "aqua", "barclaycard", "credit card", "vanquis")),
+    ("BNPL / pay later", ("bnpl", "clearpay", "klarna", "pay later", "pay in 3")),
+    ("Debt payments", ("finance", "loan", "updraft")),
+    ("Insurance", ("insurance",)),
+    ("Healthcare", ("dental", "health", "medical", "optical", "pharmacy")),
+    ("Family support", ("family", "support")),
+    ("Subscriptions", ("apple", "netflix", "prime", "spotify", "subscription", "youtube")),
+    ("Annual / irregular costs", ("annual", "non monthly", "non_monthly", "yearly")),
+]
 
 
 def detect_recurring_commitments(session: Session, entity_id: str) -> CommitmentDetectionResult:
@@ -144,6 +202,7 @@ def detect_recurring_commitments(session: Session, entity_id: str) -> Commitment
         commitment = Commitment(
             entity_id=entity_id,
             name=commitment_name(rows[0]),
+            source_label=commitment_source_label(rows[0]),
             commitment_type=commitment_type(rows[0]),
             category=commitment_category(rows[0]),
             frequency=frequency,
@@ -211,6 +270,7 @@ def serialize_commitment(session: Session, commitment: Commitment) -> Commitment
     return CommitmentSummary(
         id=commitment.id,
         name=commitment.name,
+        source_label=commitment_summary_source_label(commitment),
         commitment_type=commitment.commitment_type,
         category=commitment.category,
         frequency=commitment.frequency,
@@ -279,6 +339,7 @@ def create_manual_commitment(
     commitment = Commitment(
         entity_id=entity_id,
         name=payload.name.strip()[:180] or "Manual commitment",
+        source_label=commitment_source_label_from_payload(payload.source_label, source_transaction),
         commitment_type=payload.commitment_type,
         category=commitment_category_from_payload(payload.category, source_transaction),
         frequency=payload.frequency,
@@ -331,6 +392,8 @@ def update_commitment(
         raise ValueError("Commitment not found.")
 
     if payload.name is not None:
+        if not commitment.source_label and commitment.source != "manual":
+            commitment.source_label = commitment.name
         commitment.name = payload.name.strip()[:180] or commitment.name
     if payload.commitment_type is not None:
         commitment.commitment_type = payload.commitment_type
@@ -339,7 +402,10 @@ def update_commitment(
     if payload.frequency is not None:
         commitment.frequency = payload.frequency
     if payload.expected_amount is not None:
-        commitment.expected_amount = Decimal(payload.expected_amount).quantize(Decimal("0.01"))
+        expected_amount = Decimal(payload.expected_amount).quantize(Decimal("0.01"))
+        if expected_amount <= 0:
+            raise ValueError("Expected amount must be greater than zero.")
+        commitment.expected_amount = expected_amount
     if payload.next_due_date is not None:
         commitment.next_due_date = date.fromisoformat(payload.next_due_date)
     if payload.end_date is not None:
@@ -499,6 +565,30 @@ def commitment_name(transaction: Transaction) -> str:
     return friendly_commitment_name(label)
 
 
+def commitment_source_label(transaction: Transaction) -> str:
+    label = transaction.merchant_name or transaction.description
+    return label.strip()[:240] or "Imported transaction"
+
+
+def commitment_source_label_from_payload(
+    source_label: str | None,
+    source_transaction: Transaction | None,
+) -> str | None:
+    if source_label and source_label.strip():
+        return source_label.strip()[:240]
+    if source_transaction is not None:
+        return commitment_source_label(source_transaction)
+    return None
+
+
+def commitment_summary_source_label(commitment: Commitment) -> str | None:
+    if commitment.source_label:
+        return commitment.source_label
+    if commitment.source != "manual":
+        return commitment.name
+    return None
+
+
 def friendly_commitment_name(label: str) -> str:
     cleaned = " ".join(
         label.replace("/", " ")
@@ -515,6 +605,9 @@ def friendly_commitment_name(label: str) -> str:
 def commitment_type(transaction: Transaction) -> str:
     label = f"{transaction.merchant_name} {transaction.description}".lower()
     category = transaction.source_category.lower()
+    bnpl_tokens = ["bnpl", "clearpay", "klarna", "pay later", "pay in 3"]
+    if any(token in label or token in category for token in bnpl_tokens):
+        return "bnpl"
     if transaction.transaction_type == "debt_payment":
         if any(token in label for token in ["amex", "barclaycard", "aqua", "vanquis"]):
             return "credit_card_payment"
@@ -527,9 +620,13 @@ def commitment_type(transaction: Transaction) -> str:
 
 
 def commitment_category(transaction: Transaction) -> str:
-    return transaction.source_category.strip()[:120] or title_for_commitment_type(
-        commitment_type(transaction)
-    )
+    inferred_category = inferred_commitment_category(transaction)
+    if inferred_category:
+        return inferred_category
+    source_category = transaction.source_category.strip()
+    if source_category.lower() not in GENERIC_COMMITMENT_CATEGORIES:
+        return source_category[:120]
+    return title_for_commitment_type(commitment_type(transaction))
 
 
 def commitment_category_from_payload(
@@ -540,11 +637,32 @@ def commitment_category_from_payload(
         return category.strip()[:120]
     if source_transaction is not None:
         return commitment_category(source_transaction)
-    return "Bills"
+    return "Home & utilities"
 
 
 def title_for_commitment_type(commitment_type_value: str) -> str:
-    return commitment_type_value.replace("_", " ").title()[:120] or "Bills"
+    titles = {
+        "bill": "Home & utilities",
+        "bnpl": "BNPL / pay later",
+        "credit_card_payment": "Credit cards",
+        "loan_payment": "Debt payments",
+        "non_monthly": "Annual / irregular costs",
+        "subscription": "Subscriptions",
+    }
+    return titles.get(commitment_type_value, commitment_type_value.replace("_", " ").title())[:120]
+
+
+def inferred_commitment_category(transaction: Transaction) -> str | None:
+    text = (
+        f"{transaction.source_category} {transaction.merchant_name} "
+        f"{transaction.description} {transaction.sub_type}"
+    ).lower()
+    for category, tokens in COMMITMENT_CATEGORY_RULES:
+        if any(token in text for token in tokens):
+            return category
+    if transaction.transaction_type == "debt_payment":
+        return "Debt payments"
+    return None
 
 
 def looks_like_commitment(transaction: Transaction) -> bool:

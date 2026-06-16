@@ -45,6 +45,16 @@ ai-eos-metadata:
   `Make recurring` action that opens a review form before creating the commitment.
 - Recurring commitment forms must separate user-friendly reference naming from source evidence,
   and include an editable category so raw bank labels do not become the household planning model.
+- Commitment category inputs should offer the curated household taxonomy: utilities, council tax,
+  vehicle costs, insurance, education/childcare, family support, healthcare, credit cards, BNPL,
+  subscriptions, and annual/irregular costs. Show this as a visible suggested-category dropdown
+  next to the editable text field; do not rely only on browser datalist behavior.
+- Detected recurring candidate edit state should use the compact two-column review pattern:
+  header with source/amount/actions, uniform field cells, `Budget category` instead of generic
+  category, and `Payment kind` instead of technical type.
+- Recurring rows must support editing the planning amount for variable obligations such as credit
+  cards. Transaction advice must support `Not recurring` dismissal without changing imported
+  transactions.
 - Use `prefers-reduced-motion` protections when adding new motion.
 
 ## 5. Verification

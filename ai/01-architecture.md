@@ -29,7 +29,7 @@ Phase 1/2 currently has one active entity, Household, populated by Snoop CSV imp
 - **Import Service**: Snoop CSV parser, validator, previewer, fingerprinting/upsert engine, import logs.
 - **Classification Service**: account type mapping, category normalization, merchant rules, reviewed/unreviewed state.
 - **Internal Transfer Engine**: same/similar amount matching, opposite-sign reconciliation, description/account pattern detection.
-- **Commitment Engine**: recurring bill detection, transaction-backed commitment creation with household reference names/categories, manual commitment entry, subscription candidates, variable bill estimates, finite BNPL/loan/payment-plan modeling, and credit-card obligation modeling.
+- **Commitment Engine**: recurring bill detection, transaction-backed commitment creation with source labels plus household reference names/categories, curated household category inference, manual commitment entry, subscription candidates, editable variable bill estimates, finite BNPL/loan/payment-plan modeling, and credit-card obligation modeling.
 - **Forecast Engine**: projected balances, available-after-commitments, flexible spending remaining, low-balance warnings.
 - **Account Balance Semantics**: centralized `available_for_bills` and `liability_balance` calculations so overdraft-enabled current accounts can contribute bill-payment capacity while still reporting negative balances as liabilities.
 - **Decision Queue**: low-noise human confirmations that improve accuracy; rendered as a compact desktop review table and mobile action cards.

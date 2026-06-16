@@ -380,7 +380,7 @@ test("supports phase 2 household expansion workflows", async ({ page }) => {
   await expect(page.getByLabel("Monthly budget envelopes")).toContainText("£476.01");
 
   await page.goto("/#/recurring");
-  await expect(page.getByText("Commitment inbox")).toBeVisible();
+  await expect(page.getByText("Commitment Inbox")).toBeVisible();
   await page.getByRole("button", { name: /Add a bill or subscription/ }).click();
   await page.getByLabel("Commitment name").fill("Klarna sofa");
   await page.getByLabel("Commitment type").selectOption("bnpl");
@@ -388,7 +388,7 @@ test("supports phase 2 household expansion workflows", async ({ page }) => {
   await page.getByLabel("Commitment next due date").fill("2026-07-10");
   await page.getByLabel("Commitment payment count").fill("3");
   await page.getByRole("button", { name: "Protect this commitment" }).click();
-  await expect.poll(() => createdCommitment).toBeDefined();
+  await expect.poll(() => Boolean(createdCommitment)).toBe(true);
   expect(createdCommitment).toMatchObject({
     commitment_type: "bnpl",
     expected_amount: "42",
@@ -396,12 +396,13 @@ test("supports phase 2 household expansion workflows", async ({ page }) => {
     occurrence_count: 3,
   });
   await page.getByRole("button", { name: "Use transaction" }).click();
-  await expect(page.getByText("Based on transaction")).toBeVisible();
+  await expect(page.getByText("Source transaction")).toBeVisible();
   await page.getByRole("button", { name: "Protect this commitment" }).click();
   expect(createdCommitment).toMatchObject({
     category: "Groceries",
     expected_amount: "48.99",
     name: "Morrisons",
+    source_label: "Morrisons",
     source_transaction_id: "transaction-1",
   });
 
@@ -438,7 +439,7 @@ test("renders colorful account and report graphics", async ({ page }) => {
   await expect(page.getByRole("button", { name: /Goal progress/ })).toHaveAttribute("aria-expanded", "false");
 
   await page.goto("/#/recurring");
-  await expect(page.getByRole("button", { name: /Recurring candidates/ })).toBeVisible();
+  await expect(page.getByText("Detected recurring candidates")).toBeVisible();
 
   await page.goto("/#/reports");
   await expect(page.getByRole("heading", { name: "Cash Flow" })).toBeVisible();
@@ -640,13 +641,14 @@ test("creates a recurring commitment from the transaction ledger", async ({ page
   await expect(page.getByLabel("Transaction recurring reference name")).toHaveValue("Morrisons");
   await expect(page.getByLabel("Transaction recurring category")).toHaveValue("Groceries");
   await page.getByRole("button", { name: "Protect this recurring item" }).click();
-  await expect.poll(() => createdCommitment).toBeDefined();
+  await expect.poll(() => Boolean(createdCommitment)).toBe(true);
 
   expect(createdCommitment).toMatchObject({
     category: "Groceries",
     expected_amount: "48.99",
     name: "Morrisons",
     next_due_date: "2026-07-14",
+    source_label: "Morrisons",
     source_transaction_id: "transaction-1",
   });
 });
@@ -663,12 +665,13 @@ test("preserves whole-pound amounts when creating recurring from transactions", 
 
   await page.locator(".transaction-row", { hasText: "Council Tax" }).getByRole("button", { name: "Make recurring" }).click();
   await expect(page.getByLabel("Transaction recurring amount")).toHaveValue("200");
-  await expect(page.getByLabel("Transaction recurring category")).toHaveValue("Bills");
+  await expect(page.getByLabel("Transaction recurring category")).toHaveValue("Council tax");
+  await expect(page.getByLabel("Transaction recurring suggested household category")).toHaveValue("Council tax");
   await page.getByRole("button", { name: "Protect this recurring item" }).click();
-  await expect.poll(() => createdCommitment).toBeDefined();
+  await expect.poll(() => Boolean(createdCommitment)).toBe(true);
 
   expect(createdCommitment).toMatchObject({
-    category: "Bills",
+    category: "Council tax",
     expected_amount: "200",
     name: "Council Tax",
     source_transaction_id: "transaction-3",
@@ -685,15 +688,34 @@ test("renames and categorizes existing recurring commitments", async ({ page }) 
   await page.goto("/#/recurring");
 
   await page.getByRole("button", { name: "Edit details" }).click();
+  await expect(page.getByText("NETFLIX.COM///", { exact: true })).toBeVisible();
+  await expect(page.locator('datalist#commitment-category-options option[value="Kids tuition & school fees"]')).toHaveCount(1);
+  await expect(page.locator('datalist#commitment-category-options option[value="Vehicle insurance"]')).toHaveCount(1);
+  await expect(page.getByLabel("Suggested household category - Netflix")).toContainText("Kids tuition & school fees");
+  await page.getByLabel("Suggested household category - Netflix").selectOption("Subscriptions");
+  await expect(page.getByLabel("Category for Netflix")).toHaveValue("Subscriptions");
   await page.getByLabel("Reference name for Netflix").fill("Family Netflix");
   await page.getByLabel("Category for Netflix").fill("Streaming");
-  await page.getByRole("button", { name: "Save details" }).click();
-  await expect.poll(() => patchedCommitment).toBeDefined();
+  await page.getByLabel("Planning amount for Netflix").fill("12.49");
+  await page.getByRole("button", { name: "✓ Save & confirm" }).click();
+  await expect.poll(() => Boolean(patchedCommitment)).toBe(true);
 
   expect(patchedCommitment).toMatchObject({
     category: "Streaming",
+    expected_amount: "12.49",
     name: "Family Netflix",
+    status: "confirmed",
   });
+});
+
+test("dismisses transaction advice that is not recurring", async ({ page }) => {
+  await mockAppApis(page);
+  await page.goto("/#/recurring");
+
+  await expect(page.getByRole("button", { name: "Use transaction" })).toBeVisible();
+  await page.getByRole("button", { name: "Not recurring" }).click();
+  await expect(page.getByRole("button", { name: "Use transaction" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /Restore .*dismissed advice/ })).toBeVisible();
 });
 
 test("scopes candidate toggle to planning views and updates upcoming bills", async ({ page }) => {
@@ -849,6 +871,7 @@ async function mockAppApis(
           next_due_date: body.next_due_date,
           occurrence_count: body.occurrence_count ?? null,
           source: body.source_transaction_id ? "transaction" : "manual",
+          source_label: body.source_label ?? null,
           status: body.status ?? "confirmed",
         },
       });
@@ -870,6 +893,7 @@ async function mockAppApis(
             end_date: null,
             occurrence_count: null,
             source: "detected",
+            source_label: "NETFLIX.COM///",
             status: "candidate",
           },
         ],
@@ -895,6 +919,7 @@ async function mockAppApis(
         next_due_date: body.next_due_date ?? "2026-06-20",
         occurrence_count: body.occurrence_count ?? null,
         source: "detected",
+        source_label: "NETFLIX.COM///",
         status: body.status ?? "candidate",
       },
     });

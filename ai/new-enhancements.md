@@ -89,7 +89,7 @@ ai-eos-metadata:
 
 ### Bills, Calendar, And Subscriptions
 
-- Add deeper bill editing for expected amount, cadence, next due date, reminders, and history. Basic recurring reference name/category editing is implemented.
+- Add deeper bill editing for reminders, history, and reconciliation. Basic recurring reference name, source label, curated household category, amount, type, frequency, and next-due editing is implemented.
 - Add missed/overdue bill state.
 - Add calendar month/week/day toggle.
 - Add reminder rules.
