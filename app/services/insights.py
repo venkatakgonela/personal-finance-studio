@@ -37,7 +37,7 @@ def get_insights(
     query = select(Transaction).where(
         Transaction.entity_id == entity_id,
         Transaction.transaction_type.not_in(
-            ["internal_transfer", "internal_transfer_candidate", "ignored"]
+            ["internal_transfer", "internal_transfer_candidate", "family_transfer", "ignored"]
         ),
     )
     if start_date is not None:

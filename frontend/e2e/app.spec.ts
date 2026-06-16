@@ -101,6 +101,22 @@ const planningOverview = {
   monthly_review: {
     decision_count: 1,
     end_date: "2026-06-14",
+    groups: [
+      {
+        group: "income",
+        reviewed_count: 1,
+        total: "3250.00",
+        transaction_count: 1,
+        unreviewed_count: 0,
+      },
+      {
+        group: "flexible",
+        reviewed_count: 0,
+        total: "48.99",
+        transaction_count: 1,
+        unreviewed_count: 1,
+      },
+    ],
     headline: "Month is in surplus",
     income_total: "3250.00",
     net_total: "3201.01",
@@ -112,9 +128,9 @@ const planningOverview = {
   },
   saved_filters: [
     {
-      description: "Transactions filtered to day-to-day spending in the current month.",
+      description: "Opens Transactions filtered to day-to-day spending evidence for this month.",
       id: "this-month-flexible",
-      label: "This month flexible spend",
+      label: "Inspect flexible spend evidence",
       query: "range=this-month&group=flexible&type=spending",
       route: "transactions",
     },
@@ -227,7 +243,7 @@ test("renders phase 1.5 planning routes and saved filter URLs", async ({ page })
   await expect(page.getByRole("heading", { name: "Monthly Review" })).toBeVisible();
   await expect(page.getByText("Month is in surplus")).toBeVisible();
 
-  await page.getByRole("link", { name: /This month flexible spend/ }).click();
+  await page.getByRole("link", { name: /Inspect flexible spend evidence/ }).click();
   await expect(page).toHaveURL(/#\/transactions\?range=this-month&group=flexible&type=spending/);
   await expect(page.getByLabel("Category group filter")).toHaveValue("flexible");
   await expect(page.getByLabel("Transaction type filter")).toHaveValue("spending");
@@ -603,26 +619,40 @@ test("explains when the backend API is offline", async ({ page }) => {
 
 test("sends transaction filters to the API and updates the table", async ({ page }) => {
   const transactionRequests: string[] = [];
+  let patchedTransaction: unknown;
   await mockAppApis(page, {
+    onTransactionPatch(body) {
+      patchedTransaction = body;
+    },
     onTransactionsRequest(url) {
       transactionRequests.push(url.toString());
     },
   });
   await page.goto("/#/transactions");
 
-  await expect(page.getByRole("heading", { name: "Transactions" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Transaction review queue" })).toBeVisible();
+  await expect(page.getByText("Saved rows leave this queue.")).toBeVisible();
   await expect(page.getByLabel("Transaction intelligence summary")).toContainText("0 reviewed · 2 need review");
   await expect(page.getByLabel("Transaction intelligence summary")).toContainText("Possible bills");
-  await expect(page.getByText('Grouped as Flexible because the bank label or merchant text contains "groceries".')).toBeVisible();
+  await expect(page.locator(".transaction-meaning").first()).toHaveAttribute("title", 'Matched "groceries" in bank or merchant text.');
   await expect(page.locator(".transaction-source-pill span").first()).toHaveText("Bank label");
   await expect(page.locator(".transaction-meaning small").first()).toHaveText("App interpretation");
   await expect(page.locator(".transaction-row")).toHaveCount(2);
+
+  await page.locator(".transaction-row", { hasText: "Morrisons" }).getByLabel("Review type for Morrisons").selectOption("family_transfer");
+  await page.locator(".transaction-row", { hasText: "Morrisons" }).getByRole("button", { name: "Save" }).click();
+  await expect.poll(() => patchedTransaction).toMatchObject({
+    reviewed: true,
+    transaction_type: "family_transfer",
+  });
+  await expect(page.getByLabel("Transaction intelligence summary")).toContainText("0 reviewed · 1 need review");
+  await expect(page.locator(".transaction-row", { hasText: "Morrisons" })).toHaveCount(0);
 
   await page.getByLabel("Category group filter").selectOption("income");
 
   await expect(page.locator(".transaction-row")).toHaveCount(1);
   await expect(page.locator(".transaction-merchant > strong")).toHaveText("Salary");
-  await expect(page.getByText("Grouped as Income because the amount is an inflow.")).toBeVisible();
+  await expect(page.locator(".transaction-meaning").first()).toHaveAttribute("title", "Inflow amount.");
   expect(transactionRequests.some((url) => url.includes("normalized_group=income"))).toBe(true);
   expect(transactionRequests.some((url) => url.includes("start_date=") && url.includes("end_date="))).toBe(true);
 
@@ -642,11 +672,11 @@ test("creates a recurring commitment from the transaction ledger", async ({ page
   });
   await page.goto("/#/transactions");
 
-  await page.getByRole("button", { name: "Make recurring" }).click();
-  await expect(page.getByText("Create recurring from transaction")).toBeVisible();
+  await page.getByRole("button", { name: "Make Morrisons recurring" }).click();
+  await expect(page.locator(".transaction-recurring-panel")).toContainText("Source: Morrisons");
   await expect(page.getByLabel("Transaction recurring reference name")).toHaveValue("Morrisons");
   await expect(page.getByLabel("Transaction recurring category")).toHaveValue("Groceries");
-  await page.getByRole("button", { name: "Protect this recurring item" }).click();
+  await page.getByRole("button", { name: "✓ Save & confirm" }).click();
   await expect.poll(() => Boolean(createdCommitment)).toBe(true);
 
   expect(createdCommitment).toMatchObject({
@@ -659,6 +689,17 @@ test("creates a recurring commitment from the transaction ledger", async ({ page
   });
 });
 
+test("hides recurring action for transactions already linked to commitments", async ({ page }) => {
+  await mockAppApis(page, {
+    linkedTransactionIds: ["transaction-1"],
+  });
+  await page.goto("/#/transactions");
+
+  const morrisonsRow = page.locator(".transaction-row", { hasText: "Morrisons" });
+  await expect(morrisonsRow.getByRole("button", { name: "Make Morrisons recurring" })).toHaveCount(0);
+  await expect(morrisonsRow.locator(".transaction-recurring-action")).toContainText("Linked");
+});
+
 test("preserves whole-pound amounts when creating recurring from transactions", async ({ page }) => {
   let createdCommitment: unknown;
   await mockAppApis(page, {
@@ -669,11 +710,11 @@ test("preserves whole-pound amounts when creating recurring from transactions", 
   });
   await page.goto("/#/transactions");
 
-  await page.locator(".transaction-row", { hasText: "Council Tax" }).getByRole("button", { name: "Make recurring" }).click();
+  await page.locator(".transaction-row", { hasText: "Council Tax" }).getByRole("button", { name: "Make Council Tax recurring" }).click();
   await expect(page.getByLabel("Transaction recurring amount")).toHaveValue("200");
   await expect(page.getByLabel("Transaction recurring category")).toHaveValue("Council tax");
   await expect(page.getByLabel("Transaction recurring suggested household category")).toHaveValue("Council tax");
-  await page.getByRole("button", { name: "Protect this recurring item" }).click();
+  await page.getByRole("button", { name: "✓ Save & confirm" }).click();
   await expect.poll(() => Boolean(createdCommitment)).toBe(true);
 
   expect(createdCommitment).toMatchObject({
@@ -712,6 +753,53 @@ test("renames and categorizes existing recurring commitments", async ({ page }) 
     name: "Family Netflix",
     status: "confirmed",
   });
+});
+
+test("deletes recurring commitments after confirmation", async ({ page }) => {
+  let deletedCommitmentId = "";
+  await mockAppApis(page, {
+    onCommitmentDelete(id) {
+      deletedCommitmentId = id;
+    },
+  });
+  await page.goto("/#/recurring");
+
+  page.once("dialog", async (dialog) => {
+    expect(dialog.message()).toContain("Delete");
+    await dialog.accept();
+  });
+  await page.getByRole("button", { name: "Delete" }).first().click();
+
+  await expect.poll(() => deletedCommitmentId).toBe("commitment-1");
+});
+
+test("warns before creating a likely duplicate recurring commitment", async ({ page }) => {
+  await mockAppApis(page, {
+    extraCommitments: [
+      {
+        category: "Groceries",
+        commitment_type: "bill",
+        expected_amount: "48.99",
+        frequency: "monthly",
+        id: "commitment-morrisons-existing",
+        instance_count: 1,
+        name: "Morrisons monthly shop",
+        next_due_date: "2026-07-14",
+        end_date: null,
+        occurrence_count: null,
+        source: "manual",
+        source_label: "Morrisons",
+        source_transaction_id: null,
+        status: "confirmed",
+      },
+    ],
+  });
+  await page.goto("/#/transactions");
+
+  await page.getByRole("button", { name: "Make Morrisons recurring" }).click();
+
+  await expect(page.getByRole("alert")).toContainText("Possible duplicate");
+  await expect(page.getByRole("alert")).toContainText("Morrisons monthly shop");
 });
 
 test("dismisses transaction advice that is not recurring", async ({ page }) => {
@@ -811,13 +899,17 @@ async function mockAppApis(
   page: Page,
   options: {
     extraTransactions?: typeof baseTransaction[];
+    extraCommitments?: Array<Record<string, unknown>>;
     onCommitmentCreate?: (body: unknown) => void;
+    onCommitmentDelete?: (id: string) => void;
     onCommitmentPatch?: (body: unknown) => void;
     onReset?: () => void;
-    onTransactionPatch?: () => void;
+    onTransactionPatch?: (body: unknown) => void;
     onTransactionsRequest?: (url: URL) => void;
+    linkedTransactionIds?: string[];
   } = {},
 ) {
+  const patchedTransactions = new Map<string, Partial<typeof baseTransaction>>();
   await page.route("**/api/imports/reset", async (route) => {
     options.onReset?.();
     await route.fulfill({
@@ -878,37 +970,81 @@ async function mockAppApis(
           occurrence_count: body.occurrence_count ?? null,
           source: body.source_transaction_id ? "transaction" : "manual",
           source_label: body.source_label ?? null,
+          source_transaction_id: body.source_transaction_id ?? null,
           status: body.status ?? "confirmed",
         },
       });
       return;
     }
+    const commitments = [
+      {
+        category: "Subscriptions",
+        commitment_type: "subscription",
+        expected_amount: "9.99",
+        frequency: "monthly",
+        id: "commitment-1",
+        instance_count: 1,
+        name: "Netflix",
+        next_due_date: "2026-06-20",
+        end_date: null,
+        occurrence_count: null,
+        source: "detected",
+        source_label: "NETFLIX.COM///",
+        source_transaction_id: null,
+        status: "candidate",
+      },
+      ...((options.linkedTransactionIds ?? []).map((transactionId) => ({
+        category: "Groceries",
+        commitment_type: "bill",
+        expected_amount: "48.99",
+        frequency: "monthly",
+        id: `commitment-${transactionId}`,
+        instance_count: 1,
+        name: "Morrisons",
+        next_due_date: "2026-07-14",
+        end_date: null,
+        occurrence_count: null,
+        source: "transaction",
+        source_label: "Morrisons",
+        source_transaction_id: transactionId,
+        status: "confirmed",
+      }))),
+      ...(options.extraCommitments ?? []),
+    ];
     await route.fulfill({
       contentType: "application/json",
       json: {
-        commitments: [
-          {
-            category: "Subscriptions",
-            commitment_type: "subscription",
-            expected_amount: "9.99",
-            frequency: "monthly",
-            id: "commitment-1",
-            instance_count: 1,
-            name: "Netflix",
-            next_due_date: "2026-06-20",
-            end_date: null,
-            occurrence_count: null,
-            source: "detected",
-            source_label: "NETFLIX.COM///",
-            status: "candidate",
-          },
-        ],
+        commitments,
         entity_name: "Household",
-        total_count: 1,
+        total_count: commitments.length,
       },
     });
   });
   await page.route("**/api/commitments/*", async (route) => {
+    if (route.request().method() === "DELETE") {
+      const id = route.request().url().split("/").pop() ?? "";
+      options.onCommitmentDelete?.(id);
+      await route.fulfill({
+        contentType: "application/json",
+        json: {
+          category: "Subscriptions",
+          commitment_type: "subscription",
+          end_date: null,
+          expected_amount: "9.99",
+          frequency: "monthly",
+          id,
+          instance_count: 1,
+          name: "Netflix",
+          next_due_date: "2026-06-20",
+          occurrence_count: null,
+          source: "detected",
+          source_label: "NETFLIX.COM///",
+          source_transaction_id: null,
+          status: "candidate",
+        },
+      });
+      return;
+    }
     const body = route.request().method() === "PATCH" ? await route.request().postDataJSON() : {};
     if (route.request().method() === "PATCH") options.onCommitmentPatch?.(body);
     await route.fulfill({
@@ -926,6 +1062,7 @@ async function mockAppApis(
         occurrence_count: body.occurrence_count ?? null,
         source: "detected",
         source_label: "NETFLIX.COM///",
+        source_transaction_id: null,
         status: body.status ?? "candidate",
       },
     });
@@ -1044,10 +1181,20 @@ async function mockAppApis(
   });
   await page.route("**/api/transactions**", async (route) => {
     if (route.request().method() === "PATCH") {
-      options.onTransactionPatch?.();
+      const body = await route.request().postDataJSON();
+      options.onTransactionPatch?.(body);
+      const transactionId = route.request().url().split("/").pop() ?? baseTransaction.id;
+      const updatedTransaction = {
+        ...baseTransaction,
+        normalized_group: body.transaction_type === "family_transfer" ? "transfer" : baseTransaction.normalized_group,
+        reviewed: body.reviewed ?? true,
+        source_category: body.source_category ?? baseTransaction.source_category,
+        transaction_type: body.transaction_type ?? baseTransaction.transaction_type,
+      };
+      patchedTransactions.set(transactionId, updatedTransaction);
       await route.fulfill({
         contentType: "application/json",
-        json: { ...baseTransaction, reviewed: true, source_category: "Flexible" },
+        json: updatedTransaction,
       });
       return;
     }
@@ -1055,11 +1202,17 @@ async function mockAppApis(
     const url = new URL(route.request().url());
     const normalizedGroup = url.searchParams.get("normalized_group");
     const transactionType = url.searchParams.get("transaction_type");
+    const reviewed = url.searchParams.get("reviewed");
     options.onTransactionsRequest?.(url);
 
-    const transactions = [baseTransaction, incomeTransaction, ...(options.extraTransactions ?? [])].filter((transaction) => {
+    const sourceTransactions = [baseTransaction, incomeTransaction, ...(options.extraTransactions ?? [])].map(
+      (transaction) => ({ ...transaction, ...patchedTransactions.get(transaction.id) }),
+    );
+    const transactions = sourceTransactions.filter((transaction) => {
       if (normalizedGroup && transaction.normalized_group !== normalizedGroup) return false;
       if (transactionType && transaction.transaction_type !== transactionType) return false;
+      if (reviewed === "true" && !transaction.reviewed) return false;
+      if (reviewed === "false" && transaction.reviewed) return false;
       return true;
     });
 

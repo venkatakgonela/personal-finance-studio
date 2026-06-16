@@ -146,7 +146,9 @@ affordance; Phase 2.1 owns backend entity scoping, separate ledgers, and busines
 ### Transactions
 
 - Ledger with global search, selected date window, account filter, category group filter, transaction type filter, reviewed/unreviewed filter, posted status filter, amount/date/account/group columns, type edit, and reviewed save action.
-- Mark as internal transfer, debt payment, refund, ignored, or needs review.
+- Mark as expense, income, internal transfer, family transfer, debt payment, refund, ignored, or needs review.
+- Family transfer means money moved between household members and must behave as transfer-group
+  movement, not household expense.
 - Present Transactions as an evidence review workbench: top summary should show reviewed/unreviewed
   coverage, possible bills, possible transfers, and the amount still needing classification.
 - Each row should separate raw `Bank label`, deterministic `App interpretation`, and `Your decision`
@@ -197,13 +199,26 @@ affordance; Phase 2.1 owns backend entity scoping, separate ledgers, and busines
 
 ### Monthly Review
 
-- Current month income, outflows, net position, reviewed/unreviewed counts, open decisions, and next actions.
-- Saved filter links for common review drilldowns.
+- Current month planning-relevant income, outflows, net position, reviewed/unreviewed counts, open
+  decisions, and next actions.
+- Internal/family transfers and ignored rows are excluded from income/outflow totals and review
+  coverage. Positive transfer inflows must not inflate income, and negative payment/interest text
+  must not be grouped as income.
+- Show an inline "Where the month moved" breakdown by planning group before sending the user to
+  Transactions. Any navigation from Monthly Review to Transactions must be labelled as an evidence
+  drilldown, e.g. "Inspect transactions", not as the primary review result.
+- Saved filter cards include destination chips and action copy, e.g. "Opens Transactions" or
+  "Stay here", so the shortcut does not feel like an unexplained page transfer.
 
 ### Subscriptions
 
-- Subscription-style recurring commitments with cancellation, renegotiation, or confirmation prompts.
-- Links back into Recurring for the actual commitment review workflow.
+- Subscription workbench with a hero summary, monthly exposure, attention count, renewal review rows,
+  and integrated stale-timing issues.
+- Stale-timing issues only show unpaid/open bill instances; paid instances must clear from the page
+  even if older commitment dates are still being reconciled.
+- Keeps edit/destructive actions in Recurring, but gives each service a clear keep/renegotiate/cancel
+  prompt before the user jumps there.
+- Uses the same premium row-card language as Recurring rather than the older compact planning widget.
 
 ### Accounts
 

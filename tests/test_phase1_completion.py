@@ -1,14 +1,17 @@
+from datetime import date
+from decimal import Decimal
 from pathlib import Path
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import BillInstance, Transaction
+from app.models import BillInstance, Commitment, Transaction
 from app.schemas.accounts import AccountUpdate
-from app.schemas.commitments import BillInstancePayment, CommitmentUpdate
+from app.schemas.commitments import BillInstancePayment, CommitmentCreate, CommitmentUpdate
 from app.schemas.transactions import TransactionUpdate
 from app.services.accounts import get_accounts_summary, update_account
 from app.services.commitments import (
+    create_manual_commitment,
     detect_recurring_commitments,
     mark_bill_instance_paid,
     update_commitment,
@@ -16,7 +19,7 @@ from app.services.commitments import (
 from app.services.forecast import get_cashflow_forecast
 from app.services.import_commit import commit_snoop_csv
 from app.services.insights import get_insights
-from app.services.planning import get_planning_overview
+from app.services.planning import get_planning_overview, monthly_review
 from app.services.transactions import get_transaction_ledger, update_transaction
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -38,6 +41,36 @@ def test_transaction_review_updates_type_and_category_group(db_session: Session)
     assert updated.transaction_type == "ignored"
     assert updated.reviewed is True
     assert updated.normalized_group == "ignored"
+
+
+def test_family_transfer_review_is_excluded_from_spending_views(db_session: Session) -> None:
+    contents = (FIXTURES / "snoop_minimal.csv").read_bytes()
+    import_result = commit_snoop_csv(contents, source_filename="snoop.csv", session=db_session)
+    transaction = db_session.scalar(select(Transaction).where(Transaction.amount < 0))
+    assert transaction is not None
+
+    updated = update_transaction(
+        db_session,
+        import_result.entity_id,
+        transaction.id,
+        TransactionUpdate(transaction_type="family_transfer", reviewed=True),
+    )
+
+    assert updated.transaction_type == "family_transfer"
+    assert updated.reviewed is True
+    assert updated.normalized_group == "transfer"
+
+    ledger = get_transaction_ledger(
+        db_session,
+        import_result.entity_id,
+        include_transfer_candidates=False,
+        limit=100,
+        offset=0,
+    )
+    assert all(item.id != transaction.id for item in ledger.transactions)
+
+    insights = get_insights(db_session, import_result.entity_id)
+    assert all(group.group != "transfer" for group in insights.category_groups)
 
 
 def test_forecast_uses_only_confirmed_commitments_for_projected_balance(
@@ -111,6 +144,135 @@ def test_mark_bill_instance_paid_and_insights_exclude_transfers(db_session: Sess
         item.group not in {"income", "transfer", "ignored"}
         for item in insights.merchant_breakdowns
     )
+
+
+def test_mark_paid_advances_commitment_due_date_and_clears_stale_review(
+    db_session: Session,
+) -> None:
+    contents = (FIXTURES / "snoop_recurring.csv").read_bytes()
+    import_result = commit_snoop_csv(contents, source_filename="snoop.csv", session=db_session)
+    summary = create_manual_commitment(
+        db_session,
+        import_result.entity_id,
+        CommitmentCreate(
+            name="Past subscription",
+            commitment_type="subscription",
+            category="Subscriptions",
+            frequency="monthly",
+            expected_amount="13.49",
+            next_due_date="2026-06-01",
+        ),
+    )
+    before = get_planning_overview(db_session, import_result.entity_id)
+    assert any(item.id == summary.id for item in before.stale_commitments)
+    instance = db_session.scalar(
+        select(BillInstance).where(
+            BillInstance.commitment_id == summary.id,
+            BillInstance.due_date == summary.next_due_date,
+        )
+    )
+    assert instance is not None
+
+    mark_bill_instance_paid(
+        db_session,
+        import_result.entity_id,
+        instance.id,
+        BillInstancePayment(actual_amount="13.49", paid_date="2026-06-16"),
+    )
+
+    commitment = db_session.get(Commitment, summary.id)
+    assert commitment is not None
+    assert commitment.next_due_date is not None
+    assert commitment.next_due_date.isoformat() == "2026-07-01"
+    assert db_session.scalar(
+        select(BillInstance).where(
+            BillInstance.commitment_id == summary.id,
+            BillInstance.due_date == commitment.next_due_date,
+            BillInstance.status == "planned",
+        )
+    )
+    after = get_planning_overview(db_session, import_result.entity_id)
+    assert all(item.id != summary.id for item in after.stale_commitments)
+
+    commitment.next_due_date = instance.due_date
+    db_session.commit()
+    repaired_view = get_planning_overview(db_session, import_result.entity_id)
+    assert all(item.id != summary.id for item in repaired_view.stale_commitments)
+
+
+def test_monthly_review_excludes_transfers_and_negative_payment_text(
+    db_session: Session,
+) -> None:
+    contents = (FIXTURES / "snoop_minimal.csv").read_bytes()
+    import_result = commit_snoop_csv(contents, source_filename="snoop.csv", session=db_session)
+    transaction = db_session.scalar(select(Transaction))
+    assert transaction is not None
+
+    review = monthly_review(
+        [
+            Transaction(
+                entity_id=import_result.entity_id,
+                account_id=transaction.account_id,
+                transaction_date=date(2026, 6, 1),
+                merchant_name="June salary",
+                description="June salary",
+                amount=Decimal("2500.00"),
+                direction="in",
+                source_category="Salary",
+                transaction_type="income",
+                reviewed=True,
+                fingerprint="review-income",
+            ),
+            Transaction(
+                entity_id=import_result.entity_id,
+                account_id=transaction.account_id,
+                transaction_date=date(2026, 6, 2),
+                merchant_name="N Gonela BARCLAYCARD",
+                description="Family transfer",
+                amount=Decimal("3200.00"),
+                direction="in",
+                source_category="FreeAgent unexplained",
+                transaction_type="family_transfer",
+                reviewed=True,
+                fingerprint="review-family-transfer",
+            ),
+            Transaction(
+                entity_id=import_result.entity_id,
+                account_id=transaction.account_id,
+                transaction_date=date(2026, 6, 3),
+                merchant_name="SABRE DIRECT FIRST PAYMENT",
+                description="SABRE DIRECT FIRST PAYMENT",
+                amount=Decimal("-100.00"),
+                direction="out",
+                source_category="FreeAgent unexplained",
+                transaction_type="spending",
+                reviewed=True,
+                fingerprint="review-payment-text",
+            ),
+            Transaction(
+                entity_id=import_result.entity_id,
+                account_id=transaction.account_id,
+                transaction_date=date(2026, 6, 4),
+                merchant_name="New Wave Capital",
+                description="Transfer candidate",
+                amount=Decimal("-1425.00"),
+                direction="out",
+                source_category="Transfer to Another Account",
+                transaction_type="internal_transfer_candidate",
+                reviewed=False,
+                fingerprint="review-transfer-candidate",
+            ),
+        ],
+        date(2026, 6, 1),
+        date(2026, 6, 30),
+        decision_count=0,
+    )
+
+    assert review.income_total == "2500.00"
+    assert review.outflow_total == "100.00"
+    assert review.net_total == "2400.00"
+    assert review.reviewed_count == 2
+    assert review.unreviewed_count == 0
 
 
 def test_phase_1_5_planning_overview_derives_review_and_saved_filters(

@@ -14,6 +14,7 @@ class CommitmentSummary(BaseModel):
     occurrence_count: int | None
     status: str
     source: str
+    source_transaction_id: str | None = None
     instance_count: int
 
 

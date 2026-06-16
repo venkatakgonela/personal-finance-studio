@@ -2,13 +2,14 @@ from datetime import date
 from decimal import Decimal
 from pathlib import Path
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models import Account, BillInstance, Commitment, Entity, Transaction
 from app.schemas.commitments import CommitmentCreate, CommitmentUpdate
 from app.services.commitments import (
     create_manual_commitment,
+    delete_commitment,
     detect_recurring_commitments,
     list_commitments,
     update_commitment,
@@ -113,6 +114,39 @@ def test_create_manual_commitment_supports_missed_bill(db_session: Session) -> N
     assert instance is not None
     assert instance.due_date.isoformat() == "2026-07-05"
     assert str(instance.expected_amount) == "189.00"
+
+
+def test_delete_commitment_removes_planned_instances(db_session: Session) -> None:
+    contents = (FIXTURES / "snoop_recurring.csv").read_bytes()
+    import_result = commit_snoop_csv(
+        contents,
+        source_filename="snoop_recurring.csv",
+        session=db_session,
+    )
+    summary = create_manual_commitment(
+        db_session,
+        import_result.entity_id,
+        CommitmentCreate(
+            name="Council tax",
+            commitment_type="bill",
+            frequency="monthly",
+            expected_amount="189.00",
+            next_due_date="2026-07-05",
+        ),
+    )
+
+    deleted = delete_commitment(db_session, import_result.entity_id, summary.id)
+
+    assert deleted.id == summary.id
+    assert db_session.get(Commitment, summary.id) is None
+    assert (
+        db_session.scalar(
+            select(func.count())
+            .select_from(BillInstance)
+            .where(BillInstance.commitment_id == summary.id)
+        )
+        == 0
+    )
 
 
 def test_create_manual_commitment_supports_finite_bnpl_plan(db_session: Session) -> None:

@@ -6,9 +6,10 @@ from decimal import ROUND_HALF_UP, Decimal
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import Account, Commitment, Entity, ImportLog, Transaction
+from app.models import Account, BillInstance, Commitment, Entity, ImportLog, Transaction
 from app.schemas.planning import (
     ImportFreshness,
+    MonthlyReviewGroupSummary,
     MonthlyReviewSummary,
     PlanningGoal,
     PlanningOverview,
@@ -62,7 +63,7 @@ def get_planning_overview(
         subscriptions=subscription_reviews(commitments),
         saved_filters=saved_filters(),
         import_freshness=import_freshness(session, entity_id, today),
-        stale_commitments=stale_commitments(commitments, today),
+        stale_commitments=stale_commitments(session, commitments, today),
     )
 
 
@@ -87,18 +88,31 @@ def monthly_review(
     end_date: date,
     decision_count: int,
 ) -> MonthlyReviewSummary:
-    income_total = sum((tx.amount for tx in transactions if tx.amount > 0), Decimal("0.00"))
-    outflow_total = sum(
+    review_transactions = [
+        tx
+        for tx in transactions
+        if normalized_group_for_transaction(tx) not in {"ignored", "transfer"}
+    ]
+    income_total = sum(
         (
-            abs(tx.amount)
-            for tx in transactions
-            if tx.amount < 0 and normalized_group_for_transaction(tx) != "transfer"
+            tx.amount
+            for tx in review_transactions
+            if tx.amount > 0 and normalized_group_for_transaction(tx) == "income"
         ),
         Decimal("0.00"),
     )
-    reviewed_count = sum(1 for tx in transactions if tx.reviewed)
-    unreviewed_count = len(transactions) - reviewed_count
+    outflow_total = sum(
+        (
+            abs(tx.amount)
+            for tx in review_transactions
+            if tx.amount < 0
+        ),
+        Decimal("0.00"),
+    )
+    reviewed_count = sum(1 for tx in review_transactions if tx.reviewed)
+    unreviewed_count = len(review_transactions) - reviewed_count
     net_total = income_total - outflow_total
+    groups = monthly_review_groups(review_transactions)
     next_actions: list[str] = []
 
     if unreviewed_count:
@@ -126,6 +140,41 @@ def monthly_review(
         decision_count=decision_count,
         headline=headline,
         next_actions=next_actions,
+        groups=groups,
+    )
+
+
+def monthly_review_groups(transactions: list[Transaction]) -> list[MonthlyReviewGroupSummary]:
+    groups: dict[str, list[Transaction]] = {}
+    for transaction in transactions:
+        group = normalized_group_for_transaction(transaction)
+        groups.setdefault(group, []).append(transaction)
+
+    summaries = []
+    for group, rows in groups.items():
+        total = sum(
+            (
+                abs(row.amount)
+                if row.amount < 0
+                else row.amount
+                for row in rows
+            ),
+            Decimal("0.00"),
+        )
+        summaries.append(
+            MonthlyReviewGroupSummary(
+                group=group,
+                total=format_money(total),
+                transaction_count=len(rows),
+                reviewed_count=sum(1 for row in rows if row.reviewed),
+                unreviewed_count=sum(1 for row in rows if not row.reviewed),
+            )
+        )
+
+    order = {"income": 0, "fixed": 1, "debt": 2, "non_monthly": 3, "flexible": 4}
+    return sorted(
+        summaries,
+        key=lambda summary: (order.get(summary.group, 99), summary.group),
     )
 
 
@@ -255,29 +304,31 @@ def saved_filters() -> list[SavedReportFilter]:
     return [
         SavedReportFilter(
             id="this-month-flexible",
-            label="This month flexible spend",
-            description="Transactions filtered to day-to-day spending in the current month.",
+            label="Inspect flexible spend evidence",
+            description=(
+                "Opens Transactions filtered to day-to-day spending evidence for this month."
+            ),
             route="transactions",
             query="range=this-month&group=flexible&type=spending",
         ),
         SavedReportFilter(
             id="unreviewed",
-            label="Unreviewed transactions",
-            description="Everything still needing categorisation or confirmation.",
+            label="Inspect open review queue",
+            description="Opens Transactions filtered to rows still needing categorisation.",
             route="transactions",
             query="reviewed=unreviewed",
         ),
         SavedReportFilter(
             id="income-vs-outflow",
-            label="Income vs outflow",
-            description="Monthly review report with income, outflows, and open actions.",
+            label="Return to review summary",
+            description="Keeps you on Monthly Review with income, outflows, and open actions.",
             route="monthly-review",
             query="range=this-month",
         ),
         SavedReportFilter(
             id="subscriptions",
-            label="Subscription audit",
-            description="Recurring subscription-style charges ready for review.",
+            label="Open subscription review",
+            description="Opens Subscriptions for recurring service and timing checks.",
             route="subscriptions",
             query="",
         ),
@@ -317,10 +368,23 @@ def import_freshness(session: Session, entity_id: str, today: date) -> ImportFre
     )
 
 
-def stale_commitments(commitments: list[Commitment], today: date) -> list[StaleCommitmentReview]:
+def stale_commitments(
+    session: Session,
+    commitments: list[Commitment],
+    today: date,
+) -> list[StaleCommitmentReview]:
     stale = []
     for commitment in commitments:
         if commitment.next_due_date is None or commitment.next_due_date >= today:
+            continue
+        open_due_instance = session.scalar(
+            select(BillInstance).where(
+                BillInstance.commitment_id == commitment.id,
+                BillInstance.due_date == commitment.next_due_date,
+                BillInstance.status.in_(["planned", "due_soon", "needs_review"]),
+            )
+        )
+        if open_due_instance is None:
             continue
         stale.append(
             StaleCommitmentReview(

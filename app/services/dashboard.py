@@ -154,7 +154,7 @@ def flexible_spend_total(
             Transaction.transaction_date <= end_date,
             Transaction.amount < 0,
             Transaction.transaction_type.not_in(
-                ["internal_transfer", "internal_transfer_candidate", "ignored"]
+                ["internal_transfer", "internal_transfer_candidate", "family_transfer", "ignored"]
             ),
         )
     ).all()

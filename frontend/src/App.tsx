@@ -55,6 +55,7 @@ import {
   type UpcomingCommitmentsResponse,
   commitSnoopImport,
   createCommitment,
+  deleteCommitment,
   exchangeFreeAgentOAuthCode,
   confirmDecision,
   detectCommitments,
@@ -368,6 +369,7 @@ const transactionTypes = [
   "income",
   "debt_payment",
   "internal_transfer",
+  "family_transfer",
   "refund",
   "ignored",
 ];
@@ -606,7 +608,7 @@ export function App() {
       setTransactionFilters({
         accountId: params.get("account") ?? "",
         normalizedGroup: params.get("group") ?? "",
-        reviewed: isReviewFilter(reviewed) ? reviewed : "all",
+        reviewed: isReviewFilter(reviewed) ? reviewed : "unreviewed",
         status: params.get("status") ?? "",
         transactionType: params.get("type") ?? "",
       });
@@ -797,8 +799,20 @@ export function App() {
     setError(null);
     setLoadState("loading");
     try {
-      await updateTransaction(transactionId, payload);
+      const updatedTransaction = await updateTransaction(transactionId, payload);
+      const immediateTransaction = {
+        ...updatedTransaction,
+        normalized_group: payload.transaction_type
+          ? normalizedGroupForReviewType(payload.transaction_type, updatedTransaction.normalized_group)
+          : updatedTransaction.normalized_group,
+      };
+      setTransactions((current) =>
+        applyTransactionUpdateToLedger(current, immediateTransaction, transactionFilters),
+      );
       await refreshWorkspace();
+      setTransactions((current) =>
+        applyTransactionUpdateToLedger(current, immediateTransaction, transactionFilters),
+      );
       setLoadState("ready");
     } catch (err) {
       setError(errorMessage(err));
@@ -811,6 +825,19 @@ export function App() {
     setLoadState("loading");
     try {
       await updateCommitment(commitmentId, payload);
+      await refreshWorkspace();
+      setLoadState("ready");
+    } catch (err) {
+      setError(errorMessage(err));
+      setLoadState("error");
+    }
+  }
+
+  async function runCommitmentDelete(commitmentId: string) {
+    setError(null);
+    setLoadState("loading");
+    try {
+      await deleteCommitment(commitmentId);
       await refreshWorkspace();
       setLoadState("ready");
     } catch (err) {
@@ -902,6 +929,7 @@ export function App() {
           onBillPaid={runBillPaid}
           onCommit={runCommit}
           onCommitmentCreate={runCommitmentCreate}
+          onCommitmentDelete={runCommitmentDelete}
           onCommitmentUpdate={runCommitmentUpdate}
           onDecisionAction={runDecisionAction}
           onDetectCommitments={runCommitmentDetection}
@@ -1170,6 +1198,7 @@ function AppPage({
   onBillPaid,
   onCommit,
   onCommitmentCreate,
+  onCommitmentDelete,
   onCommitmentUpdate,
   onDecisionAction,
   onDetectCommitments,
@@ -1219,6 +1248,7 @@ function AppPage({
   onBillPaid: (instanceId: string, amount: string) => Promise<void>;
   onCommit: () => Promise<void>;
   onCommitmentCreate: (payload: CommitmentCreate) => Promise<void>;
+  onCommitmentDelete: (commitmentId: string) => Promise<void>;
   onCommitmentUpdate: (commitmentId: string, payload: CommitmentUpdate) => Promise<void>;
   onDecisionAction: (
     action: "confirm" | "reject",
@@ -1267,6 +1297,7 @@ function AppPage({
       <section className="page-grid page-grid-single" aria-label="Transactions page">
         <TransactionsCard
           accounts={accounts}
+          commitments={commitments}
           limit={18}
           onCommitmentCreate={onCommitmentCreate}
           onTransactionUpdate={onTransactionUpdate}
@@ -1353,6 +1384,7 @@ function AppPage({
           commitments={commitments}
           limit={15}
           onCommitmentCreate={onCommitmentCreate}
+          onCommitmentDelete={onCommitmentDelete}
           onCommitmentUpdate={onCommitmentUpdate}
           query={query}
           transactions={transactions}
@@ -1401,9 +1433,8 @@ function AppPage({
 
   if (route === "subscriptions") {
     return (
-      <section className="page-grid" aria-label="Subscriptions page">
+      <section className="page-grid page-grid-single" aria-label="Subscriptions page">
         <SubscriptionsCard planning={planning} />
-        <StaleCommitmentsCard planning={planning} />
       </section>
     );
   }
@@ -2031,6 +2062,8 @@ function FreeAgentIntegrationCard({ onImported }: { onImported: () => Promise<vo
   const [fromDate, setFromDate] = useState(`${new Date().getFullYear()}-01-01`);
   const [toDate, setToDate] = useState(todayIso());
   const [useIncrementalCursor, setUseIncrementalCursor] = useState(false);
+  const [connectionOpen, setConnectionOpen] = useState(true);
+  const [refreshOpen, setRefreshOpen] = useState(false);
   const completedSteps = [
     Boolean(status?.configured),
     Boolean(status?.validated),
@@ -2067,6 +2100,10 @@ function FreeAgentIntegrationCard({ onImported }: { onImported: () => Promise<vo
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (status?.validated) setConnectionOpen(false);
+  }, [status?.validated]);
 
   async function saveAndValidate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -2171,7 +2208,7 @@ function FreeAgentIntegrationCard({ onImported }: { onImported: () => Promise<vo
     <article className="card freeagent-card wide-card">
       <CardHeader
         title="FreeAgent Live Import"
-        subtitle="Validate OAuth details, choose a bank account, then import only new or selected transactions."
+        subtitle="Choose a connected bank account to import; open setup only when credentials or refresh need attention."
         helpText="Secrets and tokens are encrypted before storage. Prefer a dedicated read-only development app and rotate tokens if a device is shared."
       />
       <div className="integration-status-strip freeagent-status-strip" aria-live="polite">
@@ -2190,131 +2227,12 @@ function FreeAgentIntegrationCard({ onImported }: { onImported: () => Promise<vo
       </div>
 
       <div className="freeagent-stage-grid">
-        <form className="freeagent-panel" onSubmit={(event) => void saveAndValidate(event)}>
+        <form className="freeagent-panel freeagent-import-panel" onSubmit={(event) => void runFreeAgentImport(event)}>
           <div className="freeagent-panel-header">
-            <span>Step 1</span>
+            <span>Import</span>
             <div>
-              <strong>Connect and validate</strong>
-              <small>Credentials stay local and encrypted; validation only reads company and accounts.</small>
-            </div>
-          </div>
-          <div className="form-grid freeagent-form-grid">
-            <label>
-              Environment
-              <select
-                aria-label="FreeAgent API environment"
-                value={form.environment}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    environment: event.target.value as FreeAgentCredentials["environment"],
-                  }))
-                }
-              >
-                <option value="production">Production API</option>
-                <option value="sandbox">Sandbox API</option>
-                <option value="custom">Custom/mock URL</option>
-              </select>
-            </label>
-            {form.environment === "custom" ? (
-              <label>
-                Base URL
-                <input
-                  aria-label="FreeAgent custom base URL"
-                  onChange={(event) => setForm((current) => ({ ...current, base_url: event.target.value }))}
-                  placeholder="http://127.0.0.1:9000"
-                  required
-                  type="url"
-                  value={form.base_url ?? ""}
-                />
-              </label>
-            ) : null}
-            <label>
-              OAuth client ID
-              <input
-                aria-label="FreeAgent OAuth client ID"
-                autoComplete="off"
-                onChange={(event) => setForm((current) => ({ ...current, client_id: event.target.value }))}
-                required
-                value={form.client_id}
-              />
-            </label>
-            <SensitiveInput
-              label="OAuth client secret"
-              onChange={(value) => setForm((current) => ({ ...current, client_secret: value }))}
-              required
-              value={form.client_secret}
-            />
-            <SensitiveInput
-              label="Access token"
-              hint="Short-lived token from OAuth Playground or FreeAgent OAuth flow. Paste the token value only; the app adds Bearer automatically."
-              onChange={(value) => setForm((current) => ({ ...current, access_token: value }))}
-              required
-              value={form.access_token}
-            />
-            <SensitiveInput
-              label="Refresh token"
-              hint="Optional, but different from the access token. Add it if you want the app to refresh expired access tokens automatically."
-              optional
-              onChange={(value) => setForm((current) => ({ ...current, refresh_token: value }))}
-              value={form.refresh_token ?? ""}
-            />
-          </div>
-          <button className="button-link" disabled={busy} type="submit">
-            {busy ? "Validating..." : "Save and validate"}
-          </button>
-        </form>
-
-        <form className="freeagent-panel" onSubmit={(event) => void exchangeCodeAndValidate(event)}>
-          <div className="freeagent-panel-header">
-            <span>Step 2</span>
-            <div>
-              <strong>Enable auto refresh</strong>
-              <small>Exchange an OAuth authorization code once; the refresh token is encrypted locally.</small>
-            </div>
-          </div>
-          <div className="form-grid freeagent-form-grid">
-            <label>
-              Redirect URI
-              <input
-                aria-label="FreeAgent OAuth redirect URI"
-                onChange={(event) => setOauthRedirectUri(event.target.value)}
-                placeholder="https://www.getpostman.com/oauth2/callback"
-                required
-                type="url"
-                value={oauthRedirectUri}
-              />
-            </label>
-            <label>
-              Authorization code
-              <input
-                aria-label="FreeAgent OAuth authorization code"
-                autoComplete="off"
-                onChange={(event) => setAuthorizationCode(event.target.value)}
-                placeholder="Paste code returned by FreeAgent"
-                required
-                value={authorizationCode}
-              />
-            </label>
-          </div>
-          {authorizationUrl ? (
-            <a className="button-link button-link-secondary" href={authorizationUrl} rel="noreferrer" target="_blank">
-              Open FreeAgent authorization
-            </a>
-          ) : (
-            <p className="fine-print">Enter client ID and redirect URI to generate the authorization link.</p>
-          )}
-          <button className="button-link" disabled={busy || !authorizationCode || !form.client_id || !form.client_secret} type="submit">
-            {busy ? "Exchanging..." : "Exchange code and validate"}
-          </button>
-        </form>
-
-        <form className="freeagent-panel" onSubmit={(event) => void runFreeAgentImport(event)}>
-          <div className="freeagent-panel-header">
-            <span>Step 3</span>
-            <div>
-              <strong>Choose import scope</strong>
-              <small>Use the saved cursor for daily imports, or choose a one-off date window.</small>
+              <strong>Choose bank account</strong>
+              <small>Import one bank account at a time; saved credentials can be reused for every FreeAgent account.</small>
             </div>
           </div>
           <div className="form-grid freeagent-form-grid">
@@ -2372,7 +2290,9 @@ function FreeAgentIntegrationCard({ onImported }: { onImported: () => Promise<vo
             <span>
               {selectedAccount
                 ? `${selectedAccount.type} · ${selectedAccount.status} · latest ${selectedAccount.latest_activity_date ?? "unknown"}`
-                : "Validate first, then choose the account to import."}
+                : status?.validated
+                  ? "Choose a bank account from the saved FreeAgent connection."
+                  : "Open Connect and validate first, then choose the account to import."}
             </span>
             <small>
               {hasIncrementalCursor
@@ -2384,6 +2304,145 @@ function FreeAgentIntegrationCard({ onImported }: { onImported: () => Promise<vo
             {busy ? "Importing..." : importingWithCursor ? "Run incremental import" : "Run date-range import"}
           </button>
         </form>
+
+        <div className="freeagent-maintenance-grid" aria-label="FreeAgent setup maintenance">
+          <FreeAgentCollapsiblePanel
+            meta={status?.validated ? "Saved connection" : status?.configured ? "Configured" : "Required setup"}
+            onToggle={() => setConnectionOpen((current) => !current)}
+            open={connectionOpen}
+            title="Connect and validate"
+          >
+            <form className="freeagent-panel freeagent-panel-compact" onSubmit={(event) => void saveAndValidate(event)}>
+              <div className="freeagent-panel-header">
+                <span>Setup</span>
+                <div>
+                  <strong>OAuth credentials</strong>
+                  <small>Credentials stay local and encrypted; validation only reads company and accounts.</small>
+                </div>
+              </div>
+              <div className="form-grid freeagent-form-grid">
+                <label>
+                  Environment
+                  <select
+                    aria-label="FreeAgent API environment"
+                    value={form.environment}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        environment: event.target.value as FreeAgentCredentials["environment"],
+                      }))
+                    }
+                  >
+                    <option value="production">Production API</option>
+                    <option value="sandbox">Sandbox API</option>
+                    <option value="custom">Custom/mock URL</option>
+                  </select>
+                </label>
+                {form.environment === "custom" ? (
+                  <label>
+                    Base URL
+                    <input
+                      aria-label="FreeAgent custom base URL"
+                      onChange={(event) => setForm((current) => ({ ...current, base_url: event.target.value }))}
+                      placeholder="http://127.0.0.1:9000"
+                      required
+                      type="url"
+                      value={form.base_url ?? ""}
+                    />
+                  </label>
+                ) : null}
+                <label>
+                  OAuth client ID
+                  <input
+                    aria-label="FreeAgent OAuth client ID"
+                    autoComplete="off"
+                    onChange={(event) => setForm((current) => ({ ...current, client_id: event.target.value }))}
+                    required
+                    value={form.client_id}
+                  />
+                </label>
+                <SensitiveInput
+                  label="OAuth client secret"
+                  onChange={(value) => setForm((current) => ({ ...current, client_secret: value }))}
+                  required
+                  value={form.client_secret}
+                />
+                <SensitiveInput
+                  label="Access token"
+                  hint="Short-lived token from OAuth Playground or FreeAgent OAuth flow. Paste the token value only; the app adds Bearer automatically."
+                  onChange={(value) => setForm((current) => ({ ...current, access_token: value }))}
+                  required
+                  value={form.access_token}
+                />
+                <SensitiveInput
+                  label="Refresh token"
+                  hint="Optional, but different from the access token. Add it if you want the app to refresh expired access tokens automatically."
+                  optional
+                  onChange={(value) => setForm((current) => ({ ...current, refresh_token: value }))}
+                  value={form.refresh_token ?? ""}
+                />
+              </div>
+              <button className="button-link" disabled={busy} type="submit">
+                {busy ? "Validating..." : "Save and validate"}
+              </button>
+            </form>
+          </FreeAgentCollapsiblePanel>
+
+          <FreeAgentCollapsiblePanel
+            meta="Optional automatic token refresh"
+            onToggle={() => setRefreshOpen((current) => !current)}
+            open={refreshOpen}
+            title="Enable auto refresh"
+          >
+            <form className="freeagent-panel freeagent-panel-compact" onSubmit={(event) => void exchangeCodeAndValidate(event)}>
+              <div className="freeagent-panel-header">
+                <span>OAuth</span>
+                <div>
+                  <strong>Authorization-code exchange</strong>
+                  <small>Exchange an OAuth authorization code once; the refresh token is encrypted locally.</small>
+                </div>
+              </div>
+              <div className="form-grid freeagent-form-grid">
+                <label>
+                  Redirect URI
+                  <input
+                    aria-label="FreeAgent OAuth redirect URI"
+                    onChange={(event) => setOauthRedirectUri(event.target.value)}
+                    placeholder="https://www.getpostman.com/oauth2/callback"
+                    required
+                    type="url"
+                    value={oauthRedirectUri}
+                  />
+                </label>
+                <label>
+                  Authorization code
+                  <input
+                    aria-label="FreeAgent OAuth authorization code"
+                    autoComplete="off"
+                    onChange={(event) => setAuthorizationCode(event.target.value)}
+                    placeholder="Paste code returned by FreeAgent"
+                    required
+                    value={authorizationCode}
+                  />
+                </label>
+              </div>
+              {authorizationUrl ? (
+                <a className="button-link button-link-secondary" href={authorizationUrl} rel="noreferrer" target="_blank">
+                  Open FreeAgent authorization
+                </a>
+              ) : (
+                <p className="fine-print">Enter client ID and redirect URI to generate the authorization link.</p>
+              )}
+              <button
+                className="button-link"
+                disabled={busy || !authorizationCode || !form.client_id || !form.client_secret}
+                type="submit"
+              >
+                {busy ? "Exchanging..." : "Exchange code and validate"}
+              </button>
+            </form>
+          </FreeAgentCollapsiblePanel>
+        </div>
       </div>
 
       {message ? <p className="status-copy">{message}</p> : null}
@@ -2401,6 +2460,38 @@ function FreeAgentIntegrationCard({ onImported }: { onImported: () => Promise<vo
         </div>
       ) : null}
     </article>
+  );
+}
+
+function FreeAgentCollapsiblePanel({
+  children,
+  meta,
+  onToggle,
+  open,
+  title,
+}: {
+  children: ReactNode;
+  meta: string;
+  onToggle: () => void;
+  open: boolean;
+  title: string;
+}) {
+  return (
+    <section className="freeagent-collapsible-panel">
+      <button
+        aria-expanded={open}
+        className="freeagent-collapsible-header"
+        onClick={onToggle}
+        type="button"
+      >
+        <span className={`group-chevron ${open ? "open" : ""}`} aria-hidden="true" />
+        <span>
+          <strong>{title}</strong>
+          <small>{meta}</small>
+        </span>
+      </button>
+      {open ? <div className="freeagent-collapsible-body">{children}</div> : null}
+    </section>
   );
 }
 
@@ -3270,6 +3361,7 @@ function DecisionQueueCard({
 
 function TransactionsCard({
   accounts,
+  commitments,
   limit = 6,
   onCommitmentCreate,
   onTransactionUpdate,
@@ -3279,6 +3371,7 @@ function TransactionsCard({
   transactionFilters,
 }: {
   accounts: AccountsResponse | null;
+  commitments: CommitmentsResponse | null;
   limit?: number;
   onCommitmentCreate?: (payload: CommitmentCreate) => Promise<void>;
   onTransactionUpdate?: (transactionId: string, payload: TransactionUpdate) => Promise<void>;
@@ -3295,6 +3388,13 @@ function TransactionsCard({
   );
   const rows = filteredRows.slice(0, expandedLimit);
   const intelligence = transactionIntelligence(filteredRows);
+  const isReviewQueue = transactionFilters?.reviewed === "unreviewed";
+  const recurringTransactionIds = new Set(
+    (commitments?.commitments ?? [])
+      .map((commitment) => commitment.source_transaction_id)
+      .filter((transactionId): transactionId is string => Boolean(transactionId)),
+  );
+  const recurringDuplicate = recurringDraft ? findDuplicateCommitment(recurringDraft, commitments) : null;
   const chooseRecurringSource = (transaction: TransactionSummary) => {
     setRecurringDraft(commitmentDraftFromTransaction(transaction));
   };
@@ -3321,9 +3421,23 @@ function TransactionsCard({
   return (
     <article className="card">
       <CardHeader
-        title="Transactions"
-        subtitle={transactions ? `${transactions.total_count} non-transfer rows` : "Most recent"}
+        title={isReviewQueue ? "Transaction review queue" : "Transactions ledger"}
+        subtitle={
+          transactions
+            ? isReviewQueue
+              ? `${transactions.total_count} item(s) waiting for review`
+              : `${transactions.total_count} non-transfer rows`
+            : "Most recent"
+        }
       />
+      <div className="transaction-mode-note">
+        <strong>{isReviewQueue ? "Review queue" : "Ledger mode"}</strong>
+        <span>
+          {isReviewQueue
+            ? "Saved rows leave this queue. Switch to All review states when you want full history."
+            : "Full ledger view keeps reviewed rows visible for audit and search."}
+        </span>
+      </div>
       <TransactionIntelligenceSummary stats={intelligence} />
       {transactionFilters && setTransactionFilters ? (
         <TransactionFilterBar
@@ -3333,17 +3447,34 @@ function TransactionsCard({
         />
       ) : null}
       {recurringDraft ? (
-        <form className="transaction-recurring-panel" onSubmit={(event) => void saveRecurringFromTransaction(event)}>
-          <div className="source-transaction-callout">
-            <strong>Create recurring from transaction</strong>
-            <span>{recurringDraft.sourceTransactionLabel}</span>
-            <button className="button-link button-link-small" onClick={() => setRecurringDraft(null)} type="button">
-              Cancel
-            </button>
+        <form
+          className="transaction-recurring-panel commitment-inline-edit"
+          onSubmit={(event) => void saveRecurringFromTransaction(event)}
+        >
+          <div className="commitment-edit-header">
+            <span className="commitment-edit-icon" aria-hidden="true">+</span>
+            <div>
+              <strong>{recurringDraft.name}</strong>
+              <small>
+                <span>Source: {recurringDraft.sourceLabel}</span>
+                <span>{recurringDraft.sourceTransactionLabel}</span>
+              </small>
+            </div>
+            <span className="commitment-edit-amount">{money(recurringDraft.amount)}</span>
+            <div className="row-actions commitment-header-actions">
+              <button
+                className="button-link button-link-small button-link-secondary"
+                onClick={() => setRecurringDraft(null)}
+                type="button"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
-          <div className="transaction-recurring-grid">
+          {recurringDuplicate ? <DuplicateCommitmentWarning duplicate={recurringDuplicate} /> : null}
+          <div className="commitment-edit-grid">
             <label>
-              Reference name
+              Your reference
               <input
                 aria-label="Transaction recurring reference name"
                 onChange={(event) =>
@@ -3409,7 +3540,7 @@ function TransactionsCard({
               </select>
             </label>
             <label>
-              Amount
+              Planning amount
               <input
                 aria-label="Transaction recurring amount"
                 inputMode="decimal"
@@ -3447,9 +3578,18 @@ function TransactionsCard({
               />
             </label>
           </div>
-          <div className="manual-commitment-actions">
-            <button className="button-link" type="submit">Protect this recurring item</button>
+          <div className="commitment-edit-footer">
             <small>The source transaction stays linked as evidence and the next planned bill is created.</small>
+            <div className="row-actions">
+              <button className="button-link button-link-small" type="submit">✓ Save & confirm</button>
+              <button
+                className="button-link button-link-small button-link-secondary"
+                onClick={() => setRecurringDraft(null)}
+                type="button"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         </form>
       ) : null}
@@ -3471,6 +3611,7 @@ function TransactionsCard({
               key={transaction.id}
               onCreateRecurring={onCommitmentCreate ? chooseRecurringSource : undefined}
               onTransactionUpdate={onTransactionUpdate}
+              recurringTransactionIds={recurringTransactionIds}
               transaction={transaction}
             />
           ))}
@@ -4547,6 +4688,7 @@ function MonthlyReviewCard({ planning }: { planning: PlanningOverview | null }) 
         <Metric label="Unreviewed" value={review?.unreviewed_count ?? "-"} />
         <Metric label="Saved filters" value={planning?.saved_filters.length ?? "-"} />
       </div>
+      {review ? <MonthlyReviewBreakdown review={review} /> : null}
       <CollapsibleBlock meta={`${review?.next_actions.length ?? 1} actions`} title="Review actions">
         <div className="action-list" aria-label="Monthly review actions">
           {(review?.next_actions ?? ["Import transactions to start the review."]).map((action) => (
@@ -4565,26 +4707,170 @@ function MonthlyReviewCard({ planning }: { planning: PlanningOverview | null }) 
   );
 }
 
-function SubscriptionsCard({ planning }: { planning: PlanningOverview | null }) {
+function MonthlyReviewBreakdown({ review }: { review: PlanningOverview["monthly_review"] }) {
   return (
-    <article className="card planning-card">
-      <CardHeader
-        title="Subscriptions"
-        subtitle="Cancellation, renegotiation, and confirmation prompts."
-      />
-      <CollapsibleBlock meta={`${planning?.subscriptions.length ?? 0} subscriptions`} title="Review queue">
-        <CompactList
-          empty="No subscription-style commitments detected yet."
-          rows={(planning?.subscriptions ?? []).map((subscription) => ({
-            title: subscription.name,
-            meta: `${titleCase(subscription.frequency)} · next ${subscription.next_due_date ?? "unknown"} · ${subscription.prompt}`,
-            amount: money(subscription.expected_amount),
-            action: <a className="button-link button-link-small" href="#/recurring">Review</a>,
-          }))}
-        />
-      </CollapsibleBlock>
+    <CollapsibleBlock
+      meta={`${review.groups.length} group${review.groups.length === 1 ? "" : "s"}`}
+      title="Where the month moved"
+    >
+      {review.groups.length === 0 ? (
+        <p className="empty-copy">No planning-relevant transactions in this review period.</p>
+      ) : (
+        <div className="monthly-review-group-list">
+          {review.groups.map((group) => (
+            <div className="monthly-review-group-row" key={group.group}>
+              <div>
+                <strong>{titleCase(group.group)}</strong>
+                <small>
+                  {group.transaction_count} transaction{group.transaction_count === 1 ? "" : "s"} · {group.reviewed_count} reviewed
+                  {group.unreviewed_count ? ` · ${group.unreviewed_count} open` : ""}
+                </small>
+              </div>
+              <span>{money(group.total)}</span>
+              <a
+                className="button-link button-link-small button-link-secondary"
+                href={`#/transactions?range=this-month&group=${encodeURIComponent(group.group)}${
+                  group.group === "income" ? "" : "&type=spending"
+                }&reviewed=all`}
+              >
+                Inspect transactions
+              </a>
+            </div>
+          ))}
+        </div>
+      )}
+    </CollapsibleBlock>
+  );
+}
+
+function SubscriptionsCard({ planning }: { planning: PlanningOverview | null }) {
+  const subscriptions = planning?.subscriptions ?? [];
+  const staleCommitments = planning?.stale_commitments ?? [];
+  const monthlyExposure = subscriptions.reduce(
+    (total, subscription) => total + monthlyEquivalentFromFrequency(subscription.expected_amount, subscription.frequency),
+    0,
+  );
+  const reviewCount = subscriptions.filter((subscription) =>
+    subscription.status === "candidate" || subscription.prompt.toLowerCase().includes("renegotiate"),
+  ).length;
+
+  return (
+    <article className="card subscription-workbench-card">
+      <div className="subscription-hero">
+        <div>
+          <p className="eyebrow">Subscriptions</p>
+          <h2>Keep only what still earns its place.</h2>
+          <p>
+            Review repeat charges as small financial commitments: keep, renegotiate, cancel, or confirm
+            before they quietly become part of the baseline.
+          </p>
+        </div>
+        <div className="subscription-hero-stats" aria-label="Subscription summary">
+          <Metric label="Tracked services" value={subscriptions.length} />
+          <Metric label="Monthly exposure" value={money(String(monthlyExposure.toFixed(2)))} />
+          <Metric label="Needs attention" value={reviewCount + staleCommitments.length} />
+        </div>
+      </div>
+
+      <div className="subscription-board">
+        <section className="subscription-panel subscription-panel-primary">
+          <div className="subscription-panel-header">
+            <div>
+              <strong>Renewal review</strong>
+              <small>Services and subscription-like commitments detected from recurring evidence.</small>
+            </div>
+            <span>{subscriptions.length} item{subscriptions.length === 1 ? "" : "s"}</span>
+          </div>
+          {subscriptions.length === 0 ? (
+            <div className="subscription-empty-state">
+              <strong>No subscription-style commitments yet.</strong>
+              <small>Use Recurring to confirm subscriptions from imported transactions.</small>
+              <a className="button-link button-link-small" href="#/recurring">Open recurring</a>
+            </div>
+          ) : (
+            <div className="subscription-list">
+              {subscriptions.map((subscription) => (
+                <div className="subscription-row" key={subscription.id}>
+                  <span className={`subscription-icon subscription-icon-${subscriptionTone(subscription)}`} aria-hidden="true" />
+                  <div className="subscription-copy">
+                    <div className="subscription-title-line">
+                      <strong>{subscription.name}</strong>
+                      <span className={`status-pill status-${subscription.status}`}>{subscription.status}</span>
+                    </div>
+                    <small>
+                      {titleCase(subscription.frequency)} · next {subscription.next_due_date ?? "unknown"}
+                    </small>
+                    <p>{subscription.prompt}</p>
+                  </div>
+                  <div className="subscription-money">
+                    <strong>{money(subscription.expected_amount)}</strong>
+                    <small>{subscriptionBillingLabel(subscription.frequency)}</small>
+                  </div>
+                  <a className="button-link button-link-small" href="#/recurring">Review</a>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section className="subscription-panel">
+          <div className="subscription-panel-header">
+            <div>
+              <strong>Timing issues</strong>
+              <small>Past-due recurring items can distort cash-flow and budget confidence.</small>
+            </div>
+            <span>{staleCommitments.length} stale</span>
+          </div>
+          {staleCommitments.length === 0 ? (
+            <div className="subscription-empty-state compact">
+              <strong>No stale commitments.</strong>
+              <small>Due dates are currently in shape.</small>
+            </div>
+          ) : (
+            <div className="subscription-stale-list">
+              {staleCommitments.map((commitment) => (
+                <div className="subscription-stale-row" key={commitment.id}>
+                  <div>
+                    <strong>{commitment.name}</strong>
+                    <small>{commitment.next_due_date ?? "No due date"} · {titleCase(commitment.status)}</small>
+                    <p>{commitment.reason}</p>
+                  </div>
+                  <span>{money(commitment.expected_amount)}</span>
+                  <a className="button-link button-link-small button-link-secondary" href="#/recurring">Fix</a>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      </div>
     </article>
   );
+}
+
+function subscriptionTone(subscription: PlanningOverview["subscriptions"][number]) {
+  const prompt = subscription.prompt.toLowerCase();
+  if (subscription.status === "candidate") return "candidate";
+  if (prompt.includes("renegotiate") || Number(subscription.expected_amount) >= 50) return "attention";
+  return "steady";
+}
+
+function monthlyEquivalentFromFrequency(amount: string, frequency: string) {
+  const value = Number(amount);
+  if (!Number.isFinite(value)) return 0;
+  if (frequency === "weekly") return value * 4.333;
+  if (frequency === "fortnightly") return value * 2.167;
+  if (frequency === "quarterly") return value / 3;
+  if (frequency === "annual") return value / 12;
+  return value;
+}
+
+function subscriptionBillingLabel(frequency: string) {
+  if (frequency === "weekly") return "weekly";
+  if (frequency === "fortnightly") return "fortnightly";
+  if (frequency === "quarterly") return "quarterly";
+  if (frequency === "annual") return "annually";
+  if (frequency === "custom") return "custom cadence";
+  return "monthly";
 }
 
 function SavedFiltersCard({ planning }: { planning: PlanningOverview | null }) {
@@ -4595,8 +4881,10 @@ function SavedFiltersCard({ planning }: { planning: PlanningOverview | null }) {
         <div className="saved-filter-grid">
           {(planning?.saved_filters ?? []).map((filter) => (
             <a className="saved-filter-card" href={savedFilterHref(filter)} key={filter.id}>
+              <span className="saved-filter-route">{savedFilterRouteLabel(filter.route)}</span>
               <strong>{filter.label}</strong>
               <small>{filter.description}</small>
+              <em>{filter.route === "monthly-review" ? "Stay here" : `Opens ${savedFilterRouteLabel(filter.route)}`}</em>
             </a>
           ))}
         </div>
@@ -4648,6 +4936,35 @@ function StaleCommitmentsCard({ planning }: { planning: PlanningOverview | null 
   );
 }
 
+function applyTransactionUpdateToLedger(
+  current: TransactionsResponse | null,
+  updatedTransaction: TransactionSummary,
+  filters: TransactionFilterState,
+) {
+  if (!current) return current;
+  const rowExists = current.transactions.some((transaction) => transaction.id === updatedTransaction.id);
+  const shouldKeep = transactionMatchesActiveFilters(updatedTransaction, filters);
+  const transactions = current.transactions
+    .map((transaction) => (transaction.id === updatedTransaction.id ? updatedTransaction : transaction))
+    .filter((transaction) => transaction.id !== updatedTransaction.id || shouldKeep);
+
+  return {
+    ...current,
+    returned_count: transactions.length,
+    total_count: rowExists && !shouldKeep ? Math.max(0, current.total_count - 1) : current.total_count,
+    transactions,
+  };
+}
+
+function transactionMatchesActiveFilters(transaction: TransactionSummary, filters: TransactionFilterState) {
+  if (filters.normalizedGroup && transaction.normalized_group !== filters.normalizedGroup) return false;
+  if (filters.transactionType && transaction.transaction_type !== filters.transactionType) return false;
+  if (filters.status && transaction.status !== filters.status) return false;
+  if (filters.reviewed === "reviewed" && !transaction.reviewed) return false;
+  if (filters.reviewed === "unreviewed" && transaction.reviewed) return false;
+  return true;
+}
+
 function TransactionIntelligenceSummary({
   stats,
 }: {
@@ -4674,16 +4991,35 @@ function TransactionIntelligenceSummary({
 function TransactionReviewRow({
   onCreateRecurring,
   onTransactionUpdate,
+  recurringTransactionIds,
   transaction,
 }: {
   onCreateRecurring?: (transaction: TransactionsResponse["transactions"][number]) => void;
   onTransactionUpdate?: (transactionId: string, payload: TransactionUpdate) => Promise<void>;
+  recurringTransactionIds: Set<string>;
   transaction: TransactionsResponse["transactions"][number];
 }) {
   const [transactionType, setTransactionType] = useState(transaction.transaction_type);
+  const [isSaving, setIsSaving] = useState(false);
   const canCreateRecurring = isRecurringSourceTransaction(transaction);
+  const alreadyRecurring = recurringTransactionIds.has(transaction.id);
   const groupReason = transactionGroupExplanation(transaction);
   const reviewLabel = transaction.reviewed ? "User confirmed" : transaction.transaction_type === "needs_review" ? "Needs decision" : "Awaiting review";
+  useEffect(() => {
+    setTransactionType(transaction.transaction_type);
+  }, [transaction.transaction_type]);
+  const saveReview = async () => {
+    if (!onTransactionUpdate || isSaving) return;
+    setIsSaving(true);
+    try {
+      await onTransactionUpdate(transaction.id, {
+        transaction_type: transactionType,
+        reviewed: true,
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
   return (
     <div className="transaction-row" role="row">
       <div className="transaction-merchant" role="cell">
@@ -4699,7 +5035,7 @@ function TransactionReviewRow({
         <strong>{transaction.account_name}</strong>
         <small>{transaction.provider}</small>
       </span>
-      <div className="transaction-meaning" role="cell">
+      <div className="transaction-meaning" role="cell" title={groupReason}>
         <span className={`transaction-group transaction-group-${transaction.normalized_group}`}>
           {titleCase(transaction.normalized_group)}
         </span>
@@ -4722,33 +5058,34 @@ function TransactionReviewRow({
             <option value="income">Income</option>
             <option value="debt_payment">Debt payment</option>
             <option value="internal_transfer">Internal transfer</option>
+            <option value="family_transfer">Family transfer</option>
             <option value="refund">Refund</option>
             <option value="ignored">Ignored</option>
           </select>
           <button
-            onClick={() =>
-              void onTransactionUpdate(transaction.id, {
-                transaction_type: transactionType,
-                reviewed: true,
-              })
-            }
+            disabled={isSaving}
+            onClick={() => void saveReview()}
             type="button"
           >
-            Save
+            {isSaving ? "Saving..." : "Save"}
           </button>
         </div>
       ) : null}
       <div className="transaction-recurring-action" role="cell">
-        {onCreateRecurring && canCreateRecurring ? (
+        {alreadyRecurring ? (
+          <small title="Already linked to a recurring item">Linked</small>
+        ) : onCreateRecurring && canCreateRecurring ? (
           <button
-            className="button-link button-link-small"
+            aria-label={`Make ${transaction.merchant_name || transaction.description} recurring`}
+            className="transaction-recurring-icon"
             onClick={() => onCreateRecurring(transaction)}
+            title="Make recurring"
             type="button"
           >
-            Make recurring
+            +
           </button>
         ) : (
-          <small>{canCreateRecurring ? "Open Recurring" : "Not an outflow"}</small>
+          <small title={canCreateRecurring ? "Open Recurring" : "Not an outflow"}>—</small>
         )}
       </div>
     </div>
@@ -4957,6 +5294,7 @@ function RecurringCard({
   commitments,
   limit = 6,
   onCommitmentCreate,
+  onCommitmentDelete,
   onCommitmentUpdate,
   query,
   transactions,
@@ -4964,6 +5302,7 @@ function RecurringCard({
   commitments: CommitmentsResponse | null;
   limit?: number;
   onCommitmentCreate?: (payload: CommitmentCreate) => Promise<void>;
+  onCommitmentDelete?: (commitmentId: string) => Promise<void>;
   onCommitmentUpdate?: (commitmentId: string, payload: CommitmentUpdate) => Promise<void>;
   query: string;
   transactions: TransactionsResponse | null;
@@ -5000,6 +5339,7 @@ function RecurringCard({
   const rows = filterByQuery(commitments?.commitments ?? [], query, (commitment) =>
     `${commitment.name} ${commitment.category} ${commitment.frequency} ${commitment.commitment_type}`,
   ).slice(0, limit);
+  const manualDuplicate = findDuplicateCommitment(manualForm, commitments);
   const transactionRows = filterByQuery(
     (transactions?.transactions ?? []).filter(
       (transaction) =>
@@ -5082,6 +5422,13 @@ function RecurringCard({
       status: editingCommitment.status === "candidate" ? "confirmed" : editingCommitment.status,
     });
     setEditingCommitment(null);
+  };
+  const requestCommitmentDelete = (commitment: CommitmentsResponse["commitments"][number]) => {
+    if (!onCommitmentDelete) return;
+    const confirmed = window.confirm(
+      `Delete "${commitment.name}" from recurring commitments? This removes its planned bill instances too.`,
+    );
+    if (confirmed) void onCommitmentDelete(commitment.id);
   };
   return (
     <article className="card recurring-workbench-card">
@@ -5213,6 +5560,7 @@ function RecurringCard({
                   </div>
                 ) : null}
               </div>
+              {manualDuplicate ? <DuplicateCommitmentWarning duplicate={manualDuplicate} /> : null}
               <div className="commitment-edit-grid">
                 <label>
                   Your reference
@@ -5501,6 +5849,15 @@ function RecurringCard({
                       >
                         Cancel
                       </button>
+                      {onCommitmentDelete ? (
+                        <button
+                          className="button-link button-link-small button-link-danger"
+                          onClick={() => requestCommitmentDelete(commitment)}
+                          type="button"
+                        >
+                          Delete
+                        </button>
+                      ) : null}
                     </div>
                   </form>
                 ) : (
@@ -5525,6 +5882,15 @@ function RecurringCard({
                     <button onClick={() => startCommitmentEdit(commitment)} type="button">
                       Edit details
                     </button>
+                    {onCommitmentDelete ? (
+                      <button
+                        className="button-link-danger"
+                        onClick={() => requestCommitmentDelete(commitment)}
+                        type="button"
+                      >
+                        Delete
+                      </button>
+                    ) : null}
                     {commitment.status === "candidate" ? (
                       <>
                         <button
@@ -5556,7 +5922,9 @@ function RecurringCard({
 function isRecurringSourceTransaction(transaction: TransactionSummary) {
   if (Number(transaction.amount) >= 0) return false;
   if (transaction.is_transfer_candidate) return false;
-  if (["income", "internal_transfer_candidate", "ignored"].includes(transaction.transaction_type)) return false;
+  if (["income", "internal_transfer", "internal_transfer_candidate", "family_transfer", "ignored"].includes(transaction.transaction_type)) {
+    return false;
+  }
   return transaction.status === "posted";
 }
 
@@ -5587,30 +5955,33 @@ function transactionIntelligence(transactions: TransactionSummary[]) {
 
 function transactionGroupExplanation(transaction: TransactionSummary) {
   const text = `${transaction.source_category} ${transaction.merchant_name} ${transaction.description}`.toLowerCase();
+  if (transaction.transaction_type === "family_transfer") {
+    return "Money moved between household members; excluded from spending.";
+  }
   if (transaction.transaction_type === "internal_transfer" || transaction.transaction_type === "internal_transfer_candidate") {
-    return "Grouped as Transfer because the transaction type marks owned-account movement.";
+    return "Type marks owned-account movement.";
   }
   if (transaction.transaction_type === "ignored") {
-    return "Grouped as Ignored because your review type excludes it from planning.";
+    return "Your review type excludes it from planning.";
   }
   if (transaction.transaction_type === "debt_payment") {
-    return "Grouped as Debt because your review type marks a debt payment.";
+    return "Your review type marks a debt payment.";
   }
   if (Number(transaction.amount) > 0) {
-    return "Grouped as Income because the amount is an inflow.";
+    return "Inflow amount.";
   }
 
   const matchedRule = transactionGroupTokens.find((rule) => rule.tokens.some((token) => text.includes(token)));
   if (matchedRule) {
     const matchedToken = matchedRule.tokens.find((token) => text.includes(token));
-    return `Grouped as ${titleCase(matchedRule.group)} because the bank label or merchant text contains "${matchedToken}".`;
+    return `Matched "${matchedToken}" in bank or merchant text.`;
   }
 
   if (Number(transaction.amount) < 0) {
-    return "Grouped as Flexible by default because it is an outflow without a stronger bill, debt, or transfer signal.";
+    return "Default flexible outflow; no stronger signal.";
   }
 
-  return "Grouped as Income by default because no stronger classification signal was found.";
+  return "Default income; no stronger signal.";
 }
 
 function guessCommitmentTypeFromTransaction(transaction: TransactionSummary) {
@@ -5677,6 +6048,69 @@ function transactionAmountForInput(amount: string) {
   const normalized = Math.abs(Number(amount));
   if (!Number.isFinite(normalized)) return "";
   return normalized.toFixed(2).replace(/\.00$/, "");
+}
+
+function DuplicateCommitmentWarning({
+  duplicate,
+}: {
+  duplicate: CommitmentsResponse["commitments"][number];
+}) {
+  return (
+    <div className="duplicate-warning" role="alert">
+      <strong>Possible duplicate</strong>
+      <span>
+        {duplicate.name} is already tracked as {duplicate.frequency} for {money(duplicate.expected_amount)}.
+        Continue only if this is a separate commitment.
+      </span>
+    </div>
+  );
+}
+
+function findDuplicateCommitment(
+  draft: CommitmentDraft,
+  commitments: CommitmentsResponse | null,
+) {
+  const amount = Number(draft.amount);
+  const hasAmount = Number.isFinite(amount) && amount > 0;
+  const draftLabels = [draft.name, draft.sourceLabel]
+    .map(normalizeDuplicateLabel)
+    .filter(Boolean);
+  if (!draft.sourceTransactionId && !hasAmount && draftLabels.length === 0) return null;
+
+  return (
+    commitments?.commitments.find((commitment) => {
+      if (commitment.status === "rejected") return false;
+      if (draft.sourceTransactionId && commitment.source_transaction_id === draft.sourceTransactionId) {
+        return true;
+      }
+
+      const commitmentAmount = Number(commitment.expected_amount);
+      const amountMatches =
+        hasAmount && Number.isFinite(commitmentAmount) && Math.abs(commitmentAmount - amount) < 0.01;
+      if (!amountMatches) return false;
+
+      const commitmentLabels = [commitment.name, commitment.source_label ?? ""]
+        .map(normalizeDuplicateLabel)
+        .filter(Boolean);
+      return draftLabels.some((draftLabel) =>
+        commitmentLabels.some((commitmentLabel) => labelsLookRelated(draftLabel, commitmentLabel)),
+      );
+    }) ?? null
+  );
+}
+
+function normalizeDuplicateLabel(label: string) {
+  return label
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function labelsLookRelated(left: string, right: string) {
+  if (!left || !right) return false;
+  if (left === right) return true;
+  if (left.length < 5 || right.length < 5) return false;
+  return left.includes(right) || right.includes(left);
 }
 
 function CashflowCard({
@@ -7217,6 +7651,14 @@ function transactionTypeForGroup(group: string, transaction: TransactionsRespons
   return transaction.amount.startsWith("-") ? "spending" : "income";
 }
 
+function normalizedGroupForReviewType(transactionType: string, fallback: string) {
+  if (["internal_transfer", "internal_transfer_candidate", "family_transfer"].includes(transactionType)) return "transfer";
+  if (transactionType === "ignored") return "ignored";
+  if (transactionType === "debt_payment") return "debt";
+  if (transactionType === "income") return "income";
+  return fallback;
+}
+
 function merchantDisplayName(sourceName: string, controlState?: PlanningControlState) {
   const setting = controlState?.merchants.find((merchant) => merchant.sourceName === sourceName);
   if (!setting || setting.ignored) return setting?.ignored ? "" : sourceName;
@@ -7328,7 +7770,7 @@ function initialTransactionFilters(): TransactionFilterState {
   return {
     accountId: params.get("account") ?? "",
     normalizedGroup: params.get("group") ?? "",
-    reviewed: isReviewFilter(reviewed) ? reviewed : "all",
+    reviewed: isReviewFilter(reviewed) ? reviewed : "unreviewed",
     status: params.get("status") ?? "",
     transactionType: params.get("type") ?? "",
   };
@@ -7378,7 +7820,7 @@ function buildHashState({
   if (route === "transactions") {
     if (transactionFilters.accountId) params.set("account", transactionFilters.accountId);
     if (transactionFilters.normalizedGroup) params.set("group", transactionFilters.normalizedGroup);
-    if (transactionFilters.reviewed !== "all") params.set("reviewed", transactionFilters.reviewed);
+    if (transactionFilters.reviewed !== "unreviewed") params.set("reviewed", transactionFilters.reviewed);
     if (transactionFilters.status) params.set("status", transactionFilters.status);
     if (transactionFilters.transactionType) params.set("type", transactionFilters.transactionType);
   }
@@ -8276,6 +8718,13 @@ function isReviewFilter(value: string | null): value is TransactionFilterState["
 
 function savedFilterHref(filter: { query: string; route: string }) {
   return filter.query ? `#/${filter.route}?${filter.query}` : `#/${filter.route}`;
+}
+
+function savedFilterRouteLabel(route: string) {
+  return route
+    .split("-")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
 }
 
 function errorMessage(error: unknown): string {

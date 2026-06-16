@@ -152,7 +152,13 @@ def detect_recurring_commitments(session: Session, entity_id: str) -> Commitment
             Transaction.entity_id == entity_id,
             Transaction.amount < 0,
             Transaction.transaction_type.not_in(
-                ["income", "internal_transfer_candidate", "ignored"],
+                [
+                    "income",
+                    "internal_transfer",
+                    "internal_transfer_candidate",
+                    "family_transfer",
+                    "ignored",
+                ],
             ),
         )
         .order_by(Transaction.transaction_date.asc())
@@ -280,8 +286,15 @@ def serialize_commitment(session: Session, commitment: Commitment) -> Commitment
         occurrence_count=commitment.occurrence_count,
         status=commitment.status,
         source=commitment.source,
+        source_transaction_id=commitment_source_transaction_id(commitment),
         instance_count=instance_count,
     )
+
+
+def commitment_source_transaction_id(commitment: Commitment) -> str | None:
+    if commitment.source == "transaction" and commitment.source_key.startswith("transaction:"):
+        return commitment.source_key.removeprefix("transaction:")
+    return None
 
 
 def count_commitments(session: Session, entity_id: str) -> int:
@@ -423,6 +436,26 @@ def update_commitment(
     return serialize_commitment(session, commitment)
 
 
+def delete_commitment(
+    session: Session,
+    entity_id: str,
+    commitment_id: str,
+) -> CommitmentSummary:
+    commitment = session.get(Commitment, commitment_id)
+    if commitment is None or commitment.entity_id != entity_id:
+        raise ValueError("Commitment not found.")
+
+    summary = serialize_commitment(session, commitment)
+    instances = session.scalars(
+        select(BillInstance).where(BillInstance.commitment_id == commitment.id)
+    ).all()
+    for instance in instances:
+        session.delete(instance)
+    session.delete(commitment)
+    session.commit()
+    return summary
+
+
 def mark_bill_instance_paid(
     session: Session,
     entity_id: str,
@@ -437,9 +470,54 @@ def mark_bill_instance_paid(
     instance.paid_date = date.fromisoformat(payload.paid_date)
     instance.paid_account_id = payload.paid_account_id
     instance.status = "paid"
+    session.flush()
+    commitment = session.get(Commitment, instance.commitment_id)
+    if commitment is not None and commitment.entity_id == entity_id:
+        advance_commitment_after_paid_instance(session, commitment, instance)
     session.commit()
     session.refresh(instance)
     return serialize_bill_instance(instance)
+
+
+def advance_commitment_after_paid_instance(
+    session: Session,
+    commitment: Commitment,
+    paid_instance: BillInstance,
+) -> None:
+    paid_count = int(
+        session.scalar(
+            select(func.count())
+            .select_from(BillInstance)
+            .where(
+                BillInstance.commitment_id == commitment.id,
+                BillInstance.status == "paid",
+            )
+        )
+        or 0
+    )
+    if commitment.occurrence_count is not None and paid_count >= commitment.occurrence_count:
+        commitment.next_due_date = None
+        return
+
+    next_open_instance = session.scalar(
+        select(BillInstance)
+        .where(
+            BillInstance.commitment_id == commitment.id,
+            BillInstance.status.in_(["planned", "due_soon", "needs_review"]),
+        )
+        .order_by(BillInstance.due_date.asc())
+    )
+    if next_open_instance is not None:
+        commitment.next_due_date = next_open_instance.due_date
+        return
+
+    next_due_date = next_due_for_frequency(paid_instance.due_date, commitment.frequency)
+    if commitment.end_date is not None and next_due_date > commitment.end_date:
+        commitment.next_due_date = None
+        return
+
+    commitment.next_due_date = next_due_date
+    sync_next_planned_instance(session, commitment)
 
 
 def sync_next_planned_instance(session: Session, commitment: Commitment) -> None:

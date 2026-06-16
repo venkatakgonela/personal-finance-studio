@@ -65,13 +65,13 @@ def normalized_group(
 ) -> str:
     text = f"{source_category} {merchant_name} {description}".lower()
 
-    if transaction_type in {"internal_transfer", "internal_transfer_candidate"}:
+    if transaction_type in {"internal_transfer", "internal_transfer_candidate", "family_transfer"}:
         return "transfer"
     if transaction_type == "ignored":
         return "ignored"
     if transaction_type == "debt_payment":
         return "debt"
-    if amount > 0 or any(token in text for token in INCOME_TOKENS):
+    if amount > 0:
         return "income"
     if any(token in text for token in TRANSFER_TOKENS):
         return "transfer"

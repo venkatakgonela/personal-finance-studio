@@ -31,6 +31,7 @@ describe("App", () => {
       monthly_review: {
         decision_count: 0,
         end_date: "2026-06-14",
+        groups: [],
         headline: "Review pending",
         income_total: "0.00",
         net_total: "0.00",

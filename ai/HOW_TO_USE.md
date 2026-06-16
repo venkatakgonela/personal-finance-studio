@@ -47,7 +47,8 @@ and good-to-have ideas, see `ai/new-enhancements.md`. For demo/video scripts, se
 1. Use the top date selector to choose `This month`, `Last 30 days`, `Next 15 days`, `Next 30 days`, or a custom period.
 2. Use global search for merchants, accounts, bills, or transactions.
 3. Open `Transactions` to filter by account, category group, transaction type, review state, and posted/pending status.
-4. Save transaction review changes when a transaction should become spending, income, debt payment, transfer, refund, ignored, or reviewed.
+4. Save transaction review changes when a transaction should become spending, income, debt payment,
+   internal transfer, family transfer, refund, ignored, or reviewed.
 5. Use the small `?` help icons on card headings and metrics when a number needs context. These
    tooltips explain whether a value is a balance, selected-period activity, forecast, candidate, or
    review-quality signal.

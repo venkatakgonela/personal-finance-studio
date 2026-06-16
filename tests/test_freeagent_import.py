@@ -20,6 +20,8 @@ from app.services.freeagent_import import (
     validate_connection,
 )
 from app.services.secret_store import SecretStore, normalize_key
+from app.schemas.transactions import TransactionUpdate
+from app.services.transactions import update_transaction
 
 COMPANY = {
     "url": "https://api.freeagent.com/v2/company",
@@ -216,6 +218,52 @@ def test_freeagent_import_creates_accounts_transactions_and_cursor(db_session: S
 
     assert duplicate_result.imported_transaction_count == 0
     assert duplicate_result.skipped_duplicate_count == 2
+    assert len(db_session.scalars(select(Transaction)).all()) == 2
+
+
+def test_duplicate_freeagent_import_preserves_reviewed_transaction_updates(
+    db_session: Session,
+) -> None:
+    store = SecretStore(normalize_key("test-secret-key"), "test secret store")
+    save_credentials(credentials(), db_session, secret_store=store)
+    validate_connection(db_session, secret_store=store, client_factory=FakeFreeAgentClient)
+
+    result = import_bank_transactions(
+        FreeAgentImportRequest(
+            bank_account_url=BANK_ACCOUNTS[0]["url"],
+            from_date=date(2026, 1, 1),
+            to_date=date(2026, 6, 15),
+        ),
+        db_session,
+        secret_store=store,
+        client_factory=FakeFreeAgentClient,
+    )
+    transaction = db_session.scalar(
+        select(Transaction).where(Transaction.description == "Day to Day Exp///100.00")
+    )
+    assert transaction is not None
+
+    update_transaction(
+        db_session,
+        transaction.entity_id,
+        transaction.id,
+        TransactionUpdate(transaction_type="family_transfer", reviewed=True),
+    )
+    duplicate_result = import_bank_transactions(
+        FreeAgentImportRequest(
+            bank_account_url=BANK_ACCOUNTS[0]["url"],
+            updated_since=result.next_updated_since,
+        ),
+        db_session,
+        secret_store=store,
+        client_factory=FakeFreeAgentClient,
+    )
+    db_session.refresh(transaction)
+
+    assert duplicate_result.imported_transaction_count == 0
+    assert duplicate_result.skipped_duplicate_count == 2
+    assert transaction.transaction_type == "family_transfer"
+    assert transaction.reviewed is True
     assert len(db_session.scalars(select(Transaction)).all()) == 2
 
 

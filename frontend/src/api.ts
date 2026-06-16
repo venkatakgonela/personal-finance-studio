@@ -151,6 +151,7 @@ export type CommitmentSummary = {
   occurrence_count: number | null;
   status: string;
   source: string;
+  source_transaction_id?: string | null;
   instance_count: number;
 };
 
@@ -341,6 +342,15 @@ export type MonthlyReviewSummary = {
   decision_count: number;
   headline: string;
   next_actions: string[];
+  groups: MonthlyReviewGroupSummary[];
+};
+
+export type MonthlyReviewGroupSummary = {
+  group: string;
+  total: string;
+  transaction_count: number;
+  reviewed_count: number;
+  unreviewed_count: number;
 };
 
 export type SubscriptionReviewItem = {
@@ -606,6 +616,12 @@ export async function updateCommitment(
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteCommitment(commitmentId: string): Promise<CommitmentSummary> {
+  return fetchJson<CommitmentSummary>(`/api/commitments/${commitmentId}`, {
+    method: "DELETE",
   });
 }
 

@@ -34,6 +34,15 @@ class MonthlyReviewSummary(BaseModel):
     decision_count: int
     headline: str
     next_actions: list[str]
+    groups: list["MonthlyReviewGroupSummary"] = []
+
+
+class MonthlyReviewGroupSummary(BaseModel):
+    group: str
+    total: str
+    transaction_count: int
+    reviewed_count: int
+    unreviewed_count: int
 
 
 class SubscriptionReviewItem(BaseModel):

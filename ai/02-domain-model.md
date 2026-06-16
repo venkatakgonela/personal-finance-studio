@@ -71,7 +71,7 @@ ai-eos-metadata:
 - `normalized_category_id`
 - `status`: `posted`, `pending`
 - `reviewed`
-- `transaction_type`: `spending`, `income`, `internal_transfer`, `debt_payment`, `refund`, `ignored`, `needs_review`
+- `transaction_type`: `spending`, `income`, `internal_transfer`, `family_transfer`, `debt_payment`, `refund`, `ignored`, `needs_review`
 - `fingerprint`
 - `import_id`
 
@@ -137,7 +137,7 @@ FreeAgent-imported transactions are normalized into the same transaction table b
 - `source`
 - `status`
 
-Commitments can be detected, manually entered, or created from a source transaction. Transaction-backed commitments preserve imported transaction evidence while allowing the user to add a separate reference name, assign a meaningful category, and update the planning amount when the real payment is variable.
+Commitments can be detected, manually entered, created from a source transaction, updated, or deleted. Transaction-backed commitments preserve imported transaction evidence while allowing the user to add a separate reference name, assign a meaningful category, and update the planning amount when the real payment is variable. Exact source-transaction duplicates resolve to the existing commitment, and same-label/same-amount duplicates should warn the user before creation.
 
 Commitment classification uses four distinct layers:
 
@@ -203,6 +203,9 @@ erDiagram
 - Authorized overdraft on current accounts can count toward available bill-payment capacity, but negative balances still create liabilities.
 - Credit cards, loans, and BNPL must never be counted as cash availability, even if they have an available credit limit.
 - Internal transfers are excluded from spending and income reports but remain visible in account history.
+- Family transfers between household members are a subtype of transfer for planning purposes:
+  they are excluded from household spending/income, but remain visible as money movement between
+  people/accounts.
 - Available money must distinguish cash on hand from available after commitments.
 - Dashboard Safe To Spend must be capped by cash capacity and should not equal period surplus unless cash capacity also supports it.
 - Planning assumptions belong to Budget, while Dashboard displays concise fact-led summaries and links to assumption tuning.

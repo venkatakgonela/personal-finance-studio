@@ -14,7 +14,7 @@ from app.schemas.transactions import (
 )
 from app.services.categories import normalized_group_for_transaction
 
-EXCLUDED_TRANSFER_TYPES = ["internal_transfer_candidate", "internal_transfer"]
+EXCLUDED_TRANSFER_TYPES = ["internal_transfer_candidate", "internal_transfer", "family_transfer"]
 
 
 def get_transaction_ledger(

@@ -15,6 +15,7 @@ from app.schemas.commitments import (
 )
 from app.services.commitments import (
     create_manual_commitment,
+    delete_commitment,
     detect_recurring_commitments,
     list_commitments,
     mark_bill_instance_paid,
@@ -71,6 +72,18 @@ def patch_commitment(
     try:
         entity_id = get_household_entity_id(session)
         return update_commitment(session, entity_id, commitment_id, payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.delete("/{commitment_id}", response_model=CommitmentSummary)
+def remove_commitment(
+    commitment_id: str,
+    session: Annotated[Session, Depends(get_session)],
+) -> CommitmentSummary:
+    try:
+        entity_id = get_household_entity_id(session)
+        return delete_commitment(session, entity_id, commitment_id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 

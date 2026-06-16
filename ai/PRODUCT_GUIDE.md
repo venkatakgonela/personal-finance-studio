@@ -41,7 +41,7 @@ yet an Open Banking app, tax product, investment platform, or cloud collaboratio
 | Budget | Decision-first control tower with Overview, Monthly plan, Envelopes, Assumptions, and Review. | Turns past transactions into a calm spend boundary and editable plan. |
 | Goals | Custom goals plus derived goals with target/current/monthly contribution tracking. | Connects saving intentions to monthly planning behavior. |
 | Sinking Funds | Converts annual, quarterly, and non-monthly commitments into monthly set-asides. | Prevents large irregular bills from feeling like surprises. |
-| Monthly Review | Summarizes income, outflows, net, reviewed/unreviewed counts, decisions, and next actions. | Creates a repeatable financial review ritual. |
+| Monthly Review | Summarizes planning-relevant income, outflows, net, reviewed/unreviewed counts, decisions, group breakdowns, and next actions. Internal/family transfers are excluded from totals and review coverage. | Creates a repeatable financial review ritual. |
 | Subscriptions | Highlights recurring subscription-style commitments with action prompts. | Helps users cancel, renegotiate, or confirm recurring spend. |
 | Reports | Cash Flow, Spending, and Income reports with Sankey visualizations and group/merchant/source controls. | Makes patterns visible faster than a table. |
 | Exports | CSV exports for transactions, budgets, monthly review, and category reports. | Lets users keep portable records and do external analysis. |
@@ -122,7 +122,9 @@ Filter by date, account, group, type, reviewed status, or search. Use the review
 see reviewed coverage, possible bills, possible transfers, and the value still needing
 classification. Each row separates the raw bank label, app interpretation, and your review decision;
 use the "why this group?" explanation to understand what signal drove the deterministic grouping.
-Update transaction type when needed and mark rows reviewed. For any real posted outflow, use `Make
+Update transaction type when needed and mark rows reviewed. Use `Family transfer` for money moved
+between household members' accounts; it stays visible in the ledger but is excluded from household
+spending/income so the same money is not counted twice. For any real posted outflow, use `Make
 recurring` to create a commitment from the transaction evidence without leaving the ledger.
 
 Expected result: budget actuals and reports reflect cleaner transaction meaning.
@@ -165,12 +167,19 @@ Activity, Planning Risk, and Review Actions, with help icons available for metri
 
 Success condition: user knows what changed, what is due, what is over budget, and what is safe to spend.
 
+Monthly Review saved shortcuts are evidence drilldowns, not hidden workflow steps. Each shortcut
+should explain whether it opens Transactions, Subscriptions, or stays on Monthly Review before the
+user clicks.
+
 ### Workflow C: Bill And Subscription Review
 
 1. Open Recurring.
 2. Confirm or ignore recurring candidates.
 3. Open Calendar to see dated impact.
-4. Open Subscriptions for cancellation/renegotiation prompts.
+4. Open Subscriptions for a renewal review: monthly exposure, services needing attention, and
+   past-due timing issues. Use Review/Fix to jump back to Recurring for the actual edit. When a
+   bill instance is marked paid, its commitment advances to the next unpaid occurrence and leaves
+   timing-issue lists.
 5. Open Sinking Funds for annual/non-monthly obligations.
 
 Success condition: expected obligations are visible before they hit the account.
@@ -199,9 +208,14 @@ Success condition: Budget answers "what is safe?", "what is planned?", "what cha
    fees, Education & childcare, Family support, Healthcare, Subscriptions, or Annual / irregular costs.
    Older detected rows use their current bank label as evidence until renamed, then keep that label.
    If a transaction suggestion is not recurring, choose `Not recurring` to dismiss it from advice.
-6. If no transaction exists yet, use Add a bill or subscription.
-7. For BNPL or temporary plans, fill optional Payment count or End date.
-8. Check Calendar, Cash Flow, Budget, and Dashboard after saving.
+6. If the same-looking commitment already exists, treat the duplicate warning as a pause point before
+   confirming another bill. Exact transaction-backed duplicates reuse the existing commitment instead
+   of silently creating another one.
+7. If a commitment was added by mistake, delete it from the recurring row; this removes its planned
+   bill instances so Calendar, Cash Flow, Budget, and Dashboard stop counting it.
+8. If no transaction exists yet, use Add a bill or subscription.
+9. For BNPL or temporary plans, fill optional Payment count or End date.
+10. Check Calendar, Cash Flow, Budget, and Dashboard after saving.
 
 Success condition: future commitments are protected without assuming every recurring-looking payment lasts forever.
 

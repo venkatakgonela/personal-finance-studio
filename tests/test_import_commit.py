@@ -4,7 +4,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import Account, Entity, ImportLog, Profile, Transaction
+from app.schemas.transactions import TransactionUpdate
 from app.services.import_commit import commit_snoop_csv
+from app.services.transactions import update_transaction
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -44,6 +46,31 @@ def test_commit_snoop_csv_is_idempotent_by_transaction_fingerprint(
     assert second.created_account_count == 0
     assert len(db_session.scalars(select(Transaction)).all()) == 5
     assert len(db_session.scalars(select(ImportLog)).all()) == 2
+
+
+def test_duplicate_snoop_import_preserves_reviewed_transaction_updates(
+    db_session: Session,
+) -> None:
+    contents = (FIXTURES / "snoop_minimal.csv").read_bytes()
+
+    first = commit_snoop_csv(contents, source_filename="snoop_minimal.csv", session=db_session)
+    transaction = db_session.scalar(select(Transaction).where(Transaction.source_category == "Groceries"))
+    assert transaction is not None
+
+    update_transaction(
+        db_session,
+        first.entity_id,
+        transaction.id,
+        TransactionUpdate(transaction_type="family_transfer", reviewed=True),
+    )
+    second = commit_snoop_csv(contents, source_filename="snoop_minimal.csv", session=db_session)
+    db_session.refresh(transaction)
+
+    assert second.imported_transaction_count == 0
+    assert second.skipped_duplicate_count == 5
+    assert transaction.transaction_type == "family_transfer"
+    assert transaction.reviewed is True
+    assert len(db_session.scalars(select(Transaction)).all()) == 5
 
 
 def test_commit_marks_initial_transaction_types(db_session: Session) -> None:
