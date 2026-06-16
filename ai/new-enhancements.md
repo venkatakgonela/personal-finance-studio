@@ -18,7 +18,7 @@ ai-eos-metadata:
 | Settings backup/restore export | Local-first preferences need a way to be backed up and moved between browsers/devices. | Phase 2.1 |
 | Guided first-run checklist | Import, balances, decisions, budget, and dashboard trust could be presented as a single onboarding journey. | Phase 2.1 |
 | Data quality score | A single confidence score based on freshness, balances, unreviewed transactions, open decisions, and stale commitments would help users know whether to trust numbers. | Phase 2.1 |
-| FreeAgent OAuth hardening | Manual-token FreeAgent import works; full browser OAuth callback, token refresh UX, sync-health detail, and pre-commit preview remain. | Phase 3 |
+| FreeAgent OAuth hardening | Paginated FreeAgent import, authorization-code exchange, and refresh-token retry work; full in-app browser callback, sync-health detail, and pre-commit preview remain. | Phase 3 |
 | Bank/Open Banking integration evaluation | CSV import is useful but manual. Optional Open Banking could reduce effort if privacy/consent is acceptable. | Phase 3 |
 
 ## Product Enhancements
@@ -32,7 +32,7 @@ ai-eos-metadata:
 
 ### Data Import
 
-- Add full FreeAgent browser OAuth callback and automatic refresh-token flow.
+- Add full FreeAgent browser OAuth callback; authorization-code exchange and automatic refresh-token use already exist.
 - Add FreeAgent pre-commit preview with row counts, date range, duplicate count, and selected account confirmation before import.
 - Add import history with rollback for the latest import batch.
 - Add CSV mapping UI for non-Snoop formats.
@@ -89,7 +89,7 @@ ai-eos-metadata:
 
 ### Bills, Calendar, And Subscriptions
 
-- Add bill editing for expected amount, cadence, next due date, and category.
+- Add deeper bill editing for expected amount, cadence, next due date, reminders, and history. Basic recurring reference name/category editing is implemented.
 - Add missed/overdue bill state.
 - Add calendar month/week/day toggle.
 - Add reminder rules.
@@ -172,7 +172,7 @@ ai-eos-metadata:
 4. Date-window-aware dashboard summary.
 5. Guided first-run onboarding.
 6. Data quality score.
-7. FreeAgent OAuth callback/refresh and import preview hardening.
+7. FreeAgent OAuth callback and import preview hardening.
 8. Bill editing and reminder workflow.
 9. Split transactions and bulk transaction editing.
 10. Longer-range cashflow projections.

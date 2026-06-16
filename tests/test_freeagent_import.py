@@ -6,9 +6,15 @@ from sqlalchemy.orm import Session
 
 from app.models import Account, ImportLog, IntegrationConnection, Transaction
 from app.routes.freeagent import get_freeagent_client_factory
-from app.schemas.freeagent import FreeAgentCredentials, FreeAgentImportRequest
+from app.schemas.freeagent import (
+    FreeAgentCredentials,
+    FreeAgentImportRequest,
+    FreeAgentOAuthExchangeRequest,
+)
+from app.services.freeagent_client import parse_next_link
 from app.services.freeagent_import import (
     FreeAgentIntegrationError,
+    exchange_authorization_code,
     import_bank_transactions,
     save_credentials,
     validate_connection,
@@ -81,7 +87,16 @@ class FakeFreeAgentClient:
     def get_bank_transactions(self, **kwargs):
         self.last_transaction_query = kwargs
         assert kwargs["bank_account_url"] == BANK_ACCOUNTS[0]["url"]
+        assert kwargs.get("per_page", 100) == 100
         return BANK_TRANSACTIONS
+
+    def exchange_authorization_code(self, **kwargs):
+        assert kwargs["code"] == "auth-code"
+        assert kwargs["redirect_uri"] == "https://www.getpostman.com/oauth2/callback"
+        return {
+            "access_token": "access-token",
+            "refresh_token": "refresh-token",
+        }
 
 
 def test_freeagent_credentials_are_encrypted_and_validated(db_session: Session) -> None:
@@ -126,6 +141,39 @@ def test_freeagent_credentials_trim_bearer_prefix_and_allow_blank_refresh_token(
         client_factory=FakeFreeAgentClient,
     )
     assert validation.status.validated is True
+
+
+def test_freeagent_oauth_code_exchange_stores_refresh_token(db_session: Session) -> None:
+    store = SecretStore(normalize_key("test-secret-key"), "test secret store")
+
+    status = exchange_authorization_code(
+        FreeAgentOAuthExchangeRequest(
+            environment="custom",
+            base_url="https://mock.freeagent.local",
+            client_id="client-id-1234",
+            client_secret="client-secret",
+            redirect_uri="https://www.getpostman.com/oauth2/callback",
+            authorization_code="auth-code",
+        ),
+        db_session,
+        secret_store=store,
+        client_factory=FakeFreeAgentClient,
+    )
+
+    connection = db_session.scalar(select(IntegrationConnection))
+    assert status.configured is True
+    assert connection is not None
+    assert store.decrypt(connection.encrypted_access_token) == "access-token"
+    assert store.decrypt(connection.encrypted_refresh_token) == "refresh-token"
+
+
+def test_freeagent_link_header_next_page_is_detected() -> None:
+    link_header = (
+        "<https://api.freeagent.com/v2/bank_transactions?page=3>; rel='last', "
+        "<https://api.freeagent.com/v2/bank_transactions?page=2>; rel='next'"
+    )
+
+    assert parse_next_link(link_header) == "https://api.freeagent.com/v2/bank_transactions?page=2"
 
 
 def test_freeagent_import_creates_accounts_transactions_and_cursor(db_session: Session) -> None:

@@ -5,20 +5,39 @@ class CommitmentSummary(BaseModel):
     id: str
     name: str
     commitment_type: str
+    category: str
     frequency: str
     expected_amount: str
     next_due_date: str | None
+    end_date: str | None
+    occurrence_count: int | None
     status: str
     source: str
     instance_count: int
 
 
+class CommitmentCreate(BaseModel):
+    name: str
+    commitment_type: str = "bill"
+    category: str | None = None
+    frequency: str = "monthly"
+    expected_amount: str
+    next_due_date: str
+    end_date: str | None = None
+    occurrence_count: int | None = None
+    source_transaction_id: str | None = None
+    status: str = "confirmed"
+
+
 class CommitmentUpdate(BaseModel):
     name: str | None = None
     commitment_type: str | None = None
+    category: str | None = None
     frequency: str | None = None
     expected_amount: str | None = None
     next_due_date: str | None = None
+    end_date: str | None = None
+    occurrence_count: int | None = None
     status: str | None = None
 
 

@@ -3,8 +3,13 @@ from pathlib import Path
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import BillInstance, Commitment
-from app.services.commitments import detect_recurring_commitments, list_commitments
+from app.models import BillInstance, Commitment, Transaction
+from app.schemas.commitments import CommitmentCreate
+from app.services.commitments import (
+    create_manual_commitment,
+    detect_recurring_commitments,
+    list_commitments,
+)
 from app.services.import_commit import commit_snoop_csv
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -73,3 +78,112 @@ def test_list_commitments_returns_detected_candidates(db_session: Session) -> No
     assert response.entity_name == "Household"
     assert response.total_count == 1
     assert response.commitments[0].name == "Netflix"
+
+
+def test_create_manual_commitment_supports_missed_bill(db_session: Session) -> None:
+    contents = (FIXTURES / "snoop_recurring.csv").read_bytes()
+    import_result = commit_snoop_csv(
+        contents,
+        source_filename="snoop_recurring.csv",
+        session=db_session,
+    )
+
+    summary = create_manual_commitment(
+        db_session,
+        import_result.entity_id,
+        CommitmentCreate(
+            name="Council tax",
+            commitment_type="bill",
+            frequency="monthly",
+            expected_amount="189.00",
+            next_due_date="2026-07-05",
+        ),
+    )
+
+    assert summary.name == "Council tax"
+    assert summary.source == "manual"
+    assert summary.status == "confirmed"
+    assert summary.instance_count == 1
+    instance = db_session.scalar(
+        select(BillInstance).where(BillInstance.commitment_id == summary.id)
+    )
+    assert instance is not None
+    assert instance.due_date.isoformat() == "2026-07-05"
+    assert str(instance.expected_amount) == "189.00"
+
+
+def test_create_manual_commitment_supports_finite_bnpl_plan(db_session: Session) -> None:
+    contents = (FIXTURES / "snoop_recurring.csv").read_bytes()
+    import_result = commit_snoop_csv(
+        contents,
+        source_filename="snoop_recurring.csv",
+        session=db_session,
+    )
+
+    summary = create_manual_commitment(
+        db_session,
+        import_result.entity_id,
+        CommitmentCreate(
+            name="Klarna sofa",
+            commitment_type="bnpl",
+            frequency="monthly",
+            expected_amount="42.00",
+            next_due_date="2026-07-10",
+            occurrence_count=3,
+        ),
+    )
+
+    assert summary.commitment_type == "bnpl"
+    assert summary.occurrence_count == 3
+    assert summary.instance_count == 3
+    instances = db_session.scalars(
+        select(BillInstance)
+        .where(BillInstance.commitment_id == summary.id)
+        .order_by(BillInstance.due_date.asc())
+    ).all()
+    assert [instance.due_date.isoformat() for instance in instances] == [
+        "2026-07-10",
+        "2026-08-10",
+        "2026-09-10",
+    ]
+
+
+def test_create_commitment_from_transaction_keeps_source_evidence(db_session: Session) -> None:
+    contents = (FIXTURES / "snoop_recurring.csv").read_bytes()
+    import_result = commit_snoop_csv(
+        contents,
+        source_filename="snoop_recurring.csv",
+        session=db_session,
+    )
+    transaction = db_session.scalar(
+        select(Transaction.id)
+        .where(Transaction.entity_id == import_result.entity_id, Transaction.amount < 0)
+        .order_by(Transaction.transaction_date.asc())
+    )
+
+    assert transaction is not None
+    summary = create_manual_commitment(
+        db_session,
+        import_result.entity_id,
+        CommitmentCreate(
+            name="Netflix from transaction",
+            commitment_type="subscription",
+            category="Streaming",
+            frequency="monthly",
+            expected_amount="16.99",
+            next_due_date="2026-07-01",
+            source_transaction_id=transaction,
+        ),
+    )
+
+    assert summary.source == "transaction"
+    assert summary.category == "Streaming"
+    assert summary.instance_count == 2
+    instances = db_session.scalars(
+        select(BillInstance)
+        .where(BillInstance.commitment_id == summary.id)
+        .order_by(BillInstance.due_date.asc())
+    ).all()
+    assert instances[0].matched_transaction_id == transaction
+    assert instances[0].status == "paid"
+    assert instances[1].status == "planned"

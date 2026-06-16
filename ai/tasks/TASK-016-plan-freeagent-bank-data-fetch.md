@@ -19,8 +19,8 @@ FreeAgent bank account.
 
 ## 2. Scope
 
-- **In scope:** Manual-token OAuth validation, sandbox/production/custom URL configuration, encrypted
-  secret storage, read-only account/transaction fetch flow, incremental import cursor, UI screen,
+- **In scope:** Manual-token OAuth validation, authorization-code exchange, sandbox/production/custom URL configuration, encrypted
+  secret storage, read-only paginated account/transaction fetch flow, incremental import cursor, UI screen,
   backend services/routes/migration, mocked tests.
 - **Out of scope:** Browser OAuth callback, FreeAgent write operations, statement upload, transaction
   explanation mutation, production credential setup.
@@ -55,19 +55,21 @@ Load the smallest sufficient context set.
 
 1. User opens `#/freeagent`.
 2. User chooses production, sandbox, or custom/mock URL.
-3. User enters client ID, client secret, access token, and optional refresh token.
+3. User enters client ID, client secret, access token, and optional refresh token, or exchanges an
+   OAuth authorization code to store access/refresh tokens.
 4. Backend encrypts secrets and validates with `GET /v2/company` and `GET /v2/bank_accounts`.
 5. UI shows validation status and active accounts with current balance and latest activity date.
 6. User selects the desired FreeAgent bank account.
 7. User chooses incremental cursor mode or a date window.
 8. Backend calls `GET /v2/bank_transactions?bank_account=:bank_account` with selected filters.
-9. Backend imports provider-tagged accounts/transactions, skips duplicate fingerprints, and updates
+9. Backend follows all FreeAgent transaction pages, imports provider-tagged accounts/transactions,
+   skips duplicate fingerprints, and updates
    the next `updated_since` cursor.
 
 ## 6. Acceptance Criteria
 
 - [x] FreeAgent endpoint and OAuth process are documented.
-- [x] Tests cover service, API route, encryption, mocked account listing, import, dedupe, and cursor behavior.
+- [x] Tests cover service, API route, encryption, OAuth code exchange, mocked account listing, pagination link parsing, import, dedupe, and cursor behavior.
 - [x] Read-only guardrail is explicit.
 - [x] Token and credential handling rules are explicit.
 - [x] UI supports validation status and guided incremental import questions.

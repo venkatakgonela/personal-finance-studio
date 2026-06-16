@@ -17,6 +17,17 @@ class FreeAgentCredentials(BaseModel):
     refresh_token: str | None = None
 
 
+class FreeAgentOAuthExchangeRequest(BaseModel):
+    environment: FreeAgentEnvironment = "production"
+    base_url: HttpUrl | None = None
+    auth_url: HttpUrl | None = None
+    token_url: HttpUrl | None = None
+    client_id: str = Field(min_length=1)
+    client_secret: str = Field(min_length=1)
+    redirect_uri: HttpUrl
+    authorization_code: str = Field(min_length=1)
+
+
 class FreeAgentBankAccount(BaseModel):
     url: str
     name: str

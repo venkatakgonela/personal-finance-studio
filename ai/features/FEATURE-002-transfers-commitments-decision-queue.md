@@ -13,16 +13,39 @@ ai-eos-metadata:
 ## 1. Description & User Stories
 
 - **Description:** Detect likely internal transfers and recurring commitments, route high-impact
-  candidates to a human review queue, and keep spending/income calculations from being inflated.
-- **As a** household finance user **I want to** confirm transfers and recurring bills **so that** the
-  app can produce trustworthy reports and forecasts.
+  candidates to a human review queue, support transaction-backed and manual commitment creation
+  when detection misses a bill, model finite commitments such as BNPL, and keep spending/income
+  calculations from being inflated.
+- **As a** household finance user **I want to** confirm, create from transactions, and time-box recurring bills **so
+  that** the app can produce trustworthy reports and forecasts without pretending every payment
+  lasts forever.
 
 ## 2. Acceptance Criteria
 
 - [x] Internal transfer candidates are detected and can be confirmed or rejected.
 - [x] Recurring commitment candidates are detected and can be reviewed.
+- [x] Real outflow transactions can be used as source evidence for a new commitment.
+- [x] Missed bills can be added manually from Recurring.
+- [x] Finite commitments can end after a date or a fixed number of payments.
 - [x] Transfers are first-class records, not category hacks.
 - [x] Decision Queue stays focused on high-impact review items.
+
+## 2.1 Commitment-Inbox Design
+
+Recurring uses a "commitment inbox" model:
+
+- Detection proposes candidates from transaction patterns.
+- User confirmation decides whether a candidate becomes a protected bill.
+- Transaction-backed creation lets the user pick a valid outflow from either Recurring or the
+  Transactions ledger, rename it for household reference, categorize it, and preserve source
+  evidence.
+- Manual entry remains the fallback when detection misses a real recurring commitment with no
+  usable imported transaction.
+- Finite plans, especially BNPL and short loan/payment plans, can be capped by payment count or end date.
+- Confirmed commitments feed Calendar, Cash Flow, Budget, Dashboard, Sinking Funds, and Subscriptions.
+
+This follows commitment accounting, envelope budgeting, mental accounting, and guardrail budgeting:
+money required by future commitments is treated as already spoken for before discretionary spend.
 
 ## 3. Source Tasks
 

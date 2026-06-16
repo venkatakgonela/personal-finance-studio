@@ -8,7 +8,7 @@ ai-eos-metadata:
 # FEATURE-010: FreeAgent Bank Data Fetch
 
 **Epic:** [EPIC-004: Integrations And Hardening](file:///ai/epics/EPIC-004-integrations-and-hardening.md)  
-**Status:** Implemented - manual OAuth token phase  
+**Status:** Implemented - paginated import and OAuth refresh-token phase
 
 ## 1. Description & User Stories
 
@@ -29,11 +29,12 @@ ai-eos-metadata:
   `updated_since`.
 - [x] Transaction fetch is read-only and never uploads, deletes, explains, or mutates FreeAgent data.
 - [x] FreeAgent records are provider-tagged and deduplicated independently from Snoop imports.
+- [x] FreeAgent paginated transaction responses are followed until no `rel="next"` link remains.
 - [x] UI masks client secret, access token, and refresh token by default and explains that refresh token is optional but distinct from access token.
 - [x] Access/refresh token values are normalized when users paste `Bearer ...` or header-shaped values.
-- [ ] Full browser OAuth callback and token exchange are not implemented yet; this phase uses manually obtained tokens.
+- [x] OAuth authorization-code exchange can store an encrypted refresh token for automatic access-token refresh.
 - [ ] Pre-commit transaction preview is not implemented yet; the UI asks account/date/incremental questions before import.
-- [ ] Automatic token refresh UX is not implemented yet.
+- [x] Automatic token refresh is used on expired access tokens when a refresh token is available.
 
 ## 3. Source Artifacts
 

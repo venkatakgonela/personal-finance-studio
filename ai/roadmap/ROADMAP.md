@@ -143,14 +143,18 @@ imported transactions, commitments, accounts, or explicit user-entered plan valu
   behavior; reports and insights use cleaned display labels without mutating raw imported merchant
   text.
 - Cash Flow now includes what-if scenarios with income/outflow adjustments and baseline comparison.
-- Budget now supports category, flexible, and rollover modes with visible planned/actual/remaining
-  formulas, responsive row spacing, and no hidden/clipped values on narrower dashboard widths.
+- Budget now uses a control-tower workflow with Overview, Monthly plan, Envelopes, Assumptions,
+  and Review while preserving category, flexible, and rollover modes with visible
+  planned/actual/remaining formulas.
 - Dashboard includes a Spending Plan card that explains left-to-spend as income minus obligations,
   savings goals, and flexible actuals.
 - Dashboard now shows Safe to Spend as a cash-capped summary and treats period surplus as evidence.
   Income/job-change/known-cost/buffer assumptions live in Budget to keep Dashboard concise.
 - Dashboard cards are local-first widgets. Users can reorder with `dnd-kit`, hide/show cards, add
   custom widgets, and reset layout from Settings > Dashboard.
+- Recurring now acts as a commitment inbox: detected candidates can be confirmed, missed bills can
+  be created from source transactions or added manually, and BNPL/short-term plans can end by date
+  or payment count.
 - Small collapsibles and compact lists use `@formkit/auto-animate` for lower-friction transitions
   while preserving reduced-motion safety.
 - Dashboard semantics now separate Cash Position, Spending Plan, Period Activity, Planning Risk, and
@@ -178,7 +182,8 @@ imported transactions, commitments, accounts, or explicit user-entered plan valu
 ## Phase 3 - Integrations
 
 - [x] FreeAgent API read-only bank account balance and transaction fetch, manual-token phase.
-- [ ] FreeAgent full browser OAuth callback/token exchange and automatic refresh.
+- [x] FreeAgent authorization-code token exchange and automatic refresh-token use.
+- [ ] FreeAgent full in-app browser OAuth callback.
 - [ ] FreeAgent pre-commit import preview and richer sync health.
 - Open Banking provider evaluation.
 - Connection freshness dashboard.

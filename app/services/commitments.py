@@ -5,6 +5,7 @@ from collections import defaultdict
 from datetime import date, timedelta
 from decimal import Decimal
 from statistics import median
+from uuid import uuid4
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -19,6 +20,7 @@ from app.models import (
 from app.schemas.commitments import (
     BillInstancePayment,
     BillInstanceSummary,
+    CommitmentCreate,
     CommitmentDetectionResult,
     CommitmentsResponse,
     CommitmentSummary,
@@ -143,6 +145,7 @@ def detect_recurring_commitments(session: Session, entity_id: str) -> Commitment
             entity_id=entity_id,
             name=commitment_name(rows[0]),
             commitment_type=commitment_type(rows[0]),
+            category=commitment_category(rows[0]),
             frequency=frequency,
             expected_amount=expected_amount,
             estimate_method="recent_average",
@@ -209,9 +212,12 @@ def serialize_commitment(session: Session, commitment: Commitment) -> Commitment
         id=commitment.id,
         name=commitment.name,
         commitment_type=commitment.commitment_type,
+        category=commitment.category,
         frequency=commitment.frequency,
         expected_amount=format_money(commitment.expected_amount),
         next_due_date=commitment.next_due_date.isoformat() if commitment.next_due_date else None,
+        end_date=commitment.end_date.isoformat() if commitment.end_date else None,
+        occurrence_count=commitment.occurrence_count,
         status=commitment.status,
         source=commitment.source,
         instance_count=instance_count,
@@ -225,6 +231,93 @@ def count_commitments(session: Session, entity_id: str) -> int:
         )
         or 0
     )
+
+
+def create_manual_commitment(
+    session: Session,
+    entity_id: str,
+    payload: CommitmentCreate,
+) -> CommitmentSummary:
+    entity = session.get(Entity, entity_id)
+    if entity is None:
+        raise ValueError("Entity not found.")
+
+    expected_amount = Decimal(payload.expected_amount).quantize(Decimal("0.01"))
+    if expected_amount <= 0:
+        raise ValueError("Expected amount must be greater than zero.")
+
+    next_due_date = date.fromisoformat(payload.next_due_date)
+    end_date = date.fromisoformat(payload.end_date) if payload.end_date else None
+    occurrence_count = payload.occurrence_count
+    if occurrence_count is not None and occurrence_count < 1:
+        raise ValueError("Payment count must be at least one.")
+    if end_date is not None and end_date < next_due_date:
+        raise ValueError("End date cannot be before the next due date.")
+    source = "manual"
+    source_key = f"manual:{uuid4()}"
+    source_transaction: Transaction | None = None
+    if payload.source_transaction_id:
+        source_transaction = session.get(Transaction, payload.source_transaction_id)
+        if source_transaction is None or source_transaction.entity_id != entity_id:
+            raise ValueError("Source transaction not found.")
+        if source_transaction.amount >= 0:
+            raise ValueError("Only outflow transactions can become recurring commitments.")
+        if source_transaction.id in matched_transfer_transaction_ids(session, entity_id):
+            raise ValueError("Transfer transactions cannot become recurring commitments.")
+        existing = session.scalar(
+            select(Commitment).where(
+                Commitment.entity_id == entity_id,
+                Commitment.source == "transaction",
+                Commitment.source_key == f"transaction:{source_transaction.id}",
+            )
+        )
+        if existing is not None:
+            return serialize_commitment(session, existing)
+        source = "transaction"
+        source_key = f"transaction:{source_transaction.id}"
+
+    commitment = Commitment(
+        entity_id=entity_id,
+        name=payload.name.strip()[:180] or "Manual commitment",
+        commitment_type=payload.commitment_type,
+        category=commitment_category_from_payload(payload.category, source_transaction),
+        frequency=payload.frequency,
+        expected_amount=expected_amount,
+        estimate_method="manual",
+        next_due_date=next_due_date,
+        end_date=end_date,
+        occurrence_count=occurrence_count,
+        source=source,
+        source_key=source_key,
+        status=payload.status,
+    )
+    session.add(commitment)
+    session.flush()
+    if source_transaction is not None:
+        session.add(
+            BillInstance(
+                commitment_id=commitment.id,
+                entity_id=entity_id,
+                due_date=source_transaction.transaction_date,
+                expected_amount=expected_amount,
+                actual_amount=abs(source_transaction.amount),
+                paid_date=source_transaction.transaction_date,
+                paid_account_id=source_transaction.account_id,
+                status="paid",
+                matched_transaction_id=source_transaction.id,
+            )
+        )
+    add_planned_instances(
+        session,
+        commitment,
+        expected_amount,
+        next_due_date,
+        occurrence_count=occurrence_count,
+        end_date=end_date,
+    )
+    session.commit()
+    session.refresh(commitment)
+    return serialize_commitment(session, commitment)
 
 
 def update_commitment(
@@ -241,12 +334,20 @@ def update_commitment(
         commitment.name = payload.name.strip()[:180] or commitment.name
     if payload.commitment_type is not None:
         commitment.commitment_type = payload.commitment_type
+    if payload.category is not None:
+        commitment.category = payload.category.strip()[:120] or commitment.category
     if payload.frequency is not None:
         commitment.frequency = payload.frequency
     if payload.expected_amount is not None:
         commitment.expected_amount = Decimal(payload.expected_amount).quantize(Decimal("0.01"))
     if payload.next_due_date is not None:
         commitment.next_due_date = date.fromisoformat(payload.next_due_date)
+    if payload.end_date is not None:
+        commitment.end_date = date.fromisoformat(payload.end_date) if payload.end_date else None
+    if payload.occurrence_count is not None:
+        if payload.occurrence_count < 1:
+            raise ValueError("Payment count must be at least one.")
+        commitment.occurrence_count = payload.occurrence_count
     if payload.status is not None:
         commitment.status = payload.status
 
@@ -277,6 +378,8 @@ def mark_bill_instance_paid(
 
 def sync_next_planned_instance(session: Session, commitment: Commitment) -> None:
     if commitment.next_due_date is None:
+        return
+    if commitment.end_date is not None and commitment.next_due_date > commitment.end_date:
         return
     instance = session.scalar(
         select(BillInstance).where(
@@ -393,7 +496,20 @@ def estimate_amount(rows: list[Transaction]) -> Decimal:
 
 def commitment_name(transaction: Transaction) -> str:
     label = transaction.merchant_name or transaction.description
-    return label.strip()[:180] or "Detected commitment"
+    return friendly_commitment_name(label)
+
+
+def friendly_commitment_name(label: str) -> str:
+    cleaned = " ".join(
+        label.replace("/", " ")
+        .replace("\\", " ")
+        .replace("*", " ")
+        .replace("_", " ")
+        .split()
+    )
+    if cleaned.isupper():
+        cleaned = cleaned.title()
+    return cleaned[:180] or "Detected commitment"
 
 
 def commitment_type(transaction: Transaction) -> str:
@@ -408,6 +524,27 @@ def commitment_type(transaction: Transaction) -> str:
     if any(token in label for token in ["netflix", "spotify", "youtube", "apple", "prime"]):
         return "subscription"
     return "bill"
+
+
+def commitment_category(transaction: Transaction) -> str:
+    return transaction.source_category.strip()[:120] or title_for_commitment_type(
+        commitment_type(transaction)
+    )
+
+
+def commitment_category_from_payload(
+    category: str | None,
+    source_transaction: Transaction | None,
+) -> str:
+    if category and category.strip():
+        return category.strip()[:120]
+    if source_transaction is not None:
+        return commitment_category(source_transaction)
+    return "Bills"
+
+
+def title_for_commitment_type(commitment_type_value: str) -> str:
+    return commitment_type_value.replace("_", " ").title()[:120] or "Bills"
 
 
 def looks_like_commitment(transaction: Transaction) -> bool:
@@ -478,6 +615,53 @@ def add_next_planned_instance(
             status="planned",
         )
     )
+
+
+def add_planned_instances(
+    session: Session,
+    commitment: Commitment,
+    expected_amount: Decimal,
+    first_due_date,
+    *,
+    occurrence_count: int | None = None,
+    end_date: date | None = None,
+) -> None:
+    due_date = first_due_date
+    added = 0
+    max_instances = occurrence_count or 1
+    while added < max_instances:
+        if end_date is not None and due_date > end_date:
+            break
+        add_next_planned_instance(session, commitment, expected_amount, due_date)
+        added += 1
+        due_date = next_due_for_frequency(due_date, commitment.frequency)
+
+
+def next_due_for_frequency(current: date, frequency: str) -> date:
+    if frequency == "weekly":
+        return current + timedelta(days=7)
+    if frequency == "fortnightly":
+        return current + timedelta(days=14)
+    if frequency == "quarterly":
+        return add_months(current, 3)
+    if frequency == "annual":
+        return add_months(current, 12)
+    if frequency == "monthly":
+        return add_months(current, 1)
+    return current + timedelta(days=30)
+
+
+def add_months(value: date, months: int) -> date:
+    month_index = value.month - 1 + months
+    year = value.year + month_index // 12
+    month = month_index % 12 + 1
+    month_lengths = [31, 29 if is_leap_year(year) else 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+    day = min(value.day, month_lengths[month - 1])
+    return date(year, month, day)
+
+
+def is_leap_year(year: int) -> bool:
+    return year % 4 == 0 and (year % 100 != 0 or year % 400 == 0)
 
 
 def format_money(value: Decimal) -> str:

@@ -103,4 +103,81 @@ describe("App", () => {
     expect(screen.getByRole("button", { name: "Commit" })).toBeEnabled();
     expect(mockedApi.previewSnoopImport).toHaveBeenCalledWith(file);
   });
+
+  it("renders the Budget Control Tower workflow without crowding every control into the first view", async () => {
+    window.location.hash = "#/budget";
+    mockedApi.getDashboardSummary.mockResolvedValue({
+      account_count: 1,
+      available_after_commitments: "590.12",
+      cash_balance_account_count: 1,
+      cash_on_hand: "590.12",
+      commitment_count: 0,
+      confidence: "ready",
+      decision_count: 0,
+      entity_name: "Household",
+      flexible_spend_actual: "4837.11",
+      flexible_spend_allowance: null,
+      flexible_spend_remaining: null,
+      lowest_projected_balance: "590.12",
+      message: "Ready",
+      missing_balance_account_count: 0,
+      transaction_count: 25,
+      upcoming_candidate_total: "0.00",
+      upcoming_confirmed_total: "0.00",
+    });
+    mockedApi.getInsights.mockResolvedValue({
+      category_groups: [
+        {
+          group: "flexible",
+          inflow_total: "0.00",
+          net_total: "-4837.11",
+          outflow_total: "-4837.11",
+          transaction_count: 13,
+        },
+        {
+          group: "income",
+          inflow_total: "7160.00",
+          net_total: "7160.00",
+          outflow_total: "0.00",
+          transaction_count: 9,
+        },
+      ],
+      end_date: "2026-06-15",
+      income_sources: [],
+      internal_transfers_excluded: true,
+      merchant_breakdowns: [],
+      start_date: "2026-06-01",
+      top_merchants: [],
+    });
+    mockedApi.getUpcomingCommitments.mockResolvedValue({
+      end_date: "2026-06-30",
+      expected_total: "0.00",
+      items: [],
+      start_date: "2026-06-01",
+      total_count: 0,
+    });
+
+    render(<App />);
+
+    await waitFor(() => expect(screen.getByText("Budget control tower")).toBeInTheDocument());
+    expect(screen.getByText("Decide what is safe, then tune the plan.")).toBeInTheDocument();
+    expect(screen.getByText("1. What do I have?")).toBeInTheDocument();
+    expect(screen.queryByText("Envelope budgets")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: /Monthly plan/ }));
+    expect(screen.getByText("Monthly plan method")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Envelope" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit envelopes" }));
+    expect(screen.getByText("Envelope budgets")).toBeInTheDocument();
+    expect(screen.getByRole("table", { name: "Monthly budget envelopes" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: /Assumptions/ }));
+    expect(screen.getByText("Safe-spend assumptions")).toBeInTheDocument();
+    expect(screen.getByLabelText("Job or income change expected")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: /Review/ }));
+    expect(screen.getByText("Next best actions")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Review actuals" })).toHaveAttribute("href", "#/transactions");
+  });
 });

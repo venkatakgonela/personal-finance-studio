@@ -15,7 +15,7 @@ ai-eos-metadata:
 - **Overdraft Limit**: Authorized current-account borrowing capacity. It can increase short-term payment capacity but does not erase the liability created by a negative balance.
 - **Transaction**: Imported or manually entered money movement.
 - **Internal Transfer**: Movement between owned accounts that should not count as spending or income.
-- **Commitment**: A recurring or planned obligation, such as bill, subscription, credit-card payment, loan payment, BNPL installment, or annual cost.
+- **Commitment**: A recurring or planned obligation, such as bill, subscription, credit-card payment, loan payment, BNPL installment, or annual cost. The commitment name/category are household planning labels and may differ from raw bank transaction text.
 - **Bill Instance**: A dated occurrence of a commitment.
 - **Flexible Spend**: Money available for variable categories such as groceries, eating out, shopping, fuel, and adhoc spending.
 - **Sinking Fund**: Money set aside over time for non-monthly costs such as car insurance, school costs, Christmas, MOT, or annual subscriptions.
@@ -125,13 +125,18 @@ FreeAgent-imported transactions are normalized into the same transaction table b
 - `owner_profile_id` nullable
 - `shared_scope`: `household`, `profile`, `business`
 - `name`
+- `category`
 - `commitment_type`: `bill`, `subscription`, `loan_payment`, `credit_card_payment`, `bnpl_installment`, `income`, `sinking_fund`, `one_off`
 - `frequency`: `weekly`, `monthly`, `quarterly`, `annual`, `custom`, `one_off`
 - `expected_amount`
 - `estimate_method`
 - `next_due_date`
+- `end_date`
+- `occurrence_count`
 - `source`
 - `status`
+
+Commitments can be detected, manually entered, or created from a source transaction. Transaction-backed commitments preserve imported transaction evidence while allowing the user to rename the commitment and assign a meaningful category for planning.
 
 ### Bill Instance
 

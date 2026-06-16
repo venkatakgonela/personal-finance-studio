@@ -7,12 +7,14 @@ from app.db import get_session
 from app.schemas.commitments import (
     BillInstancePayment,
     BillInstanceSummary,
+    CommitmentCreate,
     CommitmentDetectionResult,
     CommitmentsResponse,
     CommitmentSummary,
     CommitmentUpdate,
 )
 from app.services.commitments import (
+    create_manual_commitment,
     detect_recurring_commitments,
     list_commitments,
     mark_bill_instance_paid,
@@ -46,6 +48,18 @@ def commitments(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     return list_commitments(session, entity_id, limit=limit)
+
+
+@router.post("", response_model=CommitmentSummary)
+def create_commitment(
+    payload: CommitmentCreate,
+    session: Annotated[Session, Depends(get_session)],
+) -> CommitmentSummary:
+    try:
+        entity_id = get_household_entity_id(session)
+        return create_manual_commitment(session, entity_id, payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.patch("/{commitment_id}", response_model=CommitmentSummary)

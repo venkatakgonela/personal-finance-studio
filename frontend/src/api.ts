@@ -142,20 +142,39 @@ export type CommitmentSummary = {
   id: string;
   name: string;
   commitment_type: string;
+  category: string;
   frequency: string;
   expected_amount: string;
   next_due_date: string | null;
+  end_date: string | null;
+  occurrence_count: number | null;
   status: string;
   source: string;
   instance_count: number;
 };
 
+export type CommitmentCreate = {
+  name: string;
+  commitment_type: string;
+  category?: string | null;
+  frequency: string;
+  expected_amount: string;
+  next_due_date: string;
+  end_date?: string | null;
+  occurrence_count?: number | null;
+  source_transaction_id?: string | null;
+  status?: string;
+};
+
 export type CommitmentUpdate = {
   name?: string;
   commitment_type?: string;
+  category?: string | null;
   frequency?: string;
   expected_amount?: string;
   next_due_date?: string;
+  end_date?: string | null;
+  occurrence_count?: number | null;
   status?: string;
 };
 
@@ -461,6 +480,17 @@ export type FreeAgentCredentials = {
   refresh_token?: string;
 };
 
+export type FreeAgentOAuthExchangeRequest = {
+  environment: "production" | "sandbox" | "custom";
+  base_url?: string;
+  auth_url?: string;
+  token_url?: string;
+  client_id: string;
+  client_secret: string;
+  redirect_uri: string;
+  authorization_code: string;
+};
+
 export type FreeAgentValidationResult = {
   status: FreeAgentConnectionStatus;
   accounts: FreeAgentBankAccount[];
@@ -514,6 +544,16 @@ export async function saveFreeAgentCredentials(
   });
 }
 
+export async function exchangeFreeAgentOAuthCode(
+  payload: FreeAgentOAuthExchangeRequest,
+): Promise<FreeAgentConnectionStatus> {
+  return fetchJson<FreeAgentConnectionStatus>("/api/integrations/freeagent/oauth/exchange", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function validateFreeAgent(): Promise<FreeAgentValidationResult> {
   return fetchJson<FreeAgentValidationResult>("/api/integrations/freeagent/validate", {
     method: "POST",
@@ -544,6 +584,16 @@ export async function detectCommitments(): Promise<CommitmentDetectionResult> {
 
 export async function getCommitments(): Promise<CommitmentsResponse> {
   return fetchJson<CommitmentsResponse>("/api/commitments");
+}
+
+export async function createCommitment(
+  payload: CommitmentCreate,
+): Promise<CommitmentSummary> {
+  return fetchJson<CommitmentSummary>("/api/commitments", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
 }
 
 export async function updateCommitment(

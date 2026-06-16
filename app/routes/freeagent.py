@@ -11,12 +11,14 @@ from app.schemas.freeagent import (
     FreeAgentCredentials,
     FreeAgentImportRequest,
     FreeAgentImportResult,
+    FreeAgentOAuthExchangeRequest,
     FreeAgentValidationResult,
 )
 from app.services.freeagent_client import FreeAgentApiClient
 from app.services.freeagent_import import (
     FreeAgentClientFactory,
     FreeAgentIntegrationError,
+    exchange_authorization_code,
     get_status,
     import_bank_transactions,
     list_bank_accounts,
@@ -45,6 +47,22 @@ def configure_freeagent(
 ) -> FreeAgentConnectionStatus:
     try:
         return save_credentials(payload, session)
+    except FreeAgentIntegrationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/oauth/exchange", response_model=FreeAgentConnectionStatus)
+def exchange_freeagent_oauth_code(
+    payload: FreeAgentOAuthExchangeRequest,
+    session: Annotated[Session, Depends(get_session)],
+    client_factory: Annotated[Callable, Depends(get_freeagent_client_factory)],
+) -> FreeAgentConnectionStatus:
+    try:
+        return exchange_authorization_code(
+            payload,
+            session,
+            client_factory=client_factory,
+        )
     except FreeAgentIntegrationError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

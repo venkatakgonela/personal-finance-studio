@@ -8,7 +8,7 @@ ai-eos-metadata:
 # SPEC-004: FreeAgent Bank Data Fetch
 
 **Author:** Kiran Gonela / Codex  
-**Status:** Implemented - manual OAuth token phase  
+**Status:** Implemented - paginated OAuth token phase
 **Date:** 2026-06-15  
 
 ## 1. Problem Statement
@@ -35,7 +35,9 @@ Authorization: Bearer TOKEN
 ```
 
 Access tokens are returned with refresh tokens and an expiry; refresh should happen on next use after
-expiry rather than requiring manual re-authorization every time.
+expiry rather than requiring manual re-authorization every time. The app supports one-time
+authorization-code exchange so a refresh token can be stored encrypted without relying only on
+manually pasted short-lived access tokens.
 
 ### Bank Accounts And Balances
 
@@ -113,9 +115,10 @@ Process for fetching transactions for a desired bank account:
 3. For an initial preview, call `GET /v2/bank_transactions?bank_account=:bank_account&from_date=:from&to_date=:to`.
 4. For incremental sync, call `GET /v2/bank_transactions?bank_account=:bank_account&updated_since=:timestamp`.
 5. Normalize each transaction using FreeAgent `url` or `transaction_id` for deduplication.
-6. Preserve FreeAgent `description`, `full_description`, `unexplained_amount`, and explanation data
+6. Follow FreeAgent pagination links until no next page remains before persisting/importing rows.
+7. Preserve FreeAgent `description`, `full_description`, `unexplained_amount`, and explanation data
    for auditability.
-7. Preview totals and row counts before local commit.
+8. Preview totals and row counts before local commit.
 
 ## 3. Implemented Slice
 
@@ -125,11 +128,12 @@ Process for fetching transactions for a desired bank account:
   with an ignored local key file at `data/.pfs_secret.key` for local development.
 - Supported environments: production, sandbox, and custom/mock base URL.
 - Validation: calls `GET /v2/company` and `GET /v2/bank_accounts`, then stores validation status.
-- Import: user selects bank account and either date range or incremental cursor mode.
+- Import: user selects bank account and either date range or incremental cursor mode; the client
+  follows paginated transaction pages before saving/importing rows.
 - Persistence: FreeAgent accounts are stored as provider `FreeAgent`; transactions use
   FreeAgent URL/transaction ID fingerprints for idempotency; each run creates an `import_logs` row.
-- Tests: mocked FreeAgent client covers validation, encrypted persistence, import, dedupe, cursor,
-  and route behavior.
+- Tests: mocked FreeAgent client covers validation, encrypted persistence, authorization-code
+  exchange, pagination link parsing, import, dedupe, cursor, and route behavior.
 
 ## 4. Goals
 
@@ -147,7 +151,8 @@ Process for fetching transactions for a desired bank account:
 - No statement upload, transaction deletion, explanation creation, or reconciliation mutation.
 - No production credentials committed to source control.
 - No assistant access to raw tokens or Authorization headers.
-- Full browser OAuth callback is deferred; this phase accepts manually obtained OAuth tokens.
+- Full browser OAuth callback is deferred; this phase accepts manually obtained OAuth tokens and
+  supports authorization-code exchange for encrypted access/refresh token storage.
 - Pre-commit transaction preview is deferred; the flow asks account/date/incremental questions before
   local import.
 

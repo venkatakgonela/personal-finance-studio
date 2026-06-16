@@ -30,15 +30,15 @@ yet an Open Banking app, tax product, investment platform, or cloud collaboratio
 | Import Center | Imports Snoop CSV files, previews rows/accounts/categories, commits data, reruns transfer and bill detection. | Clean onboarding starts with trusted data. Previewing prevents accidental bad imports. |
 | API/System Status | Shows whether the local backend is online and how to retry. | Users need to know when a problem is service availability rather than finance data. |
 | Accounts | Lists detected accounts, account types, imported net movement, and editable current balances. | Accurate balances power cash-on-hand, forecast confidence, and available-money planning. |
-| Transactions Ledger | Searchable/filterable transaction table with date, account, group, type, reviewed state, and save actions. | Transactions are the source evidence for every report, budget actual, and review workflow. |
+| Transactions Ledger | Searchable/filterable transaction table with date, account, group, type, reviewed state, save actions, and "Make recurring" for eligible outflows. | Transactions are the source evidence for every report, budget actual, review workflow, and transaction-backed recurring commitment. |
 | Internal Transfer Detection | Finds likely money movements between own accounts and routes them to Decision Queue. | Transfers should not inflate income or spending. |
-| Recurring Bills Detection | Finds subscriptions, bills, debt payments, BNPL, and recurring commitments. | Forecasting and left-to-spend only work if future obligations are visible. |
+| Recurring Bills Detection | Commitment inbox for detected, transaction-backed, manually added, categorized, and finite bills/subscriptions/BNPL plans. | Forecasting and safe spend only work if future obligations are visible, meaningful to the household, and time-boxed correctly. |
 | Decision Queue | Review inbox for high-impact confirmations such as transfers and recurring candidates. | Keeps noisy automation under user control and improves accounting accuracy. |
 | Dashboard | A compact household briefing with position, left-to-spend, upcoming/recent bills, spending pulse, budget/goals, review pressure, and cash-flow readiness. | Gives a fast answer to "Am I okay, and what should I look at next?" |
 | Calendar | Selected-period bill calendar with daily planned totals and bill chips. | Dates matter in personal finance; users need to know when money leaves. |
 | Cash Flow | Forecasts starting/ending cash, lowest point, due commitments, and candidate obligations. | Helps users avoid cash crunches before they happen. |
 | What-if Scenarios | Adds local income/outflow adjustments and compares ending cash against baseline. | Lets users test choices before changing real spending. |
-| Budget | Category, flexible, and rollover modes with planned, actual, remaining, and status. | Turns past transactions into a live plan users can steer. |
+| Budget | Decision-first control tower with Overview, Monthly plan, Envelopes, Assumptions, and Review. | Turns past transactions into a calm spend boundary and editable plan. |
 | Goals | Custom goals plus derived goals with target/current/monthly contribution tracking. | Connects saving intentions to monthly planning behavior. |
 | Sinking Funds | Converts annual, quarterly, and non-monthly commitments into monthly set-asides. | Prevents large irregular bills from feeling like surprises. |
 | Monthly Review | Summarizes income, outflows, net, reviewed/unreviewed counts, decisions, and next actions. | Creates a repeatable financial review ritual. |
@@ -119,7 +119,8 @@ Expected result: reports stop double-counting transfers and future bills become 
 Open `Transactions`.
 
 Filter by date, account, group, type, reviewed status, or search. Update transaction type/group when
-needed and mark rows reviewed.
+needed and mark rows reviewed. For any real posted outflow, use `Make recurring` to create a
+commitment from the transaction evidence without leaving the ledger.
 
 Expected result: budget actuals and reports reflect cleaner transaction meaning.
 
@@ -174,12 +175,26 @@ Success condition: expected obligations are visible before they hit the account.
 ### Workflow D: Budget Planning
 
 1. Open Budget.
-2. Choose category, flexible, or rollover mode.
-3. Enter planned amounts.
-4. Compare actual outflow and remaining budget.
-5. Jump to Transactions when actuals need explanation.
+2. Start in Overview to read the spend boundary and next best action.
+3. Use Monthly plan to choose envelope, flexible, or rollover mode.
+4. Use Envelopes to enter planned amounts and compare actual outflow.
+5. Use Assumptions and Review before treating the number as decision-grade.
 
-Success condition: budget rows reconcile planned, actual, remaining, and status without hidden values.
+Success condition: Budget answers "what is safe?", "what is planned?", "what changed?", and "what should improve?" without crowding every control into the first view.
+
+### Workflow D2: Commitment Inbox
+
+1. Open Recurring.
+2. Run detection to find transaction-pattern candidates.
+3. Confirm, ignore, or edit detected candidates.
+4. If detection misses a real bill but a valid outflow exists, use `Make recurring` from Transactions
+   or Add from transaction evidence in Recurring.
+5. Set a household reference name and category; keep the bank transaction as source evidence.
+6. If no transaction exists yet, use Add a bill or subscription.
+7. For BNPL or temporary plans, fill optional Payment count or End date.
+8. Check Calendar, Cash Flow, Budget, and Dashboard after saving.
+
+Success condition: future commitments are protected without assuming every recurring-looking payment lasts forever.
 
 ### Workflow E: Cash Crunch Prevention
 

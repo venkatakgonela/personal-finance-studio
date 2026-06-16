@@ -17,6 +17,7 @@ from app.schemas.freeagent import (
     FreeAgentCredentials,
     FreeAgentImportRequest,
     FreeAgentImportResult,
+    FreeAgentOAuthExchangeRequest,
     FreeAgentValidationResult,
 )
 from app.services.freeagent_client import FreeAgentApiClient, FreeAgentApiError
@@ -129,6 +130,67 @@ def validate_connection(
         status=serialize_status(connection, store),
         accounts=[serialize_bank_account(account) for account in accounts],
     )
+
+
+def exchange_authorization_code(
+    payload: FreeAgentOAuthExchangeRequest,
+    session: Session,
+    secret_store: SecretStore | None = None,
+    client_factory: FreeAgentClientFactory = FreeAgentApiClient,
+) -> FreeAgentConnectionStatus:
+    store = secret_store or SecretStore.from_settings()
+    urls = resolve_urls(payload)
+    client_id = payload.client_id.strip()
+    client_secret = normalize_secret(payload.client_secret)
+    authorization_code = normalize_secret(payload.authorization_code)
+    if not client_id:
+        raise FreeAgentIntegrationError("FreeAgent OAuth client ID is required.")
+    if not client_secret:
+        raise FreeAgentIntegrationError("FreeAgent OAuth client secret is required.")
+    if not authorization_code:
+        raise FreeAgentIntegrationError("Paste the authorization code returned by FreeAgent.")
+
+    client = client_factory(urls["base_url"], urls["token_url"])
+    try:
+        tokens = client.exchange_authorization_code(
+            client_id=client_id,
+            client_secret=client_secret,
+            code=authorization_code,
+            redirect_uri=str(payload.redirect_uri),
+        )
+    except FreeAgentApiError as exc:
+        raise FreeAgentIntegrationError(str(exc)) from exc
+
+    access_token = normalize_oauth_token(str(tokens.get("access_token") or ""))
+    refresh_token = normalize_oauth_token(str(tokens.get("refresh_token") or ""))
+    if not access_token:
+        raise FreeAgentIntegrationError("FreeAgent did not return an access token.")
+    if not refresh_token:
+        raise FreeAgentIntegrationError(
+            "FreeAgent did not return a refresh token. Re-authorize the app and make sure "
+            "the redirect URI matches exactly."
+        )
+
+    connection = get_connection(session)
+    if connection is None:
+        connection = IntegrationConnection(provider=PROVIDER)
+        session.add(connection)
+
+    connection.environment = payload.environment
+    connection.base_url = urls["base_url"]
+    connection.auth_url = urls["auth_url"]
+    connection.token_url = urls["token_url"]
+    connection.client_id = client_id
+    connection.encrypted_client_secret = store.encrypt(client_secret)
+    connection.encrypted_access_token = store.encrypt(access_token)
+    connection.encrypted_refresh_token = store.encrypt(refresh_token)
+    connection.status = "configured"
+    connection.validation_message = (
+        "OAuth code exchanged. Validate the connection before importing."
+    )
+    connection.updated_at = utc_now()
+    session.commit()
+    return serialize_status(connection, store)
 
 
 def list_bank_accounts(

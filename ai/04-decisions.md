@@ -31,6 +31,10 @@ ai-eos-metadata:
 | ADR-018 | Implement FreeAgent as read-only manual-token integration first | Accepted | 2026-06-15 |
 | ADR-019 | Keep dashboard fact-led and move assumption editing to Budget | Accepted | 2026-06-15 |
 | ADR-020 | Use library-backed dashboard sorting and lightweight transitions | Accepted | 2026-06-15 |
+| ADR-021 | Redesign Budget as a decision-first control tower | Accepted | 2026-06-15 |
+| ADR-022 | Use a commitment inbox with transaction-backed, manual, and finite commitment support | Accepted | 2026-06-15 |
+| ADR-023 | Fetch complete FreeAgent history before recurring detection | Accepted | 2026-06-15 |
+| ADR-024 | Separate recurring reference labels from source evidence | Accepted | 2026-06-16 |
 
 ## ADR-001 - Use Entity-Scoped Household and Business Model
 
@@ -190,3 +194,31 @@ ai-eos-metadata:
 - **Context**: A hand-rolled widget drag system was functional but not smooth enough for a dashboard. Large, uneven cards caused visual smearing and unpredictable reorder behavior.
 - **Decision**: Use `@dnd-kit/core`, `@dnd-kit/sortable`, and `@dnd-kit/utilities` for dashboard widget sorting with `DragOverlay`, keyboard/pointer sensors, always-on measuring, and grid swap behavior. Use `@formkit/auto-animate` for small list/collapsible transitions. Do not adopt heavy UI/chart libraries until a route requires a broader rewrite.
 - **Consequences**: Dashboard personalization has smoother motion, better accessibility, and less custom drag code. Bundle size increases modestly. Performance and regressions must be checked with browser smoke tests for overlay presence, reorder completion, and overflow.
+
+## ADR-021 - Redesign Budget As A Decision-First Control Tower
+
+- **Status**: Accepted
+- **Context**: The Budget page combined setup, actuals, safe-spend assumptions, rollover math, category planning, and review in one dense vertical screen. It was accurate but cognitively heavy, encouraging spreadsheet-style interpretation rather than calm financial decisions.
+- **Decision**: Reframe Budget around a five-panel control-tower workflow: Overview, Monthly plan, Envelopes, Assumptions, and Review. Use Kakeibo-style reflection ("what do I have, what must be protected, what can I spend, what should improve"), envelope budgeting, guardrail budgeting, pay-yourself-first, and mental accounting principles. Keep Dashboard fact-led while Budget owns the reasoning and edits.
+- **Consequences**: Users see the spend boundary before the editable table. Detailed controls remain available but no longer crowd the first view. Regression tests must verify every tab, label, action, and responsive layout because hidden panels can otherwise drift out of sync.
+
+## ADR-022 - Use A Commitment Inbox With Transaction-Backed, Manual, And Finite Commitment Support
+
+- **Status**: Accepted
+- **Context**: Pattern detection cannot find every real bill, especially new commitments, annual payments with sparse history, cash/manual obligations, or user-known bills that have not appeared in imported data. Some obligations, such as BNPL and short payment plans, recur only for a fixed period and should not become permanent forecast noise.
+- **Decision**: Treat recurring as a commitment inbox. Detection proposes candidates, users can create a commitment from a real outflow transaction as source evidence, and users can manually add confirmed commitments when no transaction exists. Commitments may be ongoing, end on a known date, or stop after a fixed number of payments. BNPL is modeled as a first-class commitment type with finite payment support.
+- **Consequences**: Forecasts and calendars are more complete even when detection misses a bill. Transaction-backed creation is preferred over blank manual entry because it preserves an imported evidence trail. Short-term obligations stop polluting long-term planning. The UI must clearly explain that saved commitments feed Calendar, Cash Flow, Budget, and Dashboard immediately.
+
+## ADR-023 - Fetch Complete FreeAgent History Before Recurring Detection
+
+- **Status**: Accepted
+- **Context**: Recurring bill detection depends on multiple months of transaction evidence. FreeAgent bank transaction responses can be paginated; importing only the first response page leaves the app with a short window and causes detection to return no candidates even when real bills exist.
+- **Decision**: The FreeAgent client must follow paginated `rel="next"` links until complete, then persist provider-tagged rows idempotently. The durable OAuth path is authorization-code exchange, encrypted refresh-token storage, and automatic access-token refresh on expiry.
+- **Consequences**: First-run date-range imports provide enough history for bill/subscription/loan pattern detection. Users still may paste manual tokens for testing, but production-like usage should exchange an authorization code once so refresh tokens are stored securely.
+
+## ADR-024 - Separate Recurring Reference Labels From Source Evidence
+
+- **Status**: Accepted
+- **Context**: Imported transaction labels often contain noisy provider text, punctuation, card-network fragments, or vendor-specific descriptions. Those labels are valuable as evidence, but poor as the household's planning vocabulary.
+- **Decision**: Store editable `name` and `category` fields on commitments. Transaction-backed commitments keep the source transaction link while allowing a user-friendly reference name and category. Existing detected commitments can be edited inline without losing their detection/source status.
+- **Consequences**: Calendar, Cash Flow, Budget, Dashboard, Sinking Funds, and Subscriptions can use meaningful household labels while preserving auditability. Migration `20260615_0006_add_commitment_category.py` backfills existing commitments to `Bills`; users can refine categories later.

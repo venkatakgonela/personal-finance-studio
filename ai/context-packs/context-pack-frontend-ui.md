@@ -38,6 +38,13 @@ ai-eos-metadata:
 - Dashboard sorting uses a small floating `Arrange` handle, `DragOverlay`, keyboard/pointer sensors, and local-first widget order/visibility/custom widget preferences.
 - Small list/collapsible transitions use `@formkit/auto-animate`; prefer applying it to stable parent containers rather than adding bespoke animation state.
 - Safe-spend assumptions belong on Budget, not Dashboard. Dashboard may show Safe to Spend and link to assumption tuning.
+- Budget is a control-tower workflow, not a single crowded table. Preserve the five sections: Overview, Monthly plan, Envelopes, Assumptions, and Review.
+- Recurring is a commitment inbox. Preserve detection-review, transaction-backed creation, and
+  manual-entry paths; finite BNPL/payment plans need either a payment count or an end date.
+- Transactions is also an evidence-entry point: eligible posted outflows should expose a direct
+  `Make recurring` action that opens a review form before creating the commitment.
+- Recurring commitment forms must separate user-friendly reference naming from source evidence,
+  and include an editable category so raw bank labels do not become the household planning model.
 - Use `prefers-reduced-motion` protections when adding new motion.
 
 ## 5. Verification

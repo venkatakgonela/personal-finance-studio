@@ -44,5 +44,10 @@ ai-eos-metadata:
   `app/services/freeagent_import.py`, `app/services/secret_store.py`.
 - Persistence: `integration_connections` stores encrypted client secret/tokens and import cursor;
   FreeAgent account/transaction rows use existing `accounts`, `transactions`, and `import_logs`.
+- Transaction import must follow FreeAgent pagination links until no `rel="next"` page remains;
+  otherwise first-run date windows silently truncate to the first result page and commitment
+  detection sees too little history.
+- OAuth can be supplied manually for testing, but the preferred durable path is authorization-code
+  exchange so the app stores an encrypted refresh token and can refresh expired access tokens.
 - Frontend: `#/freeagent` route in `frontend/src/App.tsx`.
 - Tests: `tests/test_freeagent_import.py` uses a mock FreeAgent client; no live API calls in CI.

@@ -31,6 +31,8 @@ import {
   API_BASE,
   type AccountsResponse,
   type CommitmentDetectionResult,
+  type CommitmentCreate,
+  type CommitmentUpdate,
   type CommitmentsResponse,
   type DashboardSummary,
   type DecisionQueueResponse,
@@ -46,11 +48,14 @@ import {
   type MerchantInsight,
   type PlanningOverview,
   type TransactionFilters,
+  type TransactionSummary,
   type TransactionUpdate,
   type TransactionsResponse,
   type TransferDetectionResult,
   type UpcomingCommitmentsResponse,
   commitSnoopImport,
+  createCommitment,
+  exchangeFreeAgentOAuthCode,
   confirmDecision,
   detectCommitments,
   detectTransfers,
@@ -96,6 +101,18 @@ type TransactionFilterState = {
   status: string;
   transactionType: string;
 };
+type CommitmentDraft = {
+  amount: string;
+  category: string;
+  endDate: string;
+  frequency: string;
+  name: string;
+  nextDueDate: string;
+  occurrenceCount: string;
+  sourceTransactionId: string;
+  sourceTransactionLabel: string;
+  type: string;
+};
 type AccountRow = AccountsResponse["accounts"][number];
 type AccountGroup = {
   accounts: AccountRow[];
@@ -124,6 +141,7 @@ type BudgetPlanRow = {
   plannedAmount: number;
 };
 type BudgetMode = "category" | "flexible" | "rollover";
+type BudgetSection = "overview" | "plan" | "envelopes" | "assumptions" | "review";
 type BudgetRolloverRow = {
   group: string;
   rolloverAmount: number;
@@ -216,6 +234,14 @@ const defaultDashboardWidgetIds = [
   "decision-queue",
   "review-focus",
   "cashflow",
+];
+
+const budgetSections: Array<{ id: BudgetSection; label: string; summary: string }> = [
+  { id: "overview", label: "Overview", summary: "Spend boundary and confidence" },
+  { id: "plan", label: "Monthly plan", summary: "Income, bills, goals, allowance" },
+  { id: "envelopes", label: "Envelopes", summary: "Category budgets and rollovers" },
+  { id: "assumptions", label: "Assumptions", summary: "Known changes and safety buffer" },
+  { id: "review", label: "Review", summary: "Actuals and next actions" },
 ];
 
 const dashboardDropAnimation = {
@@ -705,11 +731,23 @@ export function App() {
     }
   }
 
-  async function runCommitmentUpdate(commitmentId: string, status: string) {
+  async function runCommitmentUpdate(commitmentId: string, payload: CommitmentUpdate) {
     setError(null);
     setLoadState("loading");
     try {
-      await updateCommitment(commitmentId, { status });
+      await updateCommitment(commitmentId, payload);
+      await refreshWorkspace();
+      setLoadState("ready");
+    } catch (err) {
+      setError(errorMessage(err));
+      setLoadState("error");
+    }
+  }
+
+  async function runCommitmentCreate(payload: CommitmentCreate) {
+    setError(null);
+    try {
+      await createCommitment(payload);
       await refreshWorkspace();
       setLoadState("ready");
     } catch (err) {
@@ -788,6 +826,7 @@ export function App() {
           onAccountBalanceUpdate={runAccountBalanceUpdate}
           onBillPaid={runBillPaid}
           onCommit={runCommit}
+          onCommitmentCreate={runCommitmentCreate}
           onCommitmentUpdate={runCommitmentUpdate}
           onDecisionAction={runDecisionAction}
           onDetectCommitments={runCommitmentDetection}
@@ -1015,6 +1054,7 @@ function AppPage({
   onAccountBalanceUpdate,
   onBillPaid,
   onCommit,
+  onCommitmentCreate,
   onCommitmentUpdate,
   onDecisionAction,
   onDetectCommitments,
@@ -1063,7 +1103,8 @@ function AppPage({
   ) => Promise<void>;
   onBillPaid: (instanceId: string, amount: string) => Promise<void>;
   onCommit: () => Promise<void>;
-  onCommitmentUpdate: (commitmentId: string, status: string) => Promise<void>;
+  onCommitmentCreate: (payload: CommitmentCreate) => Promise<void>;
+  onCommitmentUpdate: (commitmentId: string, payload: CommitmentUpdate) => Promise<void>;
   onDecisionAction: (
     action: "confirm" | "reject",
     decisionType: string,
@@ -1112,6 +1153,7 @@ function AppPage({
         <TransactionsCard
           accounts={accounts}
           limit={18}
+          onCommitmentCreate={onCommitmentCreate}
           onTransactionUpdate={onTransactionUpdate}
           query={query}
           setTransactionFilters={setTransactionFilters}
@@ -1196,8 +1238,10 @@ function AppPage({
         <RecurringCard
           commitments={commitments}
           limit={15}
+          onCommitmentCreate={onCommitmentCreate}
           onCommitmentUpdate={onCommitmentUpdate}
           query={query}
+          transactions={transactions}
         />
         <UpcomingCard
           includeCandidates={includeCandidates}
@@ -1867,6 +1911,8 @@ function FreeAgentIntegrationCard({ onImported }: { onImported: () => Promise<vo
     access_token: "",
     refresh_token: "",
   });
+  const [oauthRedirectUri, setOauthRedirectUri] = useState("https://www.getpostman.com/oauth2/callback");
+  const [authorizationCode, setAuthorizationCode] = useState("");
   const [selectedAccountUrl, setSelectedAccountUrl] = useState("");
   const [fromDate, setFromDate] = useState(`${new Date().getFullYear()}-01-01`);
   const [toDate, setToDate] = useState(todayIso());
@@ -1933,6 +1979,36 @@ function FreeAgentIntegrationCard({ onImported }: { onImported: () => Promise<vo
     }
   }
 
+  async function exchangeCodeAndValidate(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setMessage(null);
+    try {
+      const exchangedStatus = await exchangeFreeAgentOAuthCode({
+        environment: form.environment,
+        base_url: form.environment === "custom" ? form.base_url : undefined,
+        auth_url: form.auth_url || undefined,
+        token_url: form.token_url || undefined,
+        client_id: form.client_id,
+        client_secret: form.client_secret,
+        redirect_uri: oauthRedirectUri,
+        authorization_code: authorizationCode,
+      });
+      setStatus(exchangedStatus);
+      const validation = await validateFreeAgent();
+      setStatus(validation.status);
+      setUseIncrementalCursor(Boolean(validation.status.sync_cursor_updated_since));
+      setAccounts(validation.accounts);
+      setSelectedAccountUrl(validation.status.selected_bank_account_url ?? validation.accounts[0]?.url ?? "");
+      setAuthorizationCode("");
+      setMessage("OAuth code exchanged and refresh token stored securely. Automatic token refresh is enabled.");
+    } catch (err) {
+      setMessage(freeAgentErrorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function runFreeAgentImport(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!selectedAccountUrl) return;
@@ -1967,6 +2043,15 @@ function FreeAgentIntegrationCard({ onImported }: { onImported: () => Promise<vo
   const canImport = Boolean(status?.validated && selectedAccountUrl);
   const hasIncrementalCursor = Boolean(status?.sync_cursor_updated_since);
   const importingWithCursor = Boolean(useIncrementalCursor && hasIncrementalCursor);
+  const authBaseUrl = form.auth_url || defaultFreeAgentAuthUrl(form.environment, form.base_url);
+  const authorizationUrl =
+    form.client_id && oauthRedirectUri
+      ? `${authBaseUrl}?${new URLSearchParams({
+          client_id: form.client_id,
+          redirect_uri: oauthRedirectUri,
+          response_type: "code",
+        }).toString()}`
+      : "";
 
   return (
     <article className="card freeagent-card wide-card">
@@ -2066,9 +2151,53 @@ function FreeAgentIntegrationCard({ onImported }: { onImported: () => Promise<vo
           </button>
         </form>
 
-        <form className="freeagent-panel" onSubmit={(event) => void runFreeAgentImport(event)}>
+        <form className="freeagent-panel" onSubmit={(event) => void exchangeCodeAndValidate(event)}>
           <div className="freeagent-panel-header">
             <span>Step 2</span>
+            <div>
+              <strong>Enable auto refresh</strong>
+              <small>Exchange an OAuth authorization code once; the refresh token is encrypted locally.</small>
+            </div>
+          </div>
+          <div className="form-grid freeagent-form-grid">
+            <label>
+              Redirect URI
+              <input
+                aria-label="FreeAgent OAuth redirect URI"
+                onChange={(event) => setOauthRedirectUri(event.target.value)}
+                placeholder="https://www.getpostman.com/oauth2/callback"
+                required
+                type="url"
+                value={oauthRedirectUri}
+              />
+            </label>
+            <label>
+              Authorization code
+              <input
+                aria-label="FreeAgent OAuth authorization code"
+                autoComplete="off"
+                onChange={(event) => setAuthorizationCode(event.target.value)}
+                placeholder="Paste code returned by FreeAgent"
+                required
+                value={authorizationCode}
+              />
+            </label>
+          </div>
+          {authorizationUrl ? (
+            <a className="button-link button-link-secondary" href={authorizationUrl} rel="noreferrer" target="_blank">
+              Open FreeAgent authorization
+            </a>
+          ) : (
+            <p className="fine-print">Enter client ID and redirect URI to generate the authorization link.</p>
+          )}
+          <button className="button-link" disabled={busy || !authorizationCode || !form.client_id || !form.client_secret} type="submit">
+            {busy ? "Exchanging..." : "Exchange code and validate"}
+          </button>
+        </form>
+
+        <form className="freeagent-panel" onSubmit={(event) => void runFreeAgentImport(event)}>
+          <div className="freeagent-panel-header">
+            <span>Step 3</span>
             <div>
               <strong>Choose import scope</strong>
               <small>Use the saved cursor for daily imports, or choose a one-off date window.</small>
@@ -2145,9 +2274,9 @@ function FreeAgentIntegrationCard({ onImported }: { onImported: () => Promise<vo
 
       {message ? <p className="status-copy">{message}</p> : null}
       <p className="freeagent-token-note">
-        Refresh token is optional and is not the same as the access token. You can validate with only
-        a currently valid access token; add the refresh token later if you want automatic token refresh.
-        If validation fails, generate a fresh access token and paste only the token value.
+        Refresh token is not the same as the access token. You can paste a short-lived access token for
+        testing, but automatic refresh needs either a refresh token or a one-time authorization-code
+        exchange. Date-range imports now follow all FreeAgent result pages before saving the cursor.
       </p>
       {importResult ? (
         <div className="import-result-grid">
@@ -2167,6 +2296,12 @@ function freeAgentErrorMessage(err: unknown) {
     return "FreeAgent validation failed. Check that the backend is online and the selected API URL is reachable.";
   }
   return message;
+}
+
+function defaultFreeAgentAuthUrl(environment: FreeAgentCredentials["environment"], baseUrl?: string) {
+  if (environment === "sandbox") return "https://api.sandbox.freeagent.com/v2/approve_app";
+  if (environment === "custom" && baseUrl) return `${baseUrl.replace(/\/$/, "")}/v2/approve_app`;
+  return "https://api.freeagent.com/v2/approve_app";
 }
 
 function SensitiveInput({
@@ -3022,6 +3157,7 @@ function DecisionQueueCard({
 function TransactionsCard({
   accounts,
   limit = 6,
+  onCommitmentCreate,
   onTransactionUpdate,
   query,
   setTransactionFilters,
@@ -3030,15 +3166,42 @@ function TransactionsCard({
 }: {
   accounts: AccountsResponse | null;
   limit?: number;
+  onCommitmentCreate?: (payload: CommitmentCreate) => Promise<void>;
   onTransactionUpdate?: (transactionId: string, payload: TransactionUpdate) => Promise<void>;
   query: string;
   setTransactionFilters?: (filters: TransactionFilterState) => void;
   transactions: TransactionsResponse | null;
   transactionFilters?: TransactionFilterState;
 }) {
-  const rows = filterByQuery(transactions?.transactions ?? [], query, (transaction) =>
+  const today = new Date().toISOString().slice(0, 10);
+  const [expandedLimit, setExpandedLimit] = useState(limit);
+  const [recurringDraft, setRecurringDraft] = useState<CommitmentDraft | null>(null);
+  const filteredRows = filterByQuery(transactions?.transactions ?? [], query, (transaction) =>
     `${transaction.merchant_name} ${transaction.description} ${transaction.provider} ${transaction.source_category}`,
-  ).slice(0, limit);
+  );
+  const rows = filteredRows.slice(0, expandedLimit);
+  const chooseRecurringSource = (transaction: TransactionSummary) => {
+    setRecurringDraft(commitmentDraftFromTransaction(transaction));
+  };
+  const saveRecurringFromTransaction = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!onCommitmentCreate || !recurringDraft) return;
+    await onCommitmentCreate({
+      commitment_type: recurringDraft.type,
+      category: recurringDraft.category,
+      end_date: recurringDraft.endDate || null,
+      expected_amount: recurringDraft.amount,
+      frequency: recurringDraft.frequency,
+      name: recurringDraft.name,
+      next_due_date: recurringDraft.nextDueDate || today,
+      occurrence_count: recurringDraft.occurrenceCount
+        ? Math.max(1, Number(recurringDraft.occurrenceCount) || 1)
+        : null,
+      source_transaction_id: recurringDraft.sourceTransactionId,
+      status: "confirmed",
+    });
+    setRecurringDraft(null);
+  };
   return (
     <article className="card">
       <CardHeader
@@ -3052,6 +3215,119 @@ function TransactionsCard({
           onChange={setTransactionFilters}
         />
       ) : null}
+      {recurringDraft ? (
+        <form className="transaction-recurring-panel" onSubmit={(event) => void saveRecurringFromTransaction(event)}>
+          <div className="source-transaction-callout">
+            <strong>Create recurring from transaction</strong>
+            <span>{recurringDraft.sourceTransactionLabel}</span>
+            <button className="button-link button-link-small" onClick={() => setRecurringDraft(null)} type="button">
+              Cancel
+            </button>
+          </div>
+          <div className="transaction-recurring-grid">
+            <label>
+              Reference name
+              <input
+                aria-label="Transaction recurring reference name"
+                onChange={(event) =>
+                  setRecurringDraft((current) => current && { ...current, name: event.target.value })
+                }
+                placeholder="e.g. Council tax, HSBC loan, Netflix"
+                required
+                value={recurringDraft.name}
+              />
+            </label>
+            <label>
+              Category
+              <input
+                aria-label="Transaction recurring category"
+                onChange={(event) =>
+                  setRecurringDraft((current) => current && { ...current, category: event.target.value })
+                }
+                placeholder="Bills, Subscriptions, Debt..."
+                required
+                value={recurringDraft.category}
+              />
+            </label>
+            <label>
+              Type
+              <select
+                aria-label="Transaction recurring type"
+                onChange={(event) =>
+                  setRecurringDraft((current) => current && { ...current, type: event.target.value })
+                }
+                value={recurringDraft.type}
+              >
+                <option value="bill">Essential bill</option>
+                <option value="subscription">Subscription</option>
+                <option value="credit_card_payment">Credit card payment</option>
+                <option value="loan_payment">Loan payment</option>
+                <option value="bnpl">Buy Now Pay Later</option>
+                <option value="non_monthly">Irregular obligation</option>
+              </select>
+            </label>
+            <label>
+              Frequency
+              <select
+                aria-label="Transaction recurring frequency"
+                onChange={(event) =>
+                  setRecurringDraft((current) => current && { ...current, frequency: event.target.value })
+                }
+                value={recurringDraft.frequency}
+              >
+                <option value="weekly">Weekly</option>
+                <option value="fortnightly">Fortnightly</option>
+                <option value="monthly">Monthly</option>
+                <option value="quarterly">Quarterly</option>
+                <option value="annual">Annual</option>
+                <option value="custom">One-off/custom</option>
+              </select>
+            </label>
+            <label>
+              Amount
+              <input
+                aria-label="Transaction recurring amount"
+                inputMode="decimal"
+                onChange={(event) =>
+                  setRecurringDraft((current) => current && { ...current, amount: event.target.value })
+                }
+                required
+                value={recurringDraft.amount}
+              />
+            </label>
+            <label>
+              Next due date
+              <input
+                aria-label="Transaction recurring next due date"
+                onChange={(event) =>
+                  setRecurringDraft((current) => current && { ...current, nextDueDate: event.target.value })
+                }
+                required
+                type="date"
+                value={recurringDraft.nextDueDate}
+              />
+            </label>
+            <label>
+              Payment count
+              <input
+                aria-label="Transaction recurring payment count"
+                inputMode="numeric"
+                min="1"
+                onChange={(event) =>
+                  setRecurringDraft((current) => current && { ...current, occurrenceCount: event.target.value })
+                }
+                placeholder="Optional"
+                type="number"
+                value={recurringDraft.occurrenceCount}
+              />
+            </label>
+          </div>
+          <div className="manual-commitment-actions">
+            <button className="button-link" type="submit">Protect this recurring item</button>
+            <small>The source transaction stays linked as evidence and the next planned bill is created.</small>
+          </div>
+        </form>
+      ) : null}
       {rows.length === 0 ? (
         <p className="empty-copy">No transactions yet.</p>
       ) : (
@@ -3063,16 +3339,29 @@ function TransactionsCard({
             <span>Group</span>
             <span>Amount</span>
             <span>Review</span>
+            <span>Recurring</span>
           </div>
           {rows.map((transaction) => (
             <TransactionReviewRow
               key={transaction.id}
+              onCreateRecurring={onCommitmentCreate ? chooseRecurringSource : undefined}
               onTransactionUpdate={onTransactionUpdate}
               transaction={transaction}
             />
           ))}
         </div>
       )}
+      {rows.length < filteredRows.length ? (
+        <div className="show-more-row">
+          <button
+            className="button-link button-link-secondary"
+            onClick={() => setExpandedLimit((current) => current + limit)}
+            type="button"
+          >
+            Show {Math.min(limit, filteredRows.length - rows.length)} more transactions
+          </button>
+        </div>
+      ) : null}
     </article>
   );
 }
@@ -3839,10 +4128,25 @@ function BudgetPageCard({
   planning: PlanningOverview | null;
   upcoming: UpcomingCommitmentsResponse | null;
 }) {
+  const [activeSection, setActiveSection] = useState<BudgetSection>("overview");
   const rows = budgetRows(controlState, insights);
   const totals = budgetTotals(rows, insights);
   const spendingPlan = spendingPlanTotals(controlState, insights, upcoming, planning);
   const safeSpend = safeSpendPlan(controlState, dashboard, spendingPlan);
+  const boundaryValue = Math.max(0, safeSpend.value);
+  const boundaryState =
+    boundaryValue <= 0
+      ? { label: "Pause discretionary spend", tone: "danger" }
+      : safeSpend.assumptionsReady
+        ? { label: "Guardrails active", tone: "ok" }
+        : { label: "Needs assumptions", tone: "warn" };
+  const reviewActions = [
+    totals.plannedOutflow <= 0 ? "Create at least one envelope before treating this as a decision-grade budget." : null,
+    safeSpend.assumptionsReady ? null : "Add assumptions for income changes, one-offs, holidays, or the buffer you never want to cross.",
+    planning?.monthly_review.unreviewed_count
+      ? `Review ${planning.monthly_review.unreviewed_count} transaction(s) before month-end decisions.`
+      : null,
+  ].filter(Boolean) as string[];
   const updateBudget = (group: string, value: string) => {
     const plannedAmount = Math.max(0, numberFromInput(value));
     onControlStateChange((current) => {
@@ -3870,99 +4174,231 @@ function BudgetPageCard({
 
   return (
     <article className="card budget-page-card">
-      <div className="budget-toolbar">
-        <CardHeader title="Budget" subtitle={`${periodLabel} · plan, actual, remaining`} />
-        <div className="report-controls">
-          <div className="report-tabs" role="tablist" aria-label="Budget mode">
-            {(["category", "flexible", "rollover"] as const).map((mode) => (
-              <button
-                aria-selected={controlState.budgetMode === mode}
-                className={controlState.budgetMode === mode ? "active" : ""}
-                key={mode}
-                onClick={() => onControlStateChange((current) => ({ ...current, budgetMode: mode }))}
-                role="tab"
-                type="button"
-              >
-                {titleCase(mode)}
-              </button>
-            ))}
-          </div>
-          <a className="button-link button-link-secondary" href="#/transactions">
-            Review actuals
-          </a>
+      <div className="budget-control-hero">
+        <div>
+          <span className="hero-kicker">Budget control tower</span>
+          <h2>Decide what is safe, then tune the plan.</h2>
+          <p>
+            A calmer Kakeibo-inspired flow: protect the boundary first, then allocate money, adjust
+            assumptions, and review what changed.
+          </p>
+        </div>
+        <div className={`budget-boundary-card budget-boundary-${boundaryState.tone}`}>
+          <span>{boundaryState.label}</span>
+          <strong>{money(String(boundaryValue))}</strong>
+          <small>Safe to spend today, capped by cash capacity and your assumptions.</small>
         </div>
       </div>
-      <div className="budget-summary-grid">
-        <Metric label="Income actual" value={money(String(totals.incomeActual))} />
-        <Metric label="Planned outflow" value={money(String(totals.plannedOutflow))} />
-        <Metric label="Actual outflow" value={money(String(totals.actualOutflow))} />
-        <Metric label="Remaining" value={money(String(totals.remaining))} />
+
+      <div className="budget-section-tabs" role="tablist" aria-label="Budget workflow">
+        {budgetSections.map((section) => (
+          <button
+            aria-controls={`budget-section-${section.id}`}
+            aria-selected={activeSection === section.id}
+            className={activeSection === section.id ? "active" : ""}
+            id={`budget-tab-${section.id}`}
+            key={section.id}
+            onClick={() => setActiveSection(section.id)}
+            role="tab"
+            type="button"
+          >
+            <strong>{section.label}</strong>
+            <span>{section.summary}</span>
+          </button>
+        ))}
       </div>
-      {controlState.budgetMode === "flexible" ? (
-        <div className="spending-plan-strip">
-          <Metric label="Income" value={money(String(spendingPlan.income))} />
-          <Metric label="Bills/subscriptions" value={money(String(spendingPlan.obligations))} />
-          <Metric label="Savings goals" value={money(String(spendingPlan.goalContributions))} />
-          <Metric label="Left to spend" value={money(String(spendingPlan.leftToSpend))} />
-        </div>
-      ) : null}
-      <p className="fine-print">
-        Formula: remaining = planned outflow - actual outflow{controlState.budgetMode === "rollover" ? " + rollover" : ""}. Actuals are imported transactions for this selected period.
-      </p>
-      <PlanningAssumptionsPanel
-        controlState={controlState}
-        onControlStateChange={onControlStateChange}
-        safeSpend={safeSpend}
-      />
-      <div className="budget-table" role="table" aria-label="Monthly budget">
-        <div className="budget-row budget-row-header" role="row">
-          <span>Group</span>
-          <span>Planned</span>
-          <span>Actual</span>
-          {controlState.budgetMode === "rollover" ? <span>Rollover</span> : null}
-          <span>Remaining</span>
-          <span>Status</span>
-        </div>
-        {rows.map((row) => {
-          const rollover = controlState.rollovers.find((item) => item.group === row.group)?.rolloverAmount ?? 0;
-          const remaining = row.plannedAmount - row.actualAmount + (controlState.budgetMode === "rollover" ? rollover : 0);
-          return (
-            <div className="budget-row" key={row.group} role="row">
-              <div>
-                <strong>{titleCase(row.group)}</strong>
-                <small>{row.transactionCount} transactions</small>
+
+      <section
+        aria-labelledby={`budget-tab-${activeSection}`}
+        className="budget-section-panel"
+        id={`budget-section-${activeSection}`}
+        role="tabpanel"
+      >
+        {activeSection === "overview" ? (
+          <>
+            <div className="budget-decision-grid">
+              <div className="budget-decision-card">
+                <span>1. What do I have?</span>
+                <strong>{money(String(dashboard?.cash_on_hand ?? 0))}</strong>
+                <small>Current cash and overdraft capacity included for bill payments.</small>
               </div>
-              <input
-                aria-label={`Planned amount for ${titleCase(row.group)}`}
-                inputMode="decimal"
-                onBlur={(event) => updateBudget(row.group, event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") updateBudget(row.group, event.currentTarget.value);
-                }}
-                placeholder="0.00"
-                defaultValue={row.plannedAmount ? row.plannedAmount.toFixed(2) : ""}
-              />
-              <span>{money(String(row.actualAmount))}</span>
-              {controlState.budgetMode === "rollover" ? (
-                <input
-                  aria-label={`Rollover amount for ${titleCase(row.group)}`}
-                  inputMode="decimal"
-                  onBlur={(event) => updateRollover(row.group, event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") updateRollover(row.group, event.currentTarget.value);
-                  }}
-                  placeholder="0.00"
-                  defaultValue={rollover ? rollover.toFixed(2) : ""}
-                />
-              ) : null}
-              <span className={remaining >= 0 ? "positive-text" : "negative-text"}>{money(String(remaining))}</span>
-              <span className={`status-pill status-${remaining >= 0 ? "ready" : "stale"}`}>
-                {remaining >= 0 ? "On track" : "Over"}
-              </span>
+              <div className="budget-decision-card">
+                <span>2. What must be protected?</span>
+                <strong>{money(String(safeSpend.assumptionDeductions + spendingPlan.obligations))}</strong>
+                <small>Bills, known costs, lifestyle allowance, and minimum buffer.</small>
+              </div>
+              <div className="budget-decision-card">
+                <span>3. What can I spend?</span>
+                <strong>{money(String(boundaryValue))}</strong>
+                <small>Permission number, not a challenge to spend it.</small>
+              </div>
+              <div className="budget-decision-card">
+                <span>4. What should improve?</span>
+                <strong>{reviewActions.length || "Clear"}</strong>
+                <small>{reviewActions[0] ?? "No urgent budget setup action from the current data."}</small>
+              </div>
             </div>
-          );
-        })}
-      </div>
+            <div className="budget-summary-grid">
+              <Metric label="Income actual" value={money(String(totals.incomeActual))} />
+              <Metric label="Actual outflow" value={money(String(totals.actualOutflow))} />
+              <Metric label="Planned outflow" value={money(String(totals.plannedOutflow))} />
+              <Metric label="Plan remaining" value={money(String(totals.remaining))} />
+            </div>
+            <div className="card-actions">
+              <button className="button-link" onClick={() => setActiveSection("plan")} type="button">
+                Build monthly plan
+              </button>
+              <button className="button-link button-link-secondary" onClick={() => setActiveSection("assumptions")} type="button">
+                Tune assumptions
+              </button>
+            </div>
+          </>
+        ) : null}
+
+        {activeSection === "plan" ? (
+          <>
+            <div className="budget-mode-strip">
+              <div>
+                <strong>Monthly plan method</strong>
+                <small>Choose the mental model that fits this month. The math below stays auditable.</small>
+              </div>
+              <div className="report-tabs" role="tablist" aria-label="Budget mode">
+                {(["category", "flexible", "rollover"] as const).map((mode) => (
+                  <button
+                    aria-selected={controlState.budgetMode === mode}
+                    className={controlState.budgetMode === mode ? "active" : ""}
+                    key={mode}
+                    onClick={() => onControlStateChange((current) => ({ ...current, budgetMode: mode }))}
+                    role="tab"
+                    type="button"
+                  >
+                    {mode === "category" ? "Envelope" : titleCase(mode)}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="spending-plan-strip">
+              <Metric label="Income" value={money(String(spendingPlan.income))} />
+              <Metric label="Bills/subscriptions" value={money(String(spendingPlan.obligations))} />
+              <Metric label="Savings goals" value={money(String(spendingPlan.goalContributions))} />
+              <Metric label="Flexible actual" value={money(String(spendingPlan.flexibleActual))} />
+              <Metric label="Period surplus" value={money(String(spendingPlan.leftToSpend))} />
+            </div>
+            <p className="fine-print">
+              Plan principle: give every pound a job, but treat the period surplus as evidence. The dashboard
+              Safe to Spend value stays capped by cash capacity.
+            </p>
+            <div className="card-actions">
+              <button className="button-link" onClick={() => setActiveSection("envelopes")} type="button">
+                Edit envelopes
+              </button>
+              <a className="button-link button-link-secondary" href="#/cash-flow">
+                Scenario plan cash flow
+              </a>
+            </div>
+          </>
+        ) : null}
+
+        {activeSection === "envelopes" ? (
+          <>
+            <div className="budget-section-heading">
+              <div>
+                <strong>Envelope budgets</strong>
+                <small>
+                  Planned minus actual{controlState.budgetMode === "rollover" ? " plus rollover" : ""}. Keep the table for editing, not for first-glance decisions.
+                </small>
+              </div>
+              <button className="button-link button-link-secondary" onClick={() => setActiveSection("plan")} type="button">
+                Back to plan
+              </button>
+            </div>
+            <div className="budget-table" role="table" aria-label="Monthly budget envelopes">
+              <div className="budget-row budget-row-header" role="row">
+                <span>Group</span>
+                <span>Planned</span>
+                <span>Actual</span>
+                {controlState.budgetMode === "rollover" ? <span>Rollover</span> : null}
+                <span>Remaining</span>
+                <span>Status</span>
+              </div>
+              {rows.map((row) => {
+                const rollover = controlState.rollovers.find((item) => item.group === row.group)?.rolloverAmount ?? 0;
+                const remaining = row.plannedAmount - row.actualAmount + (controlState.budgetMode === "rollover" ? rollover : 0);
+                return (
+                  <div className="budget-row" key={row.group} role="row">
+                    <div>
+                      <strong>{titleCase(row.group)}</strong>
+                      <small>{row.transactionCount} transactions</small>
+                    </div>
+                    <input
+                      aria-label={`Planned amount for ${titleCase(row.group)}`}
+                      inputMode="decimal"
+                      onBlur={(event) => updateBudget(row.group, event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") updateBudget(row.group, event.currentTarget.value);
+                      }}
+                      placeholder="0.00"
+                      defaultValue={row.plannedAmount ? row.plannedAmount.toFixed(2) : ""}
+                    />
+                    <span>{money(String(row.actualAmount))}</span>
+                    {controlState.budgetMode === "rollover" ? (
+                      <input
+                        aria-label={`Rollover amount for ${titleCase(row.group)}`}
+                        inputMode="decimal"
+                        onBlur={(event) => updateRollover(row.group, event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") updateRollover(row.group, event.currentTarget.value);
+                        }}
+                        placeholder="0.00"
+                        defaultValue={rollover ? rollover.toFixed(2) : ""}
+                      />
+                    ) : null}
+                    <span className={remaining >= 0 ? "positive-text" : "negative-text"}>{money(String(remaining))}</span>
+                    <span className={`status-pill status-${remaining >= 0 ? "ready" : "stale"}`}>
+                      {remaining >= 0 ? "On track" : "Over"}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        ) : null}
+
+        {activeSection === "assumptions" ? (
+          <PlanningAssumptionsPanel
+            controlState={controlState}
+            onControlStateChange={onControlStateChange}
+            safeSpend={safeSpend}
+          />
+        ) : null}
+
+        {activeSection === "review" ? (
+          <>
+            <div className="budget-review-grid">
+              <Metric label="Income actual" value={money(String(totals.incomeActual))} />
+              <Metric label="Actual outflow" value={money(String(totals.actualOutflow))} />
+              <Metric label="Reviewed transactions" value={String(planning?.monthly_review.reviewed_count ?? 0)} />
+              <Metric label="Unreviewed transactions" value={String(planning?.monthly_review.unreviewed_count ?? 0)} />
+            </div>
+            <div className="budget-action-list">
+              <strong>Next best actions</strong>
+              {reviewActions.length > 0 ? (
+                reviewActions.map((action) => <p key={action}>{action}</p>)
+              ) : (
+                <p>The current budget has no urgent setup warnings. Keep reviewing actuals as new transactions arrive.</p>
+              )}
+            </div>
+            <div className="card-actions">
+              <a className="button-link" href="#/transactions">
+                Review actuals
+              </a>
+              <a className="button-link button-link-secondary" href="#/monthly-review">
+                Monthly review
+              </a>
+            </div>
+          </>
+        ) : null}
+      </section>
     </article>
   );
 }
@@ -4090,13 +4526,16 @@ function StaleCommitmentsCard({ planning }: { planning: PlanningOverview | null 
 }
 
 function TransactionReviewRow({
+  onCreateRecurring,
   onTransactionUpdate,
   transaction,
 }: {
+  onCreateRecurring?: (transaction: TransactionsResponse["transactions"][number]) => void;
   onTransactionUpdate?: (transactionId: string, payload: TransactionUpdate) => Promise<void>;
   transaction: TransactionsResponse["transactions"][number];
 }) {
   const [transactionType, setTransactionType] = useState(transaction.transaction_type);
+  const canCreateRecurring = isRecurringSourceTransaction(transaction);
   return (
     <div className="transaction-row" role="row">
       <div className="transaction-merchant" role="cell">
@@ -4138,6 +4577,19 @@ function TransactionReviewRow({
           </button>
         </div>
       ) : null}
+      <div className="transaction-recurring-action" role="cell">
+        {onCreateRecurring && canCreateRecurring ? (
+          <button
+            className="button-link button-link-small"
+            onClick={() => onCreateRecurring(transaction)}
+            type="button"
+          >
+            Make recurring
+          </button>
+        ) : (
+          <small>{canCreateRecurring ? "Open Recurring" : "Not an outflow"}</small>
+        )}
+      </div>
     </div>
   );
 }
@@ -4343,23 +4795,282 @@ function AccountReviewRow({
 function RecurringCard({
   commitments,
   limit = 6,
+  onCommitmentCreate,
   onCommitmentUpdate,
   query,
+  transactions,
 }: {
   commitments: CommitmentsResponse | null;
   limit?: number;
-  onCommitmentUpdate?: (commitmentId: string, status: string) => Promise<void>;
+  onCommitmentCreate?: (payload: CommitmentCreate) => Promise<void>;
+  onCommitmentUpdate?: (commitmentId: string, payload: CommitmentUpdate) => Promise<void>;
   query: string;
+  transactions: TransactionsResponse | null;
 }) {
+  const today = new Date().toISOString().slice(0, 10);
+  const [manualOpen, setManualOpen] = useState(false);
+  const [editingCommitment, setEditingCommitment] = useState<{
+    category: string;
+    id: string;
+    name: string;
+  } | null>(null);
+  const [transactionOpen, setTransactionOpen] = useState(true);
+  const [manualForm, setManualForm] = useState({
+    amount: "",
+    category: "Bills",
+    endDate: "",
+    frequency: "monthly",
+    name: "",
+    nextDueDate: today,
+    occurrenceCount: "",
+    sourceTransactionId: "",
+    sourceTransactionLabel: "",
+    type: "bill",
+  });
   const rows = filterByQuery(commitments?.commitments ?? [], query, (commitment) =>
-    `${commitment.name} ${commitment.frequency} ${commitment.commitment_type}`,
+    `${commitment.name} ${commitment.category} ${commitment.frequency} ${commitment.commitment_type}`,
   ).slice(0, limit);
+  const transactionRows = filterByQuery(
+    (transactions?.transactions ?? []).filter(isRecurringSourceTransaction),
+    query,
+    (transaction) => `${transaction.merchant_name} ${transaction.description} ${transaction.account_name}`,
+  ).slice(0, 8);
+  const chooseSourceTransaction = (transaction: TransactionSummary) => {
+    setManualForm((current) => ({ ...current, ...commitmentDraftFromTransaction(transaction) }));
+    setManualOpen(true);
+  };
+  const saveManualCommitment = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!onCommitmentCreate) return;
+    await onCommitmentCreate({
+      commitment_type: manualForm.type,
+      category: manualForm.category,
+      end_date: manualForm.endDate || null,
+      expected_amount: manualForm.amount,
+      frequency: manualForm.frequency,
+      name: manualForm.name,
+      next_due_date: manualForm.nextDueDate,
+      occurrence_count: manualForm.occurrenceCount ? Math.max(1, Number(manualForm.occurrenceCount) || 1) : null,
+      source_transaction_id: manualForm.sourceTransactionId || null,
+      status: "confirmed",
+    });
+    setManualForm({
+      amount: "",
+      category: "Bills",
+      endDate: "",
+      frequency: "monthly",
+      name: "",
+      nextDueDate: today,
+      occurrenceCount: "",
+      sourceTransactionId: "",
+      sourceTransactionLabel: "",
+      type: "bill",
+    });
+  };
+  const startCommitmentEdit = (commitment: CommitmentsResponse["commitments"][number]) => {
+    setEditingCommitment({
+      category: commitment.category || "Bills",
+      id: commitment.id,
+      name: commitment.name,
+    });
+  };
+  const saveCommitmentEdit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!onCommitmentUpdate || !editingCommitment) return;
+    await onCommitmentUpdate(editingCommitment.id, {
+      category: editingCommitment.category,
+      name: editingCommitment.name,
+    });
+    setEditingCommitment(null);
+  };
   return (
     <article className="card">
       <CardHeader
         title="Recurring"
-        subtitle={commitments ? `${commitments.total_count} candidates` : "No upcoming transactions"}
+        subtitle={commitments ? `${commitments.total_count} commitments and candidates` : "No upcoming transactions"}
       />
+      <div className="commitment-inbox-intro">
+        <strong>Commitment inbox</strong>
+        <p>
+          Detection finds patterns, but you stay in control. Add missed bills manually, and give BNPL or
+          short-term plans a stop date or payment count so they do not recur forever.
+        </p>
+      </div>
+      {onCommitmentCreate ? (
+        <section className="manual-commitment-panel transaction-source-panel">
+          <button
+            aria-expanded={transactionOpen}
+            className="manual-commitment-toggle"
+            onClick={() => setTransactionOpen((current) => !current)}
+            type="button"
+          >
+            <span className={`group-chevron ${transactionOpen ? "open" : ""}`} aria-hidden="true" />
+            <span>
+              <strong>Add from transaction evidence</strong>
+              <small>Pick a real outflow, then adjust frequency, amount, and end rules before protecting it.</small>
+            </span>
+          </button>
+          {transactionOpen ? (
+            transactionRows.length > 0 ? (
+              <div className="transaction-source-list">
+                {transactionRows.map((transaction) => (
+                  <div className="transaction-source-row" key={transaction.id}>
+                    <div>
+                      <strong>{transaction.merchant_name || transaction.description}</strong>
+                      <small>
+                        {transaction.date} · {transaction.account_name} · {titleCase(transaction.normalized_group)}
+                      </small>
+                    </div>
+                    <span className="amount">{money(transaction.amount)}</span>
+                    <button className="button-link button-link-small" onClick={() => chooseSourceTransaction(transaction)} type="button">
+                      Use transaction
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="empty-copy">No eligible outflow transactions in the selected period. Change the date range or search.</p>
+            )
+          ) : null}
+        </section>
+      ) : null}
+      {onCommitmentCreate ? (
+        <section className="manual-commitment-panel">
+          <button
+            aria-expanded={manualOpen}
+            className="manual-commitment-toggle"
+            onClick={() => setManualOpen((current) => !current)}
+            type="button"
+          >
+            <span className={`group-chevron ${manualOpen ? "open" : ""}`} aria-hidden="true" />
+            <span>
+              <strong>Add a bill or subscription</strong>
+              <small>Manual fallback for missed bills, BNPL plans, and short-term commitments.</small>
+            </span>
+          </button>
+          {manualOpen ? (
+            <form className="manual-commitment-form" onSubmit={(event) => void saveManualCommitment(event)}>
+              {manualForm.sourceTransactionLabel ? (
+                <div className="source-transaction-callout">
+                  <strong>Based on transaction</strong>
+                  <span>{manualForm.sourceTransactionLabel}</span>
+                  <button
+                    className="button-link button-link-small"
+                    onClick={() =>
+                      setManualForm((current) => ({
+                        ...current,
+                        sourceTransactionId: "",
+                        sourceTransactionLabel: "",
+                      }))
+                    }
+                    type="button"
+                  >
+                    Clear source
+                  </button>
+                </div>
+              ) : null}
+              <label>
+                Reference name
+                <input
+                  aria-label="Commitment name"
+                  onChange={(event) => setManualForm((current) => ({ ...current, name: event.target.value }))}
+                  placeholder="Netflix, Klarna, Council tax..."
+                  required
+                  value={manualForm.name}
+                />
+              </label>
+              <label>
+                Category
+                <input
+                  aria-label="Commitment category"
+                  onChange={(event) => setManualForm((current) => ({ ...current, category: event.target.value }))}
+                  placeholder="Bills, Subscriptions, Debt..."
+                  required
+                  value={manualForm.category}
+                />
+              </label>
+              <label>
+                Type
+                <select
+                  aria-label="Commitment type"
+                  onChange={(event) => setManualForm((current) => ({ ...current, type: event.target.value }))}
+                  value={manualForm.type}
+                >
+                  <option value="bill">Essential bill</option>
+                  <option value="subscription">Subscription</option>
+                  <option value="credit_card_payment">Credit card payment</option>
+                  <option value="loan_payment">Loan payment</option>
+                  <option value="bnpl">Buy Now Pay Later</option>
+                  <option value="non_monthly">Irregular obligation</option>
+                </select>
+              </label>
+              <label>
+                Frequency
+                <select
+                  aria-label="Commitment frequency"
+                  onChange={(event) => setManualForm((current) => ({ ...current, frequency: event.target.value }))}
+                  value={manualForm.frequency}
+                >
+                  <option value="weekly">Weekly</option>
+                  <option value="fortnightly">Fortnightly</option>
+                  <option value="monthly">Monthly</option>
+                  <option value="quarterly">Quarterly</option>
+                  <option value="annual">Annual</option>
+                  <option value="custom">One-off/custom</option>
+                </select>
+              </label>
+              <label>
+                Amount
+                <input
+                  aria-label="Commitment amount"
+                  inputMode="decimal"
+                  onChange={(event) => setManualForm((current) => ({ ...current, amount: event.target.value }))}
+                  placeholder="29.99"
+                  required
+                  value={manualForm.amount}
+                />
+              </label>
+              <label>
+                Next due date
+                <input
+                  aria-label="Commitment next due date"
+                  onChange={(event) => setManualForm((current) => ({ ...current, nextDueDate: event.target.value }))}
+                  required
+                  type="date"
+                  value={manualForm.nextDueDate}
+                />
+              </label>
+              <label>
+                Payment count
+                <input
+                  aria-label="Commitment payment count"
+                  inputMode="numeric"
+                  min="1"
+                  onChange={(event) => setManualForm((current) => ({ ...current, occurrenceCount: event.target.value }))}
+                  placeholder="Optional, e.g. 3 for BNPL"
+                  type="number"
+                  value={manualForm.occurrenceCount}
+                />
+              </label>
+              <label>
+                End date
+                <input
+                  aria-label="Commitment end date"
+                  onChange={(event) => setManualForm((current) => ({ ...current, endDate: event.target.value }))}
+                  type="date"
+                  value={manualForm.endDate}
+                />
+              </label>
+              <div className="manual-commitment-actions">
+                <button className="button-link" type="submit">
+                  Protect this commitment
+                </button>
+                <small>Manual entries are confirmed immediately and feed Calendar, Cash Flow, Budget, and Dashboard.</small>
+              </div>
+            </form>
+          ) : null}
+        </section>
+      ) : null}
       {rows.length === 0 ? (
         <p className="empty-copy">Detect bills to populate recurring candidates.</p>
       ) : (
@@ -4367,27 +5078,77 @@ function RecurringCard({
           <div className="compact-list">
             {rows.map((commitment) => (
               <div className="compact-row" key={commitment.id}>
-                <div>
-                  <strong>{commitment.name}</strong>
-                  <small>
-                    {commitment.frequency} · next {commitment.next_due_date ?? "unknown"} · {commitment.status}
-                  </small>
-                </div>
-                <span className="amount">{money(commitment.expected_amount)}</span>
-                {onCommitmentUpdate && commitment.status === "candidate" ? (
-                  <div className="row-actions">
+                {editingCommitment?.id === commitment.id ? (
+                  <form className="commitment-inline-edit" onSubmit={(event) => void saveCommitmentEdit(event)}>
+                    <label>
+                      Reference name
+                      <input
+                        aria-label={`Reference name for ${commitment.name}`}
+                        onChange={(event) =>
+                          setEditingCommitment((current) =>
+                            current ? { ...current, name: event.target.value } : current,
+                          )
+                        }
+                        required
+                        value={editingCommitment.name}
+                      />
+                    </label>
+                    <label>
+                      Category
+                      <input
+                        aria-label={`Category for ${commitment.name}`}
+                        onChange={(event) =>
+                          setEditingCommitment((current) =>
+                            current ? { ...current, category: event.target.value } : current,
+                          )
+                        }
+                        required
+                        value={editingCommitment.category}
+                      />
+                    </label>
+                    <button className="button-link button-link-small" type="submit">Save details</button>
                     <button
-                      onClick={() => void onCommitmentUpdate(commitment.id, "confirmed")}
+                      className="button-link button-link-small button-link-secondary"
+                      onClick={() => setEditingCommitment(null)}
+                      type="button"
+                    >
+                      Cancel
+                    </button>
+                  </form>
+                ) : (
+                  <div>
+                    <strong>{commitment.name}</strong>
+                    <small>
+                      {commitment.category} · {commitment.frequency} · next {commitment.next_due_date ?? "unknown"} · {commitment.status}
+                      {commitment.occurrence_count ? ` · ${commitment.occurrence_count} payment plan` : ""}
+                      {commitment.end_date ? ` · ends ${commitment.end_date}` : ""}
+                    </small>
+                  </div>
+                )}
+                <span className="amount">{money(commitment.expected_amount)}</span>
+                {onCommitmentUpdate ? (
+                  <div className="row-actions">
+                    {editingCommitment?.id !== commitment.id ? (
+                      <button onClick={() => startCommitmentEdit(commitment)} type="button">
+                        Edit details
+                      </button>
+                    ) : null}
+                    {commitment.status === "candidate" ? (
+                      <>
+                    <button
+                      onClick={() => void onCommitmentUpdate(commitment.id, { status: "confirmed" })}
                       type="button"
                     >
                       Confirm
                     </button>
                     <button
-                      onClick={() => void onCommitmentUpdate(commitment.id, "rejected")}
+                      onClick={() => void onCommitmentUpdate(commitment.id, { status: "rejected" })}
                       type="button"
                     >
                       Ignore
                     </button>
+                      </>
+                    ) : null}
                   </div>
                 ) : null}
               </div>
@@ -4397,6 +5158,57 @@ function RecurringCard({
       )}
     </article>
   );
+}
+
+function isRecurringSourceTransaction(transaction: TransactionSummary) {
+  if (Number(transaction.amount) >= 0) return false;
+  if (transaction.is_transfer_candidate) return false;
+  if (["income", "internal_transfer_candidate", "ignored"].includes(transaction.transaction_type)) return false;
+  return transaction.status === "posted";
+}
+
+function guessCommitmentTypeFromTransaction(transaction: TransactionSummary) {
+  const text = `${transaction.merchant_name} ${transaction.description} ${transaction.source_category}`.toLowerCase();
+  if (transaction.transaction_type === "debt_payment") return "loan_payment";
+  if (["klarna", "clearpay", "paypal pay in", "bnpl"].some((token) => text.includes(token))) return "bnpl";
+  if (["amex", "american exp", "barclaycard", "aqua", "vanquis", "credit card"].some((token) => text.includes(token))) {
+    return "credit_card_payment";
+  }
+  if (["netflix", "spotify", "prime", "youtube", "apple", "subscription"].some((token) => text.includes(token))) {
+    return "subscription";
+  }
+  if (["loan", "updraft", "finance"].some((token) => text.includes(token))) return "loan_payment";
+  return "bill";
+}
+
+function commitmentDraftFromTransaction(transaction: TransactionSummary): CommitmentDraft {
+  return {
+    amount: transactionAmountForInput(transaction.amount),
+    category: transaction.source_category || titleCase(transaction.normalized_group) || "Bills",
+    endDate: "",
+    frequency: "monthly",
+    name: friendlyCommitmentName(transaction.merchant_name || transaction.description),
+    nextDueDate: addMonthsIso(transaction.date, 1),
+    occurrenceCount: "",
+    sourceTransactionId: transaction.id,
+    sourceTransactionLabel: `${transaction.date} · ${transaction.account_name} · ${money(transaction.amount)}`,
+    type: guessCommitmentTypeFromTransaction(transaction),
+  };
+}
+
+function friendlyCommitmentName(label: string) {
+  const cleaned = label
+    .replace(/[/*_\\]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!cleaned) return "Transaction-backed commitment";
+  return cleaned === cleaned.toUpperCase() ? titleCase(cleaned.toLowerCase()) : cleaned;
+}
+
+function transactionAmountForInput(amount: string) {
+  const normalized = Math.abs(Number(amount));
+  if (!Number.isFinite(normalized)) return "";
+  return normalized.toFixed(2).replace(/\.00$/, "");
 }
 
 function CashflowCard({
@@ -4845,6 +5657,7 @@ function PlanningAssumptionsPanel({
         </label>
         <label className="checkbox-label assumption-checkbox">
           <input
+            aria-label="Job or income change expected"
             checked={controlState.planningAssumptions.jobChangeExpected}
             onChange={(event) => updateAssumption("jobChangeExpected", event.target.checked)}
             type="checkbox"
@@ -6884,6 +7697,15 @@ function todayIso() {
 function addDays(isoDate: string, days: number) {
   const date = new Date(`${isoDate}T00:00:00Z`);
   date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function addMonthsIso(isoDate: string, months: number) {
+  const date = new Date(`${isoDate}T00:00:00Z`);
+  const originalDay = date.getUTCDate();
+  date.setUTCMonth(date.getUTCMonth() + months, 1);
+  const lastDay = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0)).getUTCDate();
+  date.setUTCDate(Math.min(originalDay, lastDay));
   return date.toISOString().slice(0, 10);
 }
 

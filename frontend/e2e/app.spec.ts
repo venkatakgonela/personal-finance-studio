@@ -44,6 +44,16 @@ const incomeTransaction = {
   transaction_type: "income",
 };
 
+const councilTaxTransaction = {
+  ...baseTransaction,
+  amount: "-200.00",
+  description: "COUNCIL TAX",
+  id: "transaction-3",
+  merchant_name: "Council Tax",
+  normalized_group: "household",
+  source_category: "Bills",
+};
+
 const decision = {
   amount: "340.00",
   decision_type: "internal_transfer",
@@ -158,7 +168,7 @@ test("renders the dashboard with the polished visual system", async ({ page }) =
   await page.goto("/");
 
   await expect(page.getByRole("heading", { name: /Good (morning|afternoon|evening)\./ })).toBeVisible();
-  await expect(page.getByRole("navigation", { name: "Primary navigation" }).getByRole("link")).toHaveCount(13);
+  await expect(page.getByRole("navigation", { name: "Primary navigation" }).getByRole("link")).toHaveCount(14);
   await expect(page.getByLabel("Date range", { exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: /API online|API checking/ })).toBeVisible();
   await expect(page.getByRole("button", { name: /Workspace Household/ })).toBeVisible();
@@ -249,11 +259,13 @@ test("supports phase 1.75 editable planning controls", async ({ page }) => {
   await expect(page.getByText("50%")).toBeVisible();
 
   await page.goto("/#/budget");
-  await expect(page.getByRole("heading", { name: "Budget" })).toBeVisible();
+  await expect(page.getByText("Budget control tower")).toBeVisible();
+  await expect(page.getByText("Decide what is safe, then tune the plan.")).toBeVisible();
+  await page.getByRole("tab", { name: /Envelopes/ }).click();
   const flexiblePlan = page.getByLabel("Planned amount for Flexible");
   await flexiblePlan.fill("100");
   await flexiblePlan.press("Enter");
-  await expect(page.getByLabel("Monthly budget").getByText("£51.01")).toBeVisible();
+  await expect(page.getByLabel("Monthly budget envelopes").getByText("£51.01")).toBeVisible();
 
   await page.goto("/#/settings");
   await expect(page.getByRole("heading", { name: "Categories" })).toBeVisible();
@@ -320,7 +332,11 @@ test("captures a first-run name before import and can reset app data", async ({ 
 
 test("supports phase 2 household expansion workflows", async ({ page }) => {
   let patchCount = 0;
+  let createdCommitment: unknown = null;
   await mockAppApis(page, {
+    onCommitmentCreate(body) {
+      createdCommitment = body;
+    },
     onTransactionPatch() {
       patchCount += 1;
     },
@@ -350,14 +366,44 @@ test("supports phase 2 household expansion workflows", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Transactions CSV" })).toBeVisible();
 
   await page.goto("/#/budget");
+  await page.getByRole("tab", { name: /Monthly plan/ }).click();
   await page.getByRole("tab", { name: "Flexible" }).click();
-  await expect(page.getByText("Left to spend")).toBeVisible();
+  await expect(page.locator(".spending-plan-strip").getByText("Period surplus", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Edit envelopes" }).click();
   await page.getByLabel("Planned amount for Flexible").fill("500");
   await page.getByLabel("Planned amount for Flexible").press("Enter");
-  await page.getByRole("tab", { name: "Rollover" }).click();
+  await page.getByRole("tab", { name: /Monthly plan/ }).click();
+  await page.getByRole("tab", { name: "Rollover", exact: true }).click();
+  await page.getByRole("button", { name: "Edit envelopes" }).click();
   await page.getByLabel("Rollover amount for Flexible").fill("25");
   await page.getByLabel("Rollover amount for Flexible").press("Enter");
-  await expect(page.getByLabel("Monthly budget")).toContainText("£476.01");
+  await expect(page.getByLabel("Monthly budget envelopes")).toContainText("£476.01");
+
+  await page.goto("/#/recurring");
+  await expect(page.getByText("Commitment inbox")).toBeVisible();
+  await page.getByRole("button", { name: /Add a bill or subscription/ }).click();
+  await page.getByLabel("Commitment name").fill("Klarna sofa");
+  await page.getByLabel("Commitment type").selectOption("bnpl");
+  await page.getByLabel("Commitment amount").fill("42");
+  await page.getByLabel("Commitment next due date").fill("2026-07-10");
+  await page.getByLabel("Commitment payment count").fill("3");
+  await page.getByRole("button", { name: "Protect this commitment" }).click();
+  await expect.poll(() => createdCommitment).toBeDefined();
+  expect(createdCommitment).toMatchObject({
+    commitment_type: "bnpl",
+    expected_amount: "42",
+    name: "Klarna sofa",
+    occurrence_count: 3,
+  });
+  await page.getByRole("button", { name: "Use transaction" }).click();
+  await expect(page.getByText("Based on transaction")).toBeVisible();
+  await page.getByRole("button", { name: "Protect this commitment" }).click();
+  expect(createdCommitment).toMatchObject({
+    category: "Groceries",
+    expected_amount: "48.99",
+    name: "Morrisons",
+    source_transaction_id: "transaction-1",
+  });
 
   await page.goto("/#/cash-flow");
   await expect(page.getByRole("button", { name: /What-if scenarios/ })).toHaveAttribute("aria-expanded", "true");
@@ -580,6 +626,76 @@ test("sends transaction filters to the API and updates the table", async ({ page
   expect(transactionRequests.some((url) => url.includes("transaction_type=spending"))).toBe(true);
 });
 
+test("creates a recurring commitment from the transaction ledger", async ({ page }) => {
+  let createdCommitment: unknown;
+  await mockAppApis(page, {
+    onCommitmentCreate(body) {
+      createdCommitment = body;
+    },
+  });
+  await page.goto("/#/transactions");
+
+  await page.getByRole("button", { name: "Make recurring" }).click();
+  await expect(page.getByText("Create recurring from transaction")).toBeVisible();
+  await expect(page.getByLabel("Transaction recurring reference name")).toHaveValue("Morrisons");
+  await expect(page.getByLabel("Transaction recurring category")).toHaveValue("Groceries");
+  await page.getByRole("button", { name: "Protect this recurring item" }).click();
+  await expect.poll(() => createdCommitment).toBeDefined();
+
+  expect(createdCommitment).toMatchObject({
+    category: "Groceries",
+    expected_amount: "48.99",
+    name: "Morrisons",
+    next_due_date: "2026-07-14",
+    source_transaction_id: "transaction-1",
+  });
+});
+
+test("preserves whole-pound amounts when creating recurring from transactions", async ({ page }) => {
+  let createdCommitment: unknown;
+  await mockAppApis(page, {
+    extraTransactions: [councilTaxTransaction],
+    onCommitmentCreate(body) {
+      createdCommitment = body;
+    },
+  });
+  await page.goto("/#/transactions");
+
+  await page.locator(".transaction-row", { hasText: "Council Tax" }).getByRole("button", { name: "Make recurring" }).click();
+  await expect(page.getByLabel("Transaction recurring amount")).toHaveValue("200");
+  await expect(page.getByLabel("Transaction recurring category")).toHaveValue("Bills");
+  await page.getByRole("button", { name: "Protect this recurring item" }).click();
+  await expect.poll(() => createdCommitment).toBeDefined();
+
+  expect(createdCommitment).toMatchObject({
+    category: "Bills",
+    expected_amount: "200",
+    name: "Council Tax",
+    source_transaction_id: "transaction-3",
+  });
+});
+
+test("renames and categorizes existing recurring commitments", async ({ page }) => {
+  let patchedCommitment: unknown;
+  await mockAppApis(page, {
+    onCommitmentPatch(body) {
+      patchedCommitment = body;
+    },
+  });
+  await page.goto("/#/recurring");
+
+  await page.getByRole("button", { name: "Edit details" }).click();
+  await page.getByLabel("Reference name for Netflix").fill("Family Netflix");
+  await page.getByLabel("Category for Netflix").fill("Streaming");
+  await page.getByRole("button", { name: "Save details" }).click();
+  await expect.poll(() => patchedCommitment).toBeDefined();
+
+  expect(patchedCommitment).toMatchObject({
+    category: "Streaming",
+    name: "Family Netflix",
+  });
+});
+
 test("scopes candidate toggle to planning views and updates upcoming bills", async ({ page }) => {
   await mockAppApis(page);
   await page.goto("/#/calendar");
@@ -666,6 +782,9 @@ test("keeps decision queue actions usable on mobile", async ({ page }) => {
 async function mockAppApis(
   page: Page,
   options: {
+    extraTransactions?: typeof baseTransaction[];
+    onCommitmentCreate?: (body: unknown) => void;
+    onCommitmentPatch?: (body: unknown) => void;
     onReset?: () => void;
     onTransactionPatch?: () => void;
     onTransactionsRequest?: (url: URL) => void;
@@ -713,11 +832,34 @@ async function mockAppApis(
     });
   });
   await page.route("**/api/commitments", async (route) => {
+    if (route.request().method() === "POST") {
+      const body = await route.request().postDataJSON();
+      options.onCommitmentCreate?.(body);
+      await route.fulfill({
+        contentType: "application/json",
+        json: {
+          category: body.category ?? "Bills",
+          commitment_type: body.commitment_type,
+          end_date: body.end_date ?? null,
+          expected_amount: body.expected_amount,
+          frequency: body.frequency,
+          id: "manual-commitment-1",
+          instance_count: body.occurrence_count ?? 1,
+          name: body.name,
+          next_due_date: body.next_due_date,
+          occurrence_count: body.occurrence_count ?? null,
+          source: body.source_transaction_id ? "transaction" : "manual",
+          status: body.status ?? "confirmed",
+        },
+      });
+      return;
+    }
     await route.fulfill({
       contentType: "application/json",
       json: {
         commitments: [
           {
+            category: "Subscriptions",
             commitment_type: "subscription",
             expected_amount: "9.99",
             frequency: "monthly",
@@ -725,12 +867,35 @@ async function mockAppApis(
             instance_count: 1,
             name: "Netflix",
             next_due_date: "2026-06-20",
+            end_date: null,
+            occurrence_count: null,
             source: "detected",
             status: "candidate",
           },
         ],
         entity_name: "Household",
         total_count: 1,
+      },
+    });
+  });
+  await page.route("**/api/commitments/*", async (route) => {
+    const body = route.request().method() === "PATCH" ? await route.request().postDataJSON() : {};
+    if (route.request().method() === "PATCH") options.onCommitmentPatch?.(body);
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        category: body.category ?? "Subscriptions",
+        commitment_type: body.commitment_type ?? "subscription",
+        end_date: body.end_date ?? null,
+        expected_amount: body.expected_amount ?? "9.99",
+        frequency: body.frequency ?? "monthly",
+        id: "commitment-1",
+        instance_count: 1,
+        name: body.name ?? "Netflix",
+        next_due_date: body.next_due_date ?? "2026-06-20",
+        occurrence_count: body.occurrence_count ?? null,
+        source: "detected",
+        status: body.status ?? "candidate",
       },
     });
   });
@@ -861,7 +1026,7 @@ async function mockAppApis(
     const transactionType = url.searchParams.get("transaction_type");
     options.onTransactionsRequest?.(url);
 
-    const transactions = [baseTransaction, incomeTransaction].filter((transaction) => {
+    const transactions = [baseTransaction, incomeTransaction, ...(options.extraTransactions ?? [])].filter((transaction) => {
       if (normalizedGroup && transaction.normalized_group !== normalizedGroup) return false;
       if (transactionType && transaction.transaction_type !== transactionType) return false;
       return true;

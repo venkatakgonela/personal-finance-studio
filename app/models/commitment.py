@@ -20,6 +20,7 @@ class Commitment(Base):
     shared_scope: Mapped[str] = mapped_column(String(40), nullable=False, default="household")
     name: Mapped[str] = mapped_column(String(180), nullable=False)
     commitment_type: Mapped[str] = mapped_column(String(40), nullable=False, default="bill")
+    category: Mapped[str] = mapped_column(String(120), nullable=False, default="Bills")
     frequency: Mapped[str] = mapped_column(String(40), nullable=False, default="custom")
     expected_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
     estimate_method: Mapped[str] = mapped_column(
@@ -28,6 +29,8 @@ class Commitment(Base):
         default="recent_average",
     )
     next_due_date: Mapped[date | None] = mapped_column(Date(), nullable=True)
+    end_date: Mapped[date | None] = mapped_column(Date(), nullable=True)
+    occurrence_count: Mapped[int | None] = mapped_column(nullable=True)
     source: Mapped[str] = mapped_column(String(80), nullable=False, default="detected")
     source_key: Mapped[str] = mapped_column(String(160), nullable=False)
     status: Mapped[str] = mapped_column(String(40), nullable=False, default="candidate")

@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
+from email.message import Message
 from typing import Any
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode
+from urllib.parse import parse_qsl, urlencode
 from urllib.request import Request, urlopen
 
 
@@ -35,9 +36,11 @@ class FreeAgentApiClient:
         updated_since: str | None = None,
         view: str = "all",
         last_uploaded: bool = False,
+        per_page: int = 100,
     ) -> list[dict[str, Any]]:
         params: dict[str, str] = {
             "bank_account": bank_account_url,
+            "per_page": str(max(1, min(per_page, 100))),
             "view": view,
         }
         if last_uploaded:
@@ -48,10 +51,43 @@ class FreeAgentApiClient:
             params["to_date"] = to_date
         if updated_since:
             params["updated_since"] = updated_since
-        return self.get_json("/v2/bank_transactions", access_token, params).get(
-            "bank_transactions",
-            [],
+        rows: list[dict[str, Any]] = []
+        next_url: str | None = f"{self.base_url}/v2/bank_transactions?{urlencode(params)}"
+        while next_url:
+            payload, headers = self.get_json_url(next_url, access_token)
+            page_rows = payload.get("bank_transactions", [])
+            if isinstance(page_rows, list):
+                rows.extend(page_rows)
+            next_url = parse_next_link(headers.get("Link", ""))
+        return rows
+
+    def exchange_authorization_code(
+        self,
+        *,
+        client_id: str,
+        client_secret: str,
+        code: str,
+        redirect_uri: str,
+    ) -> dict[str, Any]:
+        body = urlencode(
+            {
+                "grant_type": "authorization_code",
+                "code": code,
+                "redirect_uri": redirect_uri,
+                "client_id": client_id,
+                "client_secret": client_secret,
+            }
+        ).encode("utf-8")
+        request = Request(
+            self.token_url,
+            data=body,
+            headers={
+                "Accept": "application/json",
+                "Content-Type": "application/x-www-form-urlencoded",
+            },
+            method="POST",
         )
+        return self._send(request)
 
     def refresh_access_token(
         self,
@@ -95,10 +131,25 @@ class FreeAgentApiClient:
         )
         return self._send(request)
 
+    def get_json_url(self, url: str, access_token: str) -> tuple[dict[str, Any], Message]:
+        request = Request(
+            url,
+            headers={
+                "Accept": "application/json",
+                "Authorization": f"Bearer {access_token}",
+            },
+        )
+        return self._send_with_headers(request)
+
     def _send(self, request: Request) -> dict[str, Any]:
+        payload, _headers = self._send_with_headers(request)
+        return payload
+
+    def _send_with_headers(self, request: Request) -> tuple[dict[str, Any], Message]:
         try:
             with urlopen(request, timeout=30) as response:
                 payload = response.read().decode("utf-8")
+                headers = response.headers
         except HTTPError as exc:
             payload = exc.read().decode("utf-8", errors="replace")
             raise FreeAgentApiError(extract_error_message(payload), exc.code) from exc
@@ -106,9 +157,9 @@ class FreeAgentApiClient:
             raise FreeAgentApiError(f"FreeAgent request failed: {exc.reason}") from exc
 
         if not payload:
-            return {}
+            return {}, headers
         try:
-            return json.loads(payload)
+            return json.loads(payload), headers
         except json.JSONDecodeError as exc:
             raise FreeAgentApiError("FreeAgent returned invalid JSON.") from exc
 
@@ -122,3 +173,18 @@ def extract_error_message(payload: str) -> str:
     if isinstance(error, dict) and error.get("message"):
         return str(error["message"])
     return payload or "FreeAgent request failed."
+
+
+def parse_next_link(link_header: str) -> str | None:
+    for part in link_header.split(","):
+        section = part.strip()
+        if not section.startswith("<") or ">;" not in section:
+            continue
+        url, raw_params = section[1:].split(">;", 1)
+        cleaned_params = raw_params.replace(";", "&").replace('"', "").replace("'", "")
+        params = dict(
+            parse_qsl(cleaned_params.replace(" ", ""))
+        )
+        if params.get("rel") == "next":
+            return url
+    return None
