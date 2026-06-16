@@ -387,7 +387,7 @@ test("supports phase 2 household expansion workflows", async ({ page }) => {
   await page.getByLabel("Commitment amount").fill("42");
   await page.getByLabel("Commitment next due date").fill("2026-07-10");
   await page.getByLabel("Commitment payment count").fill("3");
-  await page.getByRole("button", { name: "Protect this commitment" }).click();
+  await page.getByRole("button", { name: "✓ Protect commitment" }).click();
   await expect.poll(() => Boolean(createdCommitment)).toBe(true);
   expect(createdCommitment).toMatchObject({
     commitment_type: "bnpl",
@@ -397,7 +397,7 @@ test("supports phase 2 household expansion workflows", async ({ page }) => {
   });
   await page.getByRole("button", { name: "Use transaction" }).click();
   await expect(page.getByText("Source transaction")).toBeVisible();
-  await page.getByRole("button", { name: "Protect this commitment" }).click();
+  await page.getByRole("button", { name: "✓ Protect commitment" }).click();
   expect(createdCommitment).toMatchObject({
     category: "Groceries",
     expected_amount: "48.99",

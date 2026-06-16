@@ -1335,7 +1335,7 @@ function AppPage({
 
   if (route === "recurring") {
     return (
-      <section className="page-grid" aria-label="Recurring page">
+      <section className="page-grid page-grid-single recurring-page-grid" aria-label="Recurring page">
         <RecurringCard
           commitments={commitments}
           limit={15}
@@ -5004,6 +5004,7 @@ function RecurringCard({
       sourceTransactionLabel: "",
       type: "bill",
     });
+    setManualOpen(false);
   };
   const startCommitmentEdit = (commitment: CommitmentsResponse["commitments"][number]) => {
     setEditingCommitment({
@@ -5125,130 +5126,153 @@ function RecurringCard({
             </span>
           </button>
           {manualOpen ? (
-            <form className="manual-commitment-form" onSubmit={(event) => void saveManualCommitment(event)}>
-              {manualForm.sourceTransactionLabel ? (
-                <div className="source-transaction-callout">
-                  <strong>Source transaction</strong>
-                  <span>{manualForm.sourceTransactionLabel}</span>
-                  <button
-                    className="button-link button-link-small"
-                    onClick={() =>
-                      setManualForm((current) => ({
-                        ...current,
-                        sourceLabel: "",
-                        sourceTransactionId: "",
-                        sourceTransactionLabel: "",
-                      }))
-                    }
-                    type="button"
-                  >
-                    Clear source
-                  </button>
+            <form className="manual-commitment-form commitment-inline-edit" onSubmit={(event) => void saveManualCommitment(event)}>
+              <div className="commitment-edit-header">
+                <span className="commitment-edit-icon" aria-hidden="true">+</span>
+                <div>
+                  <strong>{manualForm.name || "New bill or subscription"}</strong>
+                  <small>
+                    {manualForm.sourceTransactionLabel
+                      ? `Source transaction · ${manualForm.sourceTransactionLabel}`
+                      : "Manual commitment"}
+                  </small>
+                  <small>
+                    {manualForm.category} · {manualForm.frequency} · next {formatShortDay(manualForm.nextDueDate)}
+                  </small>
                 </div>
-              ) : null}
-              <label>
-                Your reference name
-                <input
-                  aria-label="Commitment name"
-                  onChange={(event) => setManualForm((current) => ({ ...current, name: event.target.value }))}
-                  placeholder="Netflix, Klarna, Council tax..."
-                  required
-                  value={manualForm.name}
-                />
-              </label>
-              <label>
-                Budget category
-                <input
-                  aria-label="Commitment category"
-                  list="commitment-category-options"
-                  onChange={(event) => setManualForm((current) => ({ ...current, category: event.target.value }))}
-                  placeholder="e.g. Vehicle insurance, Utilities, Kids tuition..."
-                  required
-                  value={manualForm.category}
-                />
-                <CommitmentCategorySuggestionSelect
-                  ariaLabel="Commitment suggested household category"
-                  onChange={(category) => setManualForm((current) => ({ ...current, category }))}
-                  value={manualForm.category}
-                />
-              </label>
-              <label>
-                Payment kind
-                <select
-                  aria-label="Commitment type"
-                  onChange={(event) => setManualForm((current) => ({ ...current, type: event.target.value }))}
-                  value={manualForm.type}
-                >
-                  <option value="bill">Essential bill</option>
-                  <option value="subscription">Subscription</option>
-                  <option value="credit_card_payment">Credit card payment</option>
-                  <option value="loan_payment">Loan payment</option>
-                  <option value="bnpl">Buy Now Pay Later</option>
-                  <option value="non_monthly">Irregular obligation</option>
-                </select>
-              </label>
-              <label>
-                Frequency
-                <select
-                  aria-label="Commitment frequency"
-                  onChange={(event) => setManualForm((current) => ({ ...current, frequency: event.target.value }))}
-                  value={manualForm.frequency}
-                >
-                  <option value="weekly">Weekly</option>
-                  <option value="fortnightly">Fortnightly</option>
-                  <option value="monthly">Monthly</option>
-                  <option value="quarterly">Quarterly</option>
-                  <option value="annual">Annual</option>
-                  <option value="custom">One-off/custom</option>
-                </select>
-              </label>
-              <label>
-                Amount
-                <input
-                  aria-label="Commitment amount"
-                  inputMode="decimal"
-                  onChange={(event) => setManualForm((current) => ({ ...current, amount: event.target.value }))}
-                  placeholder="29.99"
-                  required
-                  value={manualForm.amount}
-                />
-              </label>
-              <label>
-                Next due date
-                <input
-                  aria-label="Commitment next due date"
-                  onChange={(event) => setManualForm((current) => ({ ...current, nextDueDate: event.target.value }))}
-                  required
-                  type="date"
-                  value={manualForm.nextDueDate}
-                />
-              </label>
-              <label>
-                Payment count
-                <input
-                  aria-label="Commitment payment count"
-                  inputMode="numeric"
-                  min="1"
-                  onChange={(event) => setManualForm((current) => ({ ...current, occurrenceCount: event.target.value }))}
-                  placeholder="Optional, e.g. 3 for BNPL"
-                  type="number"
-                  value={manualForm.occurrenceCount}
-                />
-              </label>
-              <label>
-                End date
-                <input
-                  aria-label="Commitment end date"
-                  onChange={(event) => setManualForm((current) => ({ ...current, endDate: event.target.value }))}
-                  type="date"
-                  value={manualForm.endDate}
-                />
-              </label>
-              <div className="manual-commitment-actions">
-                <button className="button-link" type="submit">
-                  Protect this commitment
+                <span className="commitment-edit-amount">
+                  {manualForm.amount ? money(manualForm.amount) : "£0.00"}
+                </span>
+                {manualForm.sourceTransactionLabel ? (
+                  <div className="row-actions commitment-header-actions">
+                    <button
+                      className="button-link button-link-small button-link-secondary"
+                      onClick={() =>
+                        setManualForm((current) => ({
+                          ...current,
+                          sourceLabel: "",
+                          sourceTransactionId: "",
+                          sourceTransactionLabel: "",
+                        }))
+                      }
+                      type="button"
+                    >
+                      Clear source
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+              <div className="commitment-edit-grid">
+                <label>
+                  Your reference
+                  <input
+                    aria-label="Commitment name"
+                    onChange={(event) => setManualForm((current) => ({ ...current, name: event.target.value }))}
+                    placeholder="Netflix, Klarna, Council tax..."
+                    required
+                    value={manualForm.name}
+                  />
+                </label>
+                <label>
+                  Budget category
+                  <CommitmentCategorySuggestionSelect
+                    ariaLabel="Commitment suggested household category"
+                    onChange={(category) => setManualForm((current) => ({ ...current, category }))}
+                    value={manualForm.category}
+                  />
+                  <input
+                    aria-label="Commitment category"
+                    className="category-custom-input"
+                    onChange={(event) => setManualForm((current) => ({ ...current, category: event.target.value }))}
+                    placeholder="Custom category"
+                    required
+                    value={manualForm.category}
+                  />
+                </label>
+                <label>
+                  Payment kind
+                  <select
+                    aria-label="Commitment type"
+                    onChange={(event) => setManualForm((current) => ({ ...current, type: event.target.value }))}
+                    value={manualForm.type}
+                  >
+                    <option value="bill">Essential bill</option>
+                    <option value="subscription">Subscription</option>
+                    <option value="credit_card_payment">Credit card payment</option>
+                    <option value="loan_payment">Loan payment</option>
+                    <option value="bnpl">Buy Now Pay Later</option>
+                    <option value="non_monthly">Irregular obligation</option>
+                  </select>
+                </label>
+                <label>
+                  Frequency
+                  <select
+                    aria-label="Commitment frequency"
+                    onChange={(event) => setManualForm((current) => ({ ...current, frequency: event.target.value }))}
+                    value={manualForm.frequency}
+                  >
+                    <option value="weekly">Weekly</option>
+                    <option value="fortnightly">Fortnightly</option>
+                    <option value="monthly">Monthly</option>
+                    <option value="quarterly">Quarterly</option>
+                    <option value="annual">Annual</option>
+                    <option value="custom">One-off/custom</option>
+                  </select>
+                </label>
+                <label>
+                  Planning amount
+                  <input
+                    aria-label="Commitment amount"
+                    inputMode="decimal"
+                    onChange={(event) => setManualForm((current) => ({ ...current, amount: event.target.value }))}
+                    placeholder="29.99"
+                    required
+                    value={manualForm.amount}
+                  />
+                </label>
+                <label>
+                  Next due date
+                  <input
+                    aria-label="Commitment next due date"
+                    onChange={(event) => setManualForm((current) => ({ ...current, nextDueDate: event.target.value }))}
+                    required
+                    type="date"
+                    value={manualForm.nextDueDate}
+                  />
+                </label>
+                <label>
+                  Payment count
+                  <input
+                    aria-label="Commitment payment count"
+                    inputMode="numeric"
+                    min="1"
+                    onChange={(event) => setManualForm((current) => ({ ...current, occurrenceCount: event.target.value }))}
+                    placeholder="Optional, e.g. 3 for BNPL"
+                    type="number"
+                    value={manualForm.occurrenceCount}
+                  />
+                </label>
+                <label>
+                  End date
+                  <input
+                    aria-label="Commitment end date"
+                    onChange={(event) => setManualForm((current) => ({ ...current, endDate: event.target.value }))}
+                    type="date"
+                    value={manualForm.endDate}
+                  />
+                </label>
+              </div>
+              <div className="commitment-edit-footer">
+                <button className="button-link button-link-small" type="submit">
+                  ✓ Protect commitment
                 </button>
-                <small>Manual entries are confirmed immediately and feed Calendar, Cash Flow, Budget, and Dashboard.</small>
+                <button
+                  className="button-link button-link-small button-link-secondary"
+                  onClick={() => setManualOpen(false)}
+                  type="button"
+                >
+                  Cancel
+                </button>
               </div>
             </form>
           ) : null}
@@ -5258,14 +5282,14 @@ function RecurringCard({
       {rows.length === 0 ? (
         <p className="empty-copy">Detect bills to populate recurring candidates.</p>
       ) : (
-        <section className="recurring-candidate-panel">
-          <div className="recurring-section-heading">
-            <div>
-              <strong>Detected recurring candidates</strong>
-              <small>Edit your reference, budget category, payment kind, and planning amount before confirming.</small>
-            </div>
-            <span>{rows.length} shown</span>
-          </div>
+        <CollapsibleBlock
+          meta={`${rows.length} shown · edit, confirm, or ignore`}
+          title="Detected recurring candidates"
+        >
+          <section className="recurring-candidate-panel">
+            <p className="recurring-section-copy">
+              Edit your reference, budget category, payment kind, and planning amount before confirming.
+            </p>
           <div className="recurring-candidate-list">
             {rows.map((commitment) => (
               <div
@@ -5471,7 +5495,8 @@ function RecurringCard({
               </div>
             ))}
           </div>
-        </section>
+          </section>
+        </CollapsibleBlock>
       )}
     </article>
   );

@@ -853,6 +853,10 @@ h3 {
   grid-template-columns: minmax(0, 1fr);
 }
 
+.recurring-page-grid {
+  gap: var(--space-lg);
+}
+
 .import-page-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.05fr) minmax(340px, 0.85fr);
@@ -1226,6 +1230,21 @@ h3 {
   background:
     radial-gradient(circle at 12% 10%, rgba(245, 189, 34, 0.12), transparent 28%),
     linear-gradient(135deg, #ffffff 0%, #fffaf0 100%);
+}
+
+.recurring-page-grid .upcoming-bills-card {
+  border-style: dashed;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.94), rgba(255, 250, 240, 0.72)),
+    white;
+}
+
+.recurring-page-grid .upcoming-bills-card .compact-list {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.recurring-page-grid .upcoming-bills-card .compact-row {
+  min-height: 58px;
 }
 
 .upcoming-bills-card .compact-list {
@@ -4608,6 +4627,7 @@ button.collapsible-block-header:focus {
 .recurring-action-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.95fr);
+  align-items: start;
   gap: var(--space-sm);
 }
 
@@ -4636,12 +4656,17 @@ button.collapsible-block-header:focus {
 
 .manual-commitment-panel {
   display: grid;
+  align-self: start;
   gap: var(--space-sm);
-  margin-bottom: var(--space-sm);
   padding: var(--space-sm);
   border: 1px solid var(--line);
   border-radius: var(--radius-row);
   background: linear-gradient(135deg, rgba(255, 255, 255, 0.92), rgba(246, 243, 236, 0.86));
+}
+
+.manual-commitment-panel:has(.manual-commitment-form) {
+  grid-column: auto;
+  order: initial;
 }
 
 .manual-commitment-toggle {
@@ -4649,7 +4674,8 @@ button.collapsible-block-header:focus {
   align-items: center;
   width: 100%;
   gap: var(--space-sm);
-  padding: 0;
+  min-height: 52px;
+  padding: 2px;
   border: 0;
   background: transparent;
   color: var(--text);
@@ -4766,18 +4792,56 @@ button.collapsible-block-header:focus {
   display: flex;
   grid-column: 1 / -1;
   align-items: center;
+  justify-content: space-between;
   gap: var(--space-sm);
   flex-wrap: wrap;
+  margin-top: var(--space-xs);
+  padding: var(--space-sm);
+  border: 1px solid rgba(35, 125, 98, 0.16);
+  border-radius: var(--radius-row);
+  background:
+    linear-gradient(135deg, rgba(232, 248, 240, 0.8), rgba(255, 255, 255, 0.92)),
+    white;
 }
 
 .manual-commitment-actions small {
+  max-width: 520px;
   color: var(--muted);
+  font-size: 0.78rem;
   line-height: 1.4;
 }
 
 .recurring-candidate-panel {
   display: grid;
   gap: var(--space-sm);
+}
+
+.recurring-workbench-card .collapsible-block {
+  margin-top: 0;
+  border-color: rgba(31, 47, 43, 0.12);
+  border-radius: 18px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(247, 245, 239, 0.82)),
+    white;
+}
+
+.recurring-workbench-card .collapsible-block-header {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(241, 247, 243, 0.86)),
+    white;
+}
+
+.recurring-workbench-card .collapsible-block-body {
+  background:
+    radial-gradient(circle at 98% 0%, rgba(35, 125, 98, 0.06), transparent 28%),
+    #fbfaf7;
+}
+
+.recurring-section-copy {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.45;
 }
 
 .recurring-section-heading {
@@ -4900,6 +4964,7 @@ button.collapsible-block-header:focus {
 
 .commitment-inline-edit {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 0;
   min-width: 0;
 }
@@ -4929,6 +4994,12 @@ button.collapsible-block-header:focus {
   color: var(--accent-strong);
   font-size: 1rem;
   font-weight: 900;
+}
+
+.commitment-edit-header > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
 }
 
 .commitment-edit-header strong {
@@ -5057,6 +5128,7 @@ button.collapsible-block-header:focus {
 .empty-advice-panel {
   display: grid;
   gap: var(--space-xs);
+  min-height: 0;
   padding: var(--space-sm);
   border: 1px dashed var(--line-strong);
   border-radius: var(--radius-row);
@@ -5412,6 +5484,10 @@ button.collapsible-block-header:focus {
   }
 
   .budget-section-tabs {
+    grid-template-columns: 1fr;
+  }
+
+  .recurring-page-grid .upcoming-bills-card .compact-list {
     grid-template-columns: 1fr;
   }
 
