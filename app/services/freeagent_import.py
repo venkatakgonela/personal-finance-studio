@@ -2,22 +2,25 @@ from __future__ import annotations
 
 import hashlib
 from collections.abc import Callable
-from datetime import date
+from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import Account, ImportLog, IntegrationConnection, Transaction
+from app.models import Account, ImportLog, IntegrationAccount, IntegrationConnection, Transaction
 from app.models.base import utc_now
 from app.schemas.freeagent import (
+    FreeAgentAccountManagementRequest,
     FreeAgentBankAccount,
     FreeAgentConnectionStatus,
     FreeAgentCredentials,
     FreeAgentImportRequest,
     FreeAgentImportResult,
     FreeAgentOAuthExchangeRequest,
+    FreeAgentSyncAllRequest,
+    FreeAgentSyncAllResult,
     FreeAgentValidationResult,
 )
 from app.services.freeagent_client import FreeAgentApiClient, FreeAgentApiError
@@ -33,6 +36,8 @@ PROVIDER = "freeagent"
 PROVIDER_LABEL = "FreeAgent"
 PRODUCTION_BASE_URL = "https://api.freeagent.com"
 SANDBOX_BASE_URL = "https://api.sandbox.freeagent.com"
+DAILY_SYNC_HOUR = 6
+DAILY_SYNC_INTERVAL_MINUTES = 1440
 
 FreeAgentClientFactory = Callable[[str, str], FreeAgentApiClient]
 
@@ -126,9 +131,10 @@ def validate_connection(
     connection.company_url = clean(str(company.get("url") or ""))
     connection.last_validated_at = utc_now()
     session.commit()
+    sync_remote_accounts(session, connection, accounts)
     return FreeAgentValidationResult(
         status=serialize_status(connection, store),
-        accounts=[serialize_bank_account(account) for account in accounts],
+        accounts=serialize_bank_accounts(accounts, session, connection),
     )
 
 
@@ -208,10 +214,44 @@ def list_bank_accounts(
             client,
             lambda access_token: client.get_bank_accounts(access_token),
         )
+        sync_remote_accounts(session, connection, accounts)
         session.commit()
-        return [serialize_bank_account(account) for account in accounts]
+        return serialize_bank_accounts(accounts, session, connection)
     except FreeAgentApiError as exc:
         raise FreeAgentIntegrationError(str(exc)) from exc
+
+
+def manage_bank_account(
+    payload: FreeAgentAccountManagementRequest,
+    session: Session,
+    secret_store: SecretStore | None = None,
+    client_factory: FreeAgentClientFactory = FreeAgentApiClient,
+) -> FreeAgentBankAccount:
+    store = secret_store or SecretStore.from_settings()
+    connection = require_connection(session)
+    client = client_factory(connection.base_url, connection.token_url)
+    try:
+        accounts = call_with_token(
+            connection,
+            store,
+            client,
+            lambda access_token: client.get_bank_accounts(access_token),
+        )
+    except FreeAgentApiError as exc:
+        raise FreeAgentIntegrationError(str(exc)) from exc
+
+    remote_account = find_bank_account(accounts, payload.bank_account_url)
+    managed_account = upsert_integration_account(session, connection, remote_account)
+    managed_account.is_managed = payload.managed
+    managed_account.auto_sync_enabled = payload.auto_sync_enabled
+    managed_account.sync_interval_minutes = payload.sync_interval_minutes
+    managed_account.last_sync_message = (
+        "Auto sync enabled."
+        if payload.auto_sync_enabled
+        else "Auto sync paused; manual import remains available."
+    )
+    session.commit()
+    return serialize_bank_account(remote_account, managed_account)
 
 
 def import_bank_transactions(
@@ -226,43 +266,170 @@ def import_bank_transactions(
         raise FreeAgentIntegrationError("Validate the FreeAgent connection before importing.")
 
     client = client_factory(connection.base_url, connection.token_url)
-    updated_since = payload.updated_since or None
-    if not payload.from_date and not payload.to_date and not updated_since:
-        updated_since = connection.sync_cursor_updated_since or None
-    if not payload.from_date and not payload.to_date and not updated_since:
-        message = (
-            "Choose a date range for the first FreeAgent import. Incremental import "
-            "is available after a successful import saves a cursor."
-        )
-        raise FreeAgentIntegrationError(
-            message
-        )
-
     try:
-        accounts, remote_transactions = call_with_token(
+        accounts = call_with_token(
             connection,
             store,
             client,
-            lambda access_token: (
-                client.get_bank_accounts(access_token),
-                client.get_bank_transactions(
-                    access_token=access_token,
-                    bank_account_url=payload.bank_account_url,
-                    from_date=payload.from_date.isoformat() if payload.from_date else None,
-                    to_date=payload.to_date.isoformat() if payload.to_date else None,
-                    updated_since=updated_since,
-                    view=payload.view,
-                    last_uploaded=payload.last_uploaded,
-                ),
-            ),
+            lambda access_token: client.get_bank_accounts(access_token),
         )
     except FreeAgentApiError as exc:
         raise FreeAgentIntegrationError(str(exc)) from exc
 
     remote_account = find_bank_account(accounts, payload.bank_account_url)
+    managed_account = upsert_integration_account(session, connection, remote_account)
+    updated_since = payload.updated_since or None
+    if not payload.from_date and not payload.to_date and not updated_since:
+        updated_since = managed_account.sync_cursor_updated_since or None
+    if not payload.from_date and not payload.to_date and not updated_since:
+        message = (
+            "Choose a date range for the first FreeAgent import for this account. "
+            "Incremental import is available after this account saves its own cursor."
+        )
+        raise FreeAgentIntegrationError(message)
+
+    result = import_remote_account_transactions(
+        payload,
+        session,
+        connection,
+        managed_account,
+        remote_account,
+        client,
+        store,
+        updated_since,
+    )
+    session.commit()
+    return result
+
+
+def sync_all_managed_accounts(
+    payload: FreeAgentSyncAllRequest,
+    session: Session,
+    secret_store: SecretStore | None = None,
+    client_factory: FreeAgentClientFactory = FreeAgentApiClient,
+) -> FreeAgentSyncAllResult:
+    store = secret_store or SecretStore.from_settings()
+    connection = require_connection(session)
+    if connection.status != "validated":
+        raise FreeAgentIntegrationError(
+            "Validate the FreeAgent connection before syncing accounts."
+        )
+
+    client = client_factory(connection.base_url, connection.token_url)
+    try:
+        remote_accounts = call_with_token(
+            connection,
+            store,
+            client,
+            lambda access_token: client.get_bank_accounts(access_token),
+        )
+    except FreeAgentApiError as exc:
+        raise FreeAgentIntegrationError(str(exc)) from exc
+
+    sync_remote_accounts(session, connection, remote_accounts)
+    session.flush()
+
+    results: list[FreeAgentImportResult] = []
+    warnings: list[str] = []
+    skipped_count = 0
+    remote_by_url = {str(account.get("url") or ""): account for account in remote_accounts}
+    managed_accounts = session.scalars(
+        select(IntegrationAccount)
+        .where(
+            IntegrationAccount.connection_id == connection.id,
+            IntegrationAccount.is_managed.is_(True),
+        )
+        .order_by(IntegrationAccount.external_account_name)
+    ).all()
+
+    for managed_account in managed_accounts:
+        if payload.only_auto_sync_enabled and not managed_account.auto_sync_enabled:
+            skipped_count += 1
+            continue
+        if not payload.force and not is_sync_due(managed_account):
+            skipped_count += 1
+            continue
+        remote_account = remote_by_url.get(managed_account.external_account_url)
+        if remote_account is None:
+            managed_account.last_sync_status = "failed"
+            managed_account.last_sync_message = "FreeAgent account was not returned by the API."
+            warnings.append(
+                f"{managed_account.external_account_name}: account not returned by FreeAgent."
+            )
+            continue
+
+        updated_since = managed_account.sync_cursor_updated_since or None
+        first_sync_from_date = date.today() - timedelta(days=payload.initial_lookback_days)
+        import_payload = FreeAgentImportRequest(
+            bank_account_url=managed_account.external_account_url,
+            from_date=None if updated_since else first_sync_from_date,
+            to_date=None if updated_since else date.today(),
+            updated_since=updated_since,
+            view="all",
+            last_uploaded=False,
+        )
+        try:
+            results.append(
+                import_remote_account_transactions(
+                    import_payload,
+                    session,
+                    connection,
+                    managed_account,
+                    remote_account,
+                    client,
+                    store,
+                    updated_since,
+                )
+            )
+        except FreeAgentIntegrationError as exc:
+            managed_account.last_sync_status = "failed"
+            managed_account.last_sync_message = str(exc)
+            warnings.append(f"{managed_account.external_account_name}: {exc}")
+
+    session.commit()
+    return FreeAgentSyncAllResult(
+        account_count=len(managed_accounts),
+        synced_account_count=len(results),
+        skipped_account_count=skipped_count,
+        imported_transaction_count=sum(result.imported_transaction_count for result in results),
+        skipped_duplicate_count=sum(result.skipped_duplicate_count for result in results),
+        results=results,
+        warnings=warnings,
+    )
+
+
+def import_remote_account_transactions(
+    payload: FreeAgentImportRequest,
+    session: Session,
+    connection: IntegrationConnection,
+    managed_account: IntegrationAccount,
+    remote_account: dict[str, Any],
+    client: FreeAgentApiClient,
+    store: SecretStore,
+    updated_since: str | None,
+) -> FreeAgentImportResult:
+    try:
+        remote_transactions = call_with_token(
+            connection,
+            store,
+            client,
+            lambda access_token: client.get_bank_transactions(
+                access_token=access_token,
+                bank_account_url=payload.bank_account_url,
+                from_date=payload.from_date.isoformat() if payload.from_date else None,
+                to_date=payload.to_date.isoformat() if payload.to_date else None,
+                updated_since=updated_since,
+                view=payload.view,
+                last_uploaded=payload.last_uploaded,
+            ),
+        )
+    except FreeAgentApiError as exc:
+        raise FreeAgentIntegrationError(str(exc)) from exc
+
     entity = get_or_create_household_entity(session)
     profile = get_or_create_default_profile(session, entity)
     account = upsert_account(session, entity.id, profile.id, remote_account)
+    managed_account.local_account_id = account.id
 
     rows = [parse_remote_transaction(row) for row in remote_transactions]
     source_fingerprint = build_import_fingerprint(payload, rows)
@@ -323,8 +490,19 @@ def import_bank_transactions(
     )
     connection.selected_bank_account_name = str(remote_account.get("name") or "")
     connection.last_synced_at = utc_now()
-    connection.sync_cursor_updated_since = max_updated_at
-    session.commit()
+    connection.sync_cursor_updated_since = max(
+        connection.sync_cursor_updated_since or "",
+        max_updated_at,
+    )
+    managed_account.last_synced_at = connection.last_synced_at
+    managed_account.last_balance_synced_at = connection.last_synced_at
+    managed_account.sync_cursor_updated_since = max_updated_at
+    managed_account.last_sync_status = "synced"
+    managed_account.last_sync_message = (
+        f"Imported {imported_count}; skipped {skipped_count} duplicate(s)."
+    )
+    managed_account.last_imported_transaction_count = imported_count
+    managed_account.last_skipped_duplicate_count = skipped_count
 
     return FreeAgentImportResult(
         import_id=import_log.id,
@@ -335,7 +513,7 @@ def import_bank_transactions(
         skipped_duplicate_count=skipped_count,
         date_start=import_log.date_start.isoformat() if import_log.date_start else None,
         date_end=import_log.date_end.isoformat() if import_log.date_end else None,
-        next_updated_since=connection.sync_cursor_updated_since or None,
+        next_updated_since=managed_account.sync_cursor_updated_since or None,
         warnings=[],
     )
 
@@ -469,7 +647,27 @@ def serialize_status(
     )
 
 
-def serialize_bank_account(account: dict[str, Any]) -> FreeAgentBankAccount:
+def serialize_bank_accounts(
+    accounts: list[dict[str, Any]],
+    session: Session,
+    connection: IntegrationConnection,
+) -> list[FreeAgentBankAccount]:
+    managed_by_url = {
+        account.external_account_url: account
+        for account in session.scalars(
+            select(IntegrationAccount).where(IntegrationAccount.connection_id == connection.id)
+        )
+    }
+    return [
+        serialize_bank_account(account, managed_by_url.get(str(account.get("url") or "")))
+        for account in accounts
+    ]
+
+
+def serialize_bank_account(
+    account: dict[str, Any],
+    managed_account: IntegrationAccount | None = None,
+) -> FreeAgentBankAccount:
     return FreeAgentBankAccount(
         url=str(account.get("url") or ""),
         name=str(account.get("name") or "Unnamed account"),
@@ -482,7 +680,92 @@ def serialize_bank_account(account: dict[str, Any]) -> FreeAgentBankAccount:
         updated_at=account.get("updated_at"),
         is_personal=bool(account.get("is_personal", False)),
         is_primary=bool(account.get("is_primary", False)),
+        local_account_id=managed_account.local_account_id or None if managed_account else None,
+        managed=managed_account.is_managed if managed_account else True,
+        auto_sync_enabled=managed_account.auto_sync_enabled if managed_account else False,
+        sync_interval_minutes=(
+            managed_account.sync_interval_minutes
+            if managed_account
+            else DAILY_SYNC_INTERVAL_MINUTES
+        ),
+        sync_cursor_updated_since=(
+            managed_account.sync_cursor_updated_since or None if managed_account else None
+        ),
+        last_synced_at=(
+            managed_account.last_synced_at.isoformat()
+            if managed_account and managed_account.last_synced_at
+            else None
+        ),
+        next_sync_due_at=next_sync_due_at(managed_account),
+        last_sync_status=managed_account.last_sync_status if managed_account else "never_synced",
+        last_sync_message=managed_account.last_sync_message or None if managed_account else None,
     )
+
+
+def sync_remote_accounts(
+    session: Session,
+    connection: IntegrationConnection,
+    accounts: list[dict[str, Any]],
+) -> None:
+    for account in accounts:
+        upsert_integration_account(session, connection, account)
+    session.flush()
+
+
+def upsert_integration_account(
+    session: Session,
+    connection: IntegrationConnection,
+    remote_account: dict[str, Any],
+) -> IntegrationAccount:
+    external_url = str(remote_account.get("url") or "")
+    if not external_url:
+        raise FreeAgentIntegrationError("FreeAgent returned a bank account without a URL.")
+    account = session.scalar(
+        select(IntegrationAccount).where(
+            IntegrationAccount.connection_id == connection.id,
+            IntegrationAccount.external_account_url == external_url,
+        )
+    )
+    if account is None:
+        account = IntegrationAccount(
+            connection_id=connection.id,
+            provider=PROVIDER,
+            external_account_url=external_url,
+            is_managed=True,
+            auto_sync_enabled=False,
+            sync_interval_minutes=DAILY_SYNC_INTERVAL_MINUTES,
+            last_sync_status="never_synced",
+            last_sync_message="Ready for manual import or scheduled sync.",
+        )
+        session.add(account)
+    account.provider = PROVIDER
+    account.external_account_name = str(remote_account.get("name") or "Unnamed account")
+    return account
+
+
+def is_sync_due(account: IntegrationAccount) -> bool:
+    return utc_now() >= next_daily_sync_datetime(account.last_synced_at)
+
+
+def next_sync_due_at(account: IntegrationAccount | None) -> str | None:
+    if account is None or not account.auto_sync_enabled:
+        return None
+    return next_daily_sync_datetime(account.last_synced_at).isoformat()
+
+
+def next_daily_sync_datetime(last_synced_at: datetime | None) -> datetime:
+    now = utc_now()
+    today_six = datetime.combine(now.date(), time(DAILY_SYNC_HOUR, 0), tzinfo=now.tzinfo)
+    if last_synced_at is None:
+        return today_six if now < today_six else today_six + timedelta(days=1)
+    next_run = datetime.combine(
+        last_synced_at.date() + timedelta(days=1),
+        time(DAILY_SYNC_HOUR, 0),
+        tzinfo=last_synced_at.tzinfo or now.tzinfo,
+    )
+    if next_run <= last_synced_at:
+        next_run += timedelta(days=1)
+    return next_run
 
 
 def find_bank_account(accounts: list[dict[str, Any]], bank_account_url: str) -> dict[str, Any]:

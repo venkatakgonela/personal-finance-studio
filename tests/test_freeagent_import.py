@@ -4,23 +4,27 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import Account, ImportLog, IntegrationConnection, Transaction
+from app.models import Account, ImportLog, IntegrationAccount, IntegrationConnection, Transaction
 from app.routes.freeagent import get_freeagent_client_factory
 from app.schemas.freeagent import (
+    FreeAgentAccountManagementRequest,
     FreeAgentCredentials,
     FreeAgentImportRequest,
     FreeAgentOAuthExchangeRequest,
+    FreeAgentSyncAllRequest,
 )
+from app.schemas.transactions import TransactionUpdate
 from app.services.freeagent_client import parse_next_link
 from app.services.freeagent_import import (
     FreeAgentIntegrationError,
     exchange_authorization_code,
     import_bank_transactions,
+    manage_bank_account,
     save_credentials,
+    sync_all_managed_accounts,
     validate_connection,
 )
 from app.services.secret_store import SecretStore, normalize_key
-from app.schemas.transactions import TransactionUpdate
 from app.services.transactions import update_transaction
 
 COMPANY = {
@@ -71,6 +75,35 @@ BANK_TRANSACTIONS = [
     },
 ]
 
+MONZO_ACCOUNT = {
+    "url": "https://api.freeagent.com/v2/bank_accounts/2020202",
+    "bank_name": "Monzo",
+    "type": "StandardBankAccount",
+    "name": "Monzo Personal",
+    "status": "active",
+    "currency": "GBP",
+    "current_balance": "590.12",
+    "latest_activity_date": "2026-06-16",
+    "updated_at": "2026-06-16T08:30:00.000Z",
+    "is_personal": True,
+    "is_primary": False,
+}
+
+MONZO_TRANSACTIONS = [
+    {
+        "url": "https://api.freeagent.com/v2/bank_transactions/880000001",
+        "amount": "-40.0",
+        "bank_account": MONZO_ACCOUNT["url"],
+        "dated_on": "2026-06-16",
+        "description": "MONZO GROCERIES///",
+        "full_description": "MONZO GROCERIES///40.00",
+        "transaction_id": "monzo-txn-1",
+        "is_manual": False,
+        "updated_at": "2026-06-16T08:45:00.000Z",
+        "bank_transaction_explanations": [],
+    }
+]
+
 
 class FakeFreeAgentClient:
     def __init__(self, base_url: str, token_url: str) -> None:
@@ -99,6 +132,18 @@ class FakeFreeAgentClient:
             "access_token": "access-token",
             "refresh_token": "refresh-token",
         }
+
+
+class MultiAccountFreeAgentClient(FakeFreeAgentClient):
+    def get_bank_accounts(self, access_token: str):
+        assert access_token == "access-token"
+        return [*BANK_ACCOUNTS, MONZO_ACCOUNT]
+
+    def get_bank_transactions(self, **kwargs):
+        self.last_transaction_query = kwargs
+        if kwargs["bank_account_url"] == MONZO_ACCOUNT["url"]:
+            return MONZO_TRANSACTIONS
+        return BANK_TRANSACTIONS
 
 
 def test_freeagent_credentials_are_encrypted_and_validated(db_session: Session) -> None:
@@ -219,6 +264,75 @@ def test_freeagent_import_creates_accounts_transactions_and_cursor(db_session: S
     assert duplicate_result.imported_transaction_count == 0
     assert duplicate_result.skipped_duplicate_count == 2
     assert len(db_session.scalars(select(Transaction)).all()) == 2
+
+
+def test_freeagent_import_uses_per_account_cursor(db_session: Session) -> None:
+    store = SecretStore(normalize_key("test-secret-key"), "test secret store")
+    save_credentials(credentials(), db_session, secret_store=store)
+    validate_connection(db_session, secret_store=store, client_factory=MultiAccountFreeAgentClient)
+
+    hsbc_result = import_bank_transactions(
+        FreeAgentImportRequest(
+            bank_account_url=BANK_ACCOUNTS[0]["url"],
+            from_date=date(2026, 1, 1),
+            to_date=date(2026, 6, 15),
+        ),
+        db_session,
+        secret_store=store,
+        client_factory=MultiAccountFreeAgentClient,
+    )
+    monzo_result = import_bank_transactions(
+        FreeAgentImportRequest(
+            bank_account_url=MONZO_ACCOUNT["url"],
+            from_date=date(2026, 6, 1),
+            to_date=date(2026, 6, 16),
+        ),
+        db_session,
+        secret_store=store,
+        client_factory=MultiAccountFreeAgentClient,
+    )
+
+    managed_accounts = db_session.scalars(select(IntegrationAccount)).all()
+    cursors = {
+        account.external_account_url: account.sync_cursor_updated_since
+        for account in managed_accounts
+    }
+    assert hsbc_result.next_updated_since == "2026-06-15T11:12:27.000Z"
+    assert monzo_result.next_updated_since == "2026-06-16T08:45:00.000Z"
+    assert cursors[BANK_ACCOUNTS[0]["url"]] == "2026-06-15T11:12:27.000Z"
+    assert cursors[MONZO_ACCOUNT["url"]] == "2026-06-16T08:45:00.000Z"
+
+
+def test_freeagent_manage_account_and_sync_all_auto_accounts(db_session: Session) -> None:
+    store = SecretStore(normalize_key("test-secret-key"), "test secret store")
+    save_credentials(credentials(), db_session, secret_store=store)
+    validate_connection(db_session, secret_store=store, client_factory=MultiAccountFreeAgentClient)
+
+    managed = manage_bank_account(
+        FreeAgentAccountManagementRequest(
+            bank_account_url=MONZO_ACCOUNT["url"],
+            managed=True,
+            auto_sync_enabled=True,
+            sync_interval_minutes=1440,
+        ),
+        db_session,
+        secret_store=store,
+        client_factory=MultiAccountFreeAgentClient,
+    )
+    result = sync_all_managed_accounts(
+        FreeAgentSyncAllRequest(force=True, only_auto_sync_enabled=True, initial_lookback_days=30),
+        db_session,
+        secret_store=store,
+        client_factory=MultiAccountFreeAgentClient,
+    )
+
+    assert managed.auto_sync_enabled is True
+    assert result.account_count == 2
+    assert result.synced_account_count == 1
+    assert result.imported_transaction_count == 1
+    assert db_session.scalar(
+        select(Account).where(Account.source_account_name.like("Monzo Personal%"))
+    ) is not None
 
 
 def test_duplicate_freeagent_import_preserves_reviewed_transaction_updates(

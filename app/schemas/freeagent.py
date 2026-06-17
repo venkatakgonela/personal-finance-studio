@@ -40,6 +40,15 @@ class FreeAgentBankAccount(BaseModel):
     updated_at: str | None = None
     is_personal: bool = False
     is_primary: bool = False
+    local_account_id: str | None = None
+    managed: bool = True
+    auto_sync_enabled: bool = False
+    sync_interval_minutes: int = 1440
+    sync_cursor_updated_since: str | None = None
+    last_synced_at: str | None = None
+    next_sync_due_at: str | None = None
+    last_sync_status: str = "never_synced"
+    last_sync_message: str | None = None
 
 
 class FreeAgentConnectionStatus(BaseModel):
@@ -76,6 +85,19 @@ class FreeAgentImportRequest(BaseModel):
     last_uploaded: bool = False
 
 
+class FreeAgentAccountManagementRequest(BaseModel):
+    bank_account_url: str
+    managed: bool = True
+    auto_sync_enabled: bool = False
+    sync_interval_minutes: int = Field(default=1440, ge=1440, le=1440)
+
+
+class FreeAgentSyncAllRequest(BaseModel):
+    force: bool = False
+    only_auto_sync_enabled: bool = True
+    initial_lookback_days: int = Field(default=90, ge=1, le=730)
+
+
 class FreeAgentImportResult(BaseModel):
     import_id: str
     account_id: str
@@ -86,4 +108,14 @@ class FreeAgentImportResult(BaseModel):
     date_start: str | None
     date_end: str | None
     next_updated_since: str | None
+    warnings: list[str]
+
+
+class FreeAgentSyncAllResult(BaseModel):
+    account_count: int
+    synced_account_count: int
+    skipped_account_count: int
+    imported_transaction_count: int
+    skipped_duplicate_count: int
+    results: list[FreeAgentImportResult]
     warnings: list[str]

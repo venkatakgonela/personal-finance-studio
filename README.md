@@ -13,9 +13,9 @@ The first release focuses on the Household entity using Snoop CSV imports. It he
 Implementation has moved through the locked Phase 1 plan and Phase 1.5 planning-depth slice. The
 current local app supports Snoop import, account and transaction review, internal transfer
 candidates, recurring commitment candidates, date-windowed bills, Phase 1.5 planning routes, saved
-filter drilldowns, import freshness, local service health, Monarch-inspired reporting visuals, and a
-dashboard with time-aware greeting, balance-readiness status, spending pulse, and compact Decision
-Queue preview.
+filter drilldowns, import freshness, local service health, Monarch-inspired reporting visuals,
+FreeAgent read-only account import, and a dashboard with time-aware greeting, balance-readiness
+status, spending pulse, and compact Decision Queue preview.
 
 All current Household money views are GBP-only.
 
@@ -37,7 +37,27 @@ All current Household money views are GBP-only.
 - Database: PostgreSQL
 - Phase 1 integration: Snoop CSV import
 - Phase 1 entity: Household
-- Future entities/integrations: Business, Tide CSV, NatWest Business CSV, Open Banking, local LLM assistant
+- Current live integration: FreeAgent read-only import for accounting/business reference.
+- Next personal banking direction: direct Monzo API plus an Open Banking aggregator connector.
+- Future entities/integrations: Business, Tide CSV, NatWest Business CSV, local LLM assistant.
+
+## Banking Integration Direction
+
+FreeAgent is useful for read-only accounting/business imports, but it is not the preferred source of
+truth for personal banking because balances can depend on bookkeeping reconciliation and may lag
+online-bank balances. Personal account balances and transactions should come from bank/Open Banking
+sources instead.
+
+Recommended connector path:
+
+- **Monzo first**: use Monzo's official OAuth/API for Monzo accounts, balances, pots, transactions,
+  and webhooks.
+- **Open Banking aggregator next**: evaluate GoCardless Bank Account Data first, then TrueLayer,
+  Plaid, Yapily, Tink, Moneyhub, or Salt Edge if coverage/commercial needs require it.
+- **Provider abstraction**: normalize all external connectors into the app's account, balance,
+  transaction, consent, cursor, and sync-health model.
+- **Regulatory boundary**: keep this local/personal until a regulated provider or FCA-authorised
+  Account Information Service Provider route is deliberately selected for any multi-user product.
 
 ## Local Development
 
@@ -58,6 +78,13 @@ uv sync
 uv run alembic upgrade head
 uv run uvicorn app.main:app --reload --host 127.0.0.1 --port 8025
 ```
+
+Optional local settings:
+
+- `PFS_SECRET_KEY` or `PFS_SECRET_KEY_FILE`: encrypts local OAuth client secrets and tokens.
+- `FREEAGENT_AUTO_SYNC_WORKER_ENABLED=true|false`: enables the local FreeAgent auto-sync worker.
+- `FREEAGENT_AUTO_SYNC_CHECK_SECONDS=300`: how often the worker checks for FreeAgent accounts due
+  for the once-daily post-06:00 sync.
 
 Frontend:
 

@@ -9,6 +9,8 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+psycopg://pfs:pfs_local@localhost:5435/personal_finance_studio"
     pfs_secret_key: str | None = None
     pfs_secret_key_file: str = "data/.pfs_secret.key"
+    freeagent_auto_sync_worker_enabled: bool = True
+    freeagent_auto_sync_check_seconds: int = 300
     cors_origins: str = (
         "http://localhost:5173,http://127.0.0.1:5173,"
         "http://localhost:5174,http://127.0.0.1:5174,"

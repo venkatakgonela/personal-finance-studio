@@ -99,6 +99,29 @@ FreeAgent-imported transactions are normalized into the same transaction table b
 - `last_validated_at`
 - `last_synced_at`
 
+### Integration Account
+
+- `id`
+- `connection_id`
+- `provider`
+- `external_account_url`
+- `external_account_name`
+- `local_account_id`
+- `is_managed`
+- `auto_sync_enabled`
+- `sync_interval_minutes`
+- `sync_cursor_updated_since`
+- `last_synced_at`
+- `last_balance_synced_at`
+- `last_sync_status`
+- `last_sync_message`
+- `last_imported_transaction_count`
+- `last_skipped_duplicate_count`
+
+FreeAgent keeps one OAuth connection for the company but stores sync state per bank account. This
+prevents one bank account's incremental cursor from masking another account's transactions and lets
+users enable/disable once-daily post-06:00 auto-sync account by account.
+
 ### Category
 
 - `id`

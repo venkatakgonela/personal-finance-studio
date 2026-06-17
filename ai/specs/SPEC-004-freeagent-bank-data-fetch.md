@@ -8,7 +8,7 @@ ai-eos-metadata:
 # SPEC-004: FreeAgent Bank Data Fetch
 
 **Author:** Kiran Gonela / Codex  
-**Status:** Implemented - paginated OAuth token phase
+**Status:** Implemented - multi-account paginated OAuth token phase
 **Date:** 2026-06-15  
 
 ## 1. Problem Statement
@@ -71,11 +71,13 @@ Process for fetching account balances:
    - `paypal_accounts`
 3. Present active accounts to the user with name, type, currency, bank name, current balance, and
    latest activity date.
-4. Store the selected FreeAgent `bank_account.url` as the external account identifier.
+4. Store each FreeAgent `bank_account.url` as a managed external account identity.
 5. For the selected account, use either the list response or `GET /v2/bank_accounts/:id` to read
    `current_balance`.
 6. Normalize the balance into a local preview model before committing any local account/balance
    records.
+7. Store sync cursor, last sync status, and auto-sync preference per FreeAgent account rather than
+   on the connection only.
 
 ### Bank Transactions
 
@@ -118,6 +120,17 @@ Process for fetching transactions for a desired bank account:
 6. Follow FreeAgent pagination links until no next page remains before persisting/importing rows.
 7. Preserve FreeAgent `description`, `full_description`, `unexplained_amount`, and explanation data
    for auditability.
+8. Use the selected account's own `updated_since` cursor for incremental import.
+
+### Multi-Account And Periodic Sync
+
+- The connection owns OAuth credentials and company metadata.
+- Each discovered bank account has local sync state: managed flag, auto-sync flag, interval minutes,
+  local account link, per-account cursor, last sync time, and last sync status/message.
+- Manual import can target any one account.
+- Bulk sync can run due auto-sync accounts or force all managed accounts.
+- The local FastAPI worker checks for due auto-sync accounts and imports balances/transactions once
+  daily after 06:00 while the app is running.
 8. Preview totals and row counts before local commit.
 
 ## 3. Implemented Slice

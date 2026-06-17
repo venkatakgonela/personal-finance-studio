@@ -7,8 +7,8 @@ ai-eos-metadata:
 
 # Architecture Design - Personal Finance Studio
 
-**Last reviewed:** 2026-06-15  
-**Implementation status:** Phase 2 household expansion, FreeAgent paginated OAuth import, overdraft-aware cash semantics, and dashboard personalization are implemented locally.
+**Last reviewed:** 2026-06-17  
+**Implementation status:** Phase 2 household expansion, FreeAgent multi-account paginated OAuth import, overdraft-aware cash semantics, dashboard personalization, and the Monzo/Open Banking personal-bank integration direction are documented locally.
 
 ## 1. System Overview
 
@@ -19,7 +19,7 @@ Personal Finance Studio is planned as a local-first web application:
 - PostgreSQL database for durable local storage.
 - Docker Compose for local development and database runtime.
 
-Phase 1/2 currently has one active entity, Household, populated by Snoop CSV imports and optional read-only FreeAgent bank transaction imports. Phase 2 stays household-focused and adds rule application, merchant cleanup, scenario planning, budget control-tower workflows, cash-constrained spending-plan views, dashboard widgets, and exports. Business entity imports from Tide/NatWest Business are now Phase 2.1 so household expansion can remain coherent.
+Phase 1/2 currently has one active entity, Household, populated by Snoop CSV imports and optional read-only FreeAgent bank transaction imports. FreeAgent is now treated as accounting/business reference rather than the long-term source of truth for personal bank balances. The next personal-bank direction is direct Monzo API plus an Open Banking aggregator behind a provider-neutral connector abstraction. Phase 2 stays household-focused and adds rule application, merchant cleanup, scenario planning, budget control-tower workflows, cash-constrained spending-plan views, dashboard widgets, and exports. Business entity imports from Tide/NatWest Business are now Phase 2.1 so household expansion can remain coherent.
 
 ## 2. Key Components
 
@@ -34,7 +34,8 @@ Phase 1/2 currently has one active entity, Household, populated by Snoop CSV imp
 - **Account Balance Semantics**: centralized `available_for_bills` and `liability_balance` calculations so overdraft-enabled current accounts can contribute bill-payment capacity while still reporting negative balances as liabilities.
 - **Decision Queue**: low-noise human confirmations that improve accuracy; rendered as a compact desktop review table and mobile action cards.
 - **Planning Overview Service**: deterministic Phase 1.5 aggregation for goals, sinking funds, monthly review, subscription prompts, saved filters, import freshness, and stale commitments.
-- **FreeAgent Integration Services**: encrypted local credentials, OAuth authorization-code exchange, automatic access-token refresh, API validation, bank account listing, paginated date-range/incremental bank transaction import, and provider-specific dedupe.
+- **FreeAgent Integration Services**: encrypted local credentials, OAuth authorization-code exchange, automatic access-token refresh, API validation, bank account listing, per-account sync state, daily post-06:00 auto-sync, paginated date-range/incremental bank transaction import, and provider-specific dedupe.
+- **Future Personal Bank Connector Services**: direct Monzo API and an Open Banking aggregator connector should implement an app-owned `ExternalBankConnector` interface for normalized accounts, balances, transactions, consent status, cursors, and sync health.
 - **Secret Store**: Fernet-style local encryption key file and encrypted database fields for client secrets and OAuth tokens; tokens are never shown unmasked in the UI by default.
 - **Database**: PostgreSQL tables for entities, profiles, accounts, transactions, rules, bills, instances, and imports; Phase 1.75/2 user-authored planning preferences are currently browser-local except explicit transaction review/rule application mutations.
 
@@ -45,9 +46,12 @@ graph TD
     CSV[Snoop CSV] --> Preview[Import Preview]
     FreeAgent[FreeAgent API] --> FAValidate[Validate Connection]
     FAValidate --> FAImport[FreeAgent Import Service]
+    Monzo[Monzo API - planned] --> BankAdapter[External Bank Connector]
+    OpenBanking[Open Banking Aggregator - planned] --> BankAdapter
     Preview --> Import[Import Service]
     Import --> Dedupe[Fingerprint / Upsert]
     FAImport --> Dedupe
+    BankAdapter --> Dedupe
     Dedupe --> DB[(PostgreSQL)]
     DB --> Transfer[Internal Transfer Engine]
     DB --> Rules[Category / Merchant Rules]
@@ -118,7 +122,9 @@ Backend APIs:
 - `POST /api/integrations/freeagent/credentials`
 - `POST /api/integrations/freeagent/validate`
 - `GET /api/integrations/freeagent/bank-accounts`
+- `PATCH /api/integrations/freeagent/bank-accounts/manage`
 - `POST /api/integrations/freeagent/import`
+- `POST /api/integrations/freeagent/sync-all`
 
 Phase 2 additions should preserve this simple API style. Mutating workflows such as rule application
 must expose preview, commit, and undo/reversal concepts rather than silently rewriting imported data.
@@ -136,3 +142,4 @@ and app code remain intact while demos or bad imports can be cleared.
 - Budget uses a control-tower workflow: show the spend boundary first, then separate monthly plan, envelopes, assumptions, and review. This follows decision-psychology principles from envelope budgeting, Kakeibo reflection, guardrail budgeting, and mental accounting.
 - Recurring commitments use a commitment-inbox model: detection suggests, humans confirm, manual entry covers missed bills, and finite plans prevent BNPL/short-term obligations from recurring forever.
 - Dashboard personalization is a user preference. Widget order, visibility, and custom widgets are local-first until server-backed preferences are introduced.
+- Personal-bank balances should come from direct bank/Open Banking sources where possible. FreeAgent balances must be treated as accounting/bookkeeping facts that may require reconciliation before they are reliable for personal cash truth.

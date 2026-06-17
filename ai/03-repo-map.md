@@ -7,8 +7,8 @@ ai-eos-metadata:
 
 # Repo Map - Personal Finance Studio
 
-**Last reviewed:** 2026-06-16
-**Current repository status:** Phase 2 household expansion, FreeAgent paginated OAuth import/refresh, overdraft semantics, dashboard personalization, budget control tower, and source-labelled transaction-backed categorized commitments complete locally.
+**Last reviewed:** 2026-06-17
+**Current repository status:** Phase 2 household expansion, FreeAgent multi-account paginated OAuth import/refresh with daily sync, overdraft semantics, dashboard personalization, budget control tower, source-labelled transaction-backed categorized commitments, and Monzo/Open Banking personal-bank direction documented locally.
 
 ## Root
 
@@ -23,14 +23,15 @@ ai-eos-metadata:
 
 ## Backend
 
-- `app/main.py`: FastAPI app factory, CORS, `/health`, and route registration.
+- `app/main.py`: FastAPI app factory, lifespan-managed FreeAgent auto-sync worker, CORS,
+  `/health`, and route registration.
 - `app/config.py`: environment-driven settings.
 - `app/db.py`: SQLAlchemy engine/session setup.
-- `app/models/`: SQLAlchemy entities for Household/Profile, accounts, transactions, import logs, internal transfer matches, source-labelled categorized commitments with optional finite end controls, bill instances, and integration connections.
+- `app/models/`: SQLAlchemy entities for Household/Profile, accounts, transactions, import logs, internal transfer matches, source-labelled categorized commitments with optional finite end controls, bill instances, integration connections, and per-provider integration account sync state.
 - `app/schemas/`: Pydantic response/request schemas for all API surfaces, including reset/data
   management responses.
 - `app/routes/`: FastAPI routers for imports, accounts, transactions, transfers, commitments, calendar, forecast, dashboard, insights, planning, decisions, and FreeAgent integrations.
-- `app/services/`: deterministic finance logic for parsing/imports, category normalization, transfer detection, commitment detection/manual/transaction-backed creation/finite BNPL planning, curated household commitment-category inference, account balance/overdraft semantics, dashboard math, calendar/upcoming, forecast, insights, Phase 1.5 planning overview, transaction review, Decision Queue actions, encrypted secret handling, FreeAgent paginated API import/OAuth refresh, and imported-data reset.
+- `app/services/`: deterministic finance logic for parsing/imports, category normalization, transfer detection, commitment detection/manual/transaction-backed creation/finite BNPL planning, curated household commitment-category inference, account balance/overdraft semantics, dashboard math, calendar/upcoming, forecast, insights, Phase 1.5 planning overview, transaction review, Decision Queue actions, encrypted secret handling, FreeAgent paginated API import/OAuth refresh/per-account daily sync, and imported-data reset.
 
 ## Frontend
 

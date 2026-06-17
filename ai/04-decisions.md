@@ -35,6 +35,7 @@ ai-eos-metadata:
 | ADR-022 | Use a commitment inbox with transaction-backed, manual, and finite commitment support | Accepted | 2026-06-15 |
 | ADR-023 | Fetch complete FreeAgent history before recurring detection | Accepted | 2026-06-15 |
 | ADR-024 | Separate recurring reference labels from source evidence | Accepted | 2026-06-16 |
+| ADR-025 | Use direct bank/Open Banking connectors for personal banking truth | Accepted | 2026-06-17 |
 
 ## ADR-001 - Use Entity-Scoped Household and Business Model
 
@@ -222,3 +223,10 @@ ai-eos-metadata:
 - **Context**: Imported transaction labels often contain noisy provider text, punctuation, card-network fragments, or vendor-specific descriptions. Those labels are valuable as evidence, but poor as the household's planning vocabulary.
 - **Decision**: Store editable `name` and `category` fields on commitments, plus immutable-ish `source_label` evidence from the imported transaction where available. Transaction-backed commitments keep the source transaction link while allowing a user-friendly reference name, household category, planning amount, type, frequency, and next due date. Category inference uses household-planning labels instead of broad bank labels: Credit cards, Vehicle loan/insurance/maintenance/tax, Utilities, Telecoms, Council tax, Kids tuition & school fees, Education & childcare, Family support, Healthcare, BNPL / pay later, Subscriptions, and Annual / irregular costs.
 - **Consequences**: Calendar, Cash Flow, Budget, Dashboard, Sinking Funds, and Subscriptions can use meaningful household labels while preserving auditability. Migration `20260615_0006_add_commitment_category.py` backfills existing commitments to `Bills`; migration `20260616_0007_add_commitment_source_label.py` adds raw source-label evidence for new/updated commitments. Legacy detected/transaction commitments without the column populated expose their current bank label as source evidence and freeze it on first rename. Users can dismiss non-recurring transaction advice locally so the inbox stays calm without mutating imported transactions.
+
+## ADR-025 - Use Direct Bank/Open Banking Connectors For Personal Banking Truth
+
+- **Status**: Accepted
+- **Context**: FreeAgent is accounting/bookkeeping-oriented. Its bank account balance can diverge from the online-bank balance when opening balances, missing feed entries, duplicates, or explanations are unreconciled. That makes it a poor source of truth for personal cash position, even though it remains useful for Business/accounting reference.
+- **Decision**: Personal banking should use direct bank/Open Banking sources rather than FreeAgent balances. Implement Monzo direct API first for Monzo accounts, then evaluate an Open Banking aggregator for HSBC, NatWest, Amex/card accounts, and other UK banks. Shortlist GoCardless Bank Account Data, TrueLayer, Plaid, Yapily, Tink, Moneyhub, and Salt Edge. Keep all connectors behind an app-owned `ExternalBankConnector` abstraction that returns normalized accounts, balances, transactions, consent status, cursor, and sync-health records.
+- **Consequences**: Dashboard Cash Position and transaction analysis can move toward online-bank truth instead of bookkeeping truth. FreeAgent remains read-only and useful for Business/accounting imports. Any multi-user/commercial account aggregation must use an authorised provider or a deliberate FCA AISP path; local/personal experiments must still avoid screen scraping and never persist raw bank credentials.

@@ -459,6 +459,15 @@ export type FreeAgentBankAccount = {
   updated_at: string | null;
   is_personal: boolean;
   is_primary: boolean;
+  local_account_id: string | null;
+  managed: boolean;
+  auto_sync_enabled: boolean;
+  sync_interval_minutes: number;
+  sync_cursor_updated_since: string | null;
+  last_synced_at: string | null;
+  next_sync_due_at: string | null;
+  last_sync_status: string;
+  last_sync_message: string | null;
 };
 
 export type FreeAgentConnectionStatus = {
@@ -530,6 +539,29 @@ export type FreeAgentImportResult = {
   warnings: string[];
 };
 
+export type FreeAgentAccountManagementRequest = {
+  bank_account_url: string;
+  managed: boolean;
+  auto_sync_enabled: boolean;
+  sync_interval_minutes: number;
+};
+
+export type FreeAgentSyncAllRequest = {
+  force?: boolean;
+  only_auto_sync_enabled?: boolean;
+  initial_lookback_days?: number;
+};
+
+export type FreeAgentSyncAllResult = {
+  account_count: number;
+  synced_account_count: number;
+  skipped_account_count: number;
+  imported_transaction_count: number;
+  skipped_duplicate_count: number;
+  results: FreeAgentImportResult[];
+  warnings: string[];
+};
+
 export async function previewSnoopImport(file: File): Promise<ImportPreview> {
   return uploadCsv<ImportPreview>("/api/imports/snoop/preview", file);
 }
@@ -576,10 +608,30 @@ export async function getFreeAgentBankAccounts(): Promise<FreeAgentBankAccount[]
   return fetchJson<FreeAgentBankAccount[]>("/api/integrations/freeagent/bank-accounts");
 }
 
+export async function manageFreeAgentBankAccount(
+  payload: FreeAgentAccountManagementRequest,
+): Promise<FreeAgentBankAccount> {
+  return fetchJson<FreeAgentBankAccount>("/api/integrations/freeagent/bank-accounts/manage", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function importFreeAgentTransactions(
   payload: FreeAgentImportRequest,
 ): Promise<FreeAgentImportResult> {
   return fetchJson<FreeAgentImportResult>("/api/integrations/freeagent/import", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function syncAllFreeAgentAccounts(
+  payload: FreeAgentSyncAllRequest,
+): Promise<FreeAgentSyncAllResult> {
+  return fetchJson<FreeAgentSyncAllResult>("/api/integrations/freeagent/sync-all", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),

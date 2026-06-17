@@ -26,6 +26,8 @@ Use the smallest context set that can safely complete the task. Start with requi
 - [Architecture Decisions](file:///ai/04-decisions.md) — Use when a choice may conflict with existing decisions.
 - [Coding Standards](file:///ai/05-coding-standards.md) — Use before editing code or tests.
 - [Risk Register](file:///ai/08-risk-register.md) — Use for security, privacy, data, reliability, or irreversible operations.
+- [Open Banking Feature](file:///ai/features/FEATURE-009-open-banking-and-sync-evaluation.md) —
+  Use when planning Monzo, Open Banking, consent, or personal-bank source-of-truth work.
 
 ## 2. Context Budget
 

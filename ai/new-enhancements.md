@@ -18,8 +18,8 @@ ai-eos-metadata:
 | Settings backup/restore export | Local-first preferences need a way to be backed up and moved between browsers/devices. | Phase 2.1 |
 | Guided first-run checklist | Import, balances, decisions, budget, and dashboard trust could be presented as a single onboarding journey. | Phase 2.1 |
 | Data quality score | A single confidence score based on freshness, balances, unreviewed transactions, open decisions, and stale commitments would help users know whether to trust numbers. | Phase 2.1 |
-| FreeAgent OAuth hardening | Paginated FreeAgent import, authorization-code exchange, and refresh-token retry work; full in-app browser callback, sync-health detail, and pre-commit preview remain. | Phase 3 |
-| Bank/Open Banking integration evaluation | CSV import is useful but manual. Optional Open Banking could reduce effort if privacy/consent is acceptable. | Phase 3 |
+| FreeAgent OAuth hardening | Paginated multi-account FreeAgent import, authorization-code exchange, refresh-token retry, and once-daily local sync work; full in-app browser callback, richer sync-health detail, and pre-commit preview remain. | Phase 3 |
+| Personal bank connector evaluation | FreeAgent is accounting/reference, not the long-term personal-bank source of truth. Evaluate direct Monzo first, then an Open Banking aggregator such as GoCardless Bank Account Data, TrueLayer, Plaid, Yapily, Tink, Moneyhub, or Salt Edge. | Phase 3 |
 
 ## Product Enhancements
 
@@ -34,6 +34,9 @@ ai-eos-metadata:
 
 - Add full FreeAgent browser OAuth callback; authorization-code exchange and automatic refresh-token use already exist.
 - Add FreeAgent pre-commit preview with row counts, date range, duplicate count, and selected account confirmation before import.
+- Add direct Monzo connector behind a provider-neutral `ExternalBankConnector` abstraction.
+- Evaluate one Open Banking aggregator connector for HSBC/NatWest/card coverage, starting with
+  GoCardless Bank Account Data unless coverage/commercial needs point elsewhere.
 - Add import history with rollback for the latest import batch.
 - Add CSV mapping UI for non-Snoop formats.
 - Add duplicate import explanation page with skipped/duplicate transaction details.

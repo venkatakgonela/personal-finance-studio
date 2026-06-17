@@ -4570,6 +4570,90 @@ button.collapsible-block-header:focus {
   padding: 0 var(--space-md) var(--space-md);
 }
 
+.freeagent-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}
+
+.freeagent-action-row .button-link {
+  width: auto;
+}
+
+.freeagent-account-manager-header {
+  pointer-events: none;
+}
+
+.freeagent-account-list {
+  display: grid;
+  gap: var(--space-xs);
+  padding: 0 var(--space-md) var(--space-md);
+}
+
+.freeagent-account-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-xs);
+  align-items: center;
+  padding: var(--space-xs);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-row);
+  background: rgba(255, 255, 255, 0.74);
+}
+
+.freeagent-account-row > button {
+  display: grid;
+  justify-items: start;
+  min-height: 0;
+  padding: var(--space-xs);
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  transform: none;
+}
+
+.freeagent-account-row > button:hover,
+.freeagent-account-row > button:focus-visible,
+.freeagent-account-row > button.is-selected {
+  background: var(--accent-soft);
+  transform: none;
+}
+
+.freeagent-account-row strong {
+  color: var(--text);
+  font-size: 0.86rem;
+}
+
+.freeagent-account-row small {
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.3;
+}
+
+.freeagent-account-row > small {
+  grid-column: 1 / -1;
+  padding: 0 var(--space-xs);
+}
+
+.freeagent-mini-toggle {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--card-muted);
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.freeagent-mini-toggle input {
+  width: auto;
+}
+
 .freeagent-panel {
   display: grid;
   gap: var(--space-md);

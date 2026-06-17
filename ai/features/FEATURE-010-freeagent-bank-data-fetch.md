@@ -8,7 +8,7 @@ ai-eos-metadata:
 # FEATURE-010: FreeAgent Bank Data Fetch
 
 **Epic:** [EPIC-004: Integrations And Hardening](file:///ai/epics/EPIC-004-integrations-and-hardening.md)  
-**Status:** Implemented - paginated import and OAuth refresh-token phase
+**Status:** Implemented - multi-account paginated import and OAuth refresh-token phase
 
 ## 1. Description & User Stories
 
@@ -24,9 +24,12 @@ ai-eos-metadata:
 - [x] Bank accounts can be listed from `GET /v2/bank_accounts`.
 - [x] Current balance is read from the FreeAgent `current_balance` bank account field.
 - [x] A desired account can be selected by its FreeAgent bank account URL.
+- [x] Multiple FreeAgent bank accounts can be discovered, managed, and imported independently.
 - [x] Bank transactions can be fetched with `GET /v2/bank_transactions?bank_account=:bank_account`.
 - [x] Date-window and incremental fetch parameters are supported: `from_date`, `to_date`, and
   `updated_since`.
+- [x] Incremental cursors are stored per FreeAgent bank account so one account's sync point does not
+  hide transactions from another account.
 - [x] Transaction fetch is read-only and never uploads, deletes, explains, or mutates FreeAgent data.
 - [x] FreeAgent records are provider-tagged and deduplicated independently from Snoop imports.
 - [x] FreeAgent paginated transaction responses are followed until no `rel="next"` link remains.
@@ -35,6 +38,8 @@ ai-eos-metadata:
 - [x] OAuth authorization-code exchange can store an encrypted refresh token for automatic access-token refresh.
 - [ ] Pre-commit transaction preview is not implemented yet; the UI asks account/date/incremental questions before import.
 - [x] Automatic token refresh is used on expired access tokens when a refresh token is available.
+- [x] Users can enable auto-sync per managed FreeAgent account; the local worker checks for due
+  accounts and syncs balances/transactions once daily after 06:00 while the app is running.
 
 ## 3. Source Artifacts
 
@@ -44,6 +49,7 @@ ai-eos-metadata:
 - `app/routes/freeagent.py`
 - `app/services/freeagent_client.py`
 - `app/services/freeagent_import.py`
+- `app/services/freeagent_scheduler.py`
 - `app/services/secret_store.py`
 - `app/models/integration.py`
 - `frontend/src/App.tsx` FreeAgent route/card

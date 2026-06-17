@@ -54,7 +54,9 @@ def test_duplicate_snoop_import_preserves_reviewed_transaction_updates(
     contents = (FIXTURES / "snoop_minimal.csv").read_bytes()
 
     first = commit_snoop_csv(contents, source_filename="snoop_minimal.csv", session=db_session)
-    transaction = db_session.scalar(select(Transaction).where(Transaction.source_category == "Groceries"))
+    transaction = db_session.scalar(
+        select(Transaction).where(Transaction.source_category == "Groceries")
+    )
     assert transaction is not None
 
     update_transaction(

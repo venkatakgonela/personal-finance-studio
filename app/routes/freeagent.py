@@ -6,12 +6,15 @@ from sqlalchemy.orm import Session
 
 from app.db import get_session
 from app.schemas.freeagent import (
+    FreeAgentAccountManagementRequest,
     FreeAgentBankAccount,
     FreeAgentConnectionStatus,
     FreeAgentCredentials,
     FreeAgentImportRequest,
     FreeAgentImportResult,
     FreeAgentOAuthExchangeRequest,
+    FreeAgentSyncAllRequest,
+    FreeAgentSyncAllResult,
     FreeAgentValidationResult,
 )
 from app.services.freeagent_client import FreeAgentApiClient
@@ -22,7 +25,9 @@ from app.services.freeagent_import import (
     get_status,
     import_bank_transactions,
     list_bank_accounts,
+    manage_bank_account,
     save_credentials,
+    sync_all_managed_accounts,
     validate_connection,
 )
 
@@ -89,6 +94,18 @@ def freeagent_bank_accounts(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+@router.patch("/bank-accounts/manage", response_model=FreeAgentBankAccount)
+def manage_freeagent_bank_account(
+    payload: FreeAgentAccountManagementRequest,
+    session: Annotated[Session, Depends(get_session)],
+    client_factory: Annotated[Callable, Depends(get_freeagent_client_factory)],
+) -> FreeAgentBankAccount:
+    try:
+        return manage_bank_account(payload, session, client_factory=client_factory)
+    except FreeAgentIntegrationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @router.post("/import", response_model=FreeAgentImportResult)
 def import_freeagent_transactions(
     payload: FreeAgentImportRequest,
@@ -97,5 +114,17 @@ def import_freeagent_transactions(
 ) -> FreeAgentImportResult:
     try:
         return import_bank_transactions(payload, session, client_factory=client_factory)
+    except FreeAgentIntegrationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/sync-all", response_model=FreeAgentSyncAllResult)
+def sync_freeagent_accounts(
+    payload: FreeAgentSyncAllRequest,
+    session: Annotated[Session, Depends(get_session)],
+    client_factory: Annotated[Callable, Depends(get_freeagent_client_factory)],
+) -> FreeAgentSyncAllResult:
+    try:
+        return sync_all_managed_accounts(payload, session, client_factory=client_factory)
     except FreeAgentIntegrationError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

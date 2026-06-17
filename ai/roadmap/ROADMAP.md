@@ -183,8 +183,10 @@ imported transactions, commitments, accounts, or explicit user-entered plan valu
 
 - [x] FreeAgent API read-only bank account balance and transaction fetch, manual-token phase.
 - [x] FreeAgent authorization-code token exchange and automatic refresh-token use.
+- [x] FreeAgent multi-account management with per-account cursor and once-daily post-06:00 local sync.
 - [ ] FreeAgent full in-app browser OAuth callback.
 - [ ] FreeAgent pre-commit import preview and richer sync health.
-- Open Banking provider evaluation.
+- Personal-bank source-of-truth connector evaluation: Monzo direct first, then Open Banking
+  aggregator shortlist starting with GoCardless Bank Account Data.
 - Connection freshness dashboard.
 - Optional cross-device/cloud strategy if explicitly approved.

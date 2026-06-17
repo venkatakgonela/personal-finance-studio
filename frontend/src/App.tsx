@@ -41,6 +41,7 @@ import {
   type FreeAgentConnectionStatus,
   type FreeAgentCredentials,
   type FreeAgentImportResult,
+  type FreeAgentSyncAllResult,
   type HealthResponse,
   type ImportCommitResult,
   type ImportPreview,
@@ -73,11 +74,13 @@ import {
   getTransactions,
   getUpcomingCommitments,
   importFreeAgentTransactions,
+  manageFreeAgentBankAccount,
   markBillInstancePaid,
   previewSnoopImport,
   rejectDecision,
   resetImportedData,
   saveFreeAgentCredentials,
+  syncAllFreeAgentAccounts,
   updateAccount,
   updateCommitment,
   updateTransaction,
@@ -2047,6 +2050,7 @@ function FreeAgentIntegrationCard({ onImported }: { onImported: () => Promise<vo
   const [status, setStatus] = useState<FreeAgentConnectionStatus | null>(null);
   const [accounts, setAccounts] = useState<FreeAgentBankAccount[]>([]);
   const [importResult, setImportResult] = useState<FreeAgentImportResult | null>(null);
+  const [bulkSyncResult, setBulkSyncResult] = useState<FreeAgentSyncAllResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [form, setForm] = useState<FreeAgentCredentials>({
@@ -2077,13 +2081,16 @@ function FreeAgentIntegrationCard({ onImported }: { onImported: () => Promise<vo
         const nextStatus = await getFreeAgentStatus();
         if (cancelled) return;
         setStatus(nextStatus);
-        setUseIncrementalCursor(Boolean(nextStatus.sync_cursor_updated_since));
         if (nextStatus.validated) {
           try {
             const nextAccounts = await getFreeAgentBankAccounts();
             if (cancelled) return;
             setAccounts(nextAccounts);
             setSelectedAccountUrl(nextStatus.selected_bank_account_url ?? nextAccounts[0]?.url ?? "");
+            const selected = nextAccounts.find(
+              (account) => account.url === (nextStatus.selected_bank_account_url ?? nextAccounts[0]?.url),
+            );
+            setUseIncrementalCursor(Boolean(selected?.sync_cursor_updated_since));
           } catch {
             if (!cancelled) {
               setMessage("Saved FreeAgent connection found, but accounts could not be refreshed. Revalidate when the API is reachable.");
@@ -2105,6 +2112,25 @@ function FreeAgentIntegrationCard({ onImported }: { onImported: () => Promise<vo
     if (status?.validated) setConnectionOpen(false);
   }, [status?.validated]);
 
+  async function refreshFreeAgentAccounts(preferredAccountUrl?: string) {
+    const [nextStatus, nextAccounts] = await Promise.all([
+      getFreeAgentStatus(),
+      getFreeAgentBankAccounts(),
+    ]);
+    setStatus(nextStatus);
+    setAccounts(nextAccounts);
+    const nextSelectedUrl =
+      preferredAccountUrl ||
+      nextStatus.selected_bank_account_url ||
+      selectedAccountUrl ||
+      nextAccounts[0]?.url ||
+      "";
+    setSelectedAccountUrl(nextSelectedUrl);
+    const selected = nextAccounts.find((account) => account.url === nextSelectedUrl);
+    setUseIncrementalCursor(Boolean(selected?.sync_cursor_updated_since));
+    return { nextStatus, nextAccounts };
+  }
+
   async function saveAndValidate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
@@ -2119,9 +2145,12 @@ function FreeAgentIntegrationCard({ onImported }: { onImported: () => Promise<vo
       });
       const validation = await validateFreeAgent();
       setStatus(validation.status);
-      setUseIncrementalCursor(Boolean(validation.status.sync_cursor_updated_since));
       setAccounts(validation.accounts);
       setSelectedAccountUrl(validation.status.selected_bank_account_url ?? validation.accounts[0]?.url ?? "");
+      const selected = validation.accounts.find(
+        (account) => account.url === (validation.status.selected_bank_account_url ?? validation.accounts[0]?.url),
+      );
+      setUseIncrementalCursor(Boolean(selected?.sync_cursor_updated_since));
       setMessage(`Validated ${validation.accounts.length} FreeAgent bank account(s).`);
     } catch (err) {
       setMessage(freeAgentErrorMessage(err));
@@ -2148,9 +2177,12 @@ function FreeAgentIntegrationCard({ onImported }: { onImported: () => Promise<vo
       setStatus(exchangedStatus);
       const validation = await validateFreeAgent();
       setStatus(validation.status);
-      setUseIncrementalCursor(Boolean(validation.status.sync_cursor_updated_since));
       setAccounts(validation.accounts);
       setSelectedAccountUrl(validation.status.selected_bank_account_url ?? validation.accounts[0]?.url ?? "");
+      const selected = validation.accounts.find(
+        (account) => account.url === (validation.status.selected_bank_account_url ?? validation.accounts[0]?.url),
+      );
+      setUseIncrementalCursor(Boolean(selected?.sync_cursor_updated_since));
       setAuthorizationCode("");
       setMessage("OAuth code exchanged and refresh token stored securely. Automatic token refresh is enabled.");
     } catch (err) {
@@ -2166,19 +2198,18 @@ function FreeAgentIntegrationCard({ onImported }: { onImported: () => Promise<vo
     setBusy(true);
     setMessage(null);
     try {
-      const shouldUseCursor = Boolean(useIncrementalCursor && status?.sync_cursor_updated_since);
+      const shouldUseCursor = Boolean(useIncrementalCursor && selectedAccount?.sync_cursor_updated_since);
       const result = await importFreeAgentTransactions({
         bank_account_url: selectedAccountUrl,
         from_date: shouldUseCursor ? undefined : fromDate,
         to_date: shouldUseCursor ? undefined : toDate,
-        updated_since: shouldUseCursor ? status?.sync_cursor_updated_since ?? undefined : undefined,
+        updated_since: shouldUseCursor ? selectedAccount?.sync_cursor_updated_since ?? undefined : undefined,
         view: "all",
         last_uploaded: false,
       });
       setImportResult(result);
-      const nextStatus = await getFreeAgentStatus();
-      setStatus(nextStatus);
-      setUseIncrementalCursor(Boolean(nextStatus.sync_cursor_updated_since));
+      setBulkSyncResult(null);
+      await refreshFreeAgentAccounts(selectedAccountUrl);
       await onImported();
       setMessage(
         `Imported ${result.imported_transaction_count}; skipped ${result.skipped_duplicate_count} duplicate(s).`,
@@ -2190,10 +2221,58 @@ function FreeAgentIntegrationCard({ onImported }: { onImported: () => Promise<vo
     }
   }
 
+  async function toggleAccountAutoSync(account: FreeAgentBankAccount, enabled: boolean) {
+    setBusy(true);
+    setMessage(null);
+    try {
+      await manageFreeAgentBankAccount({
+        bank_account_url: account.url,
+        managed: true,
+        auto_sync_enabled: enabled,
+        sync_interval_minutes: 1440,
+      });
+      await refreshFreeAgentAccounts(account.url);
+      setMessage(
+        enabled
+          ? `${account.name} will auto-refresh once daily after 6 AM while the app is running.`
+          : `${account.name} auto-refresh is paused; manual import still works.`,
+      );
+    } catch (err) {
+      setMessage(freeAgentErrorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function runFreeAgentSyncAll(force = false) {
+    setBusy(true);
+    setMessage(null);
+    try {
+      const result = await syncAllFreeAgentAccounts({
+        force,
+        only_auto_sync_enabled: !force,
+        initial_lookback_days: 90,
+      });
+      setBulkSyncResult(result);
+      setImportResult(result.results[0] ?? null);
+      await refreshFreeAgentAccounts(selectedAccountUrl);
+      await onImported();
+      setMessage(
+        `Synced ${result.synced_account_count} account(s), imported ${result.imported_transaction_count}, skipped ${result.skipped_duplicate_count} duplicate(s).`,
+      );
+    } catch (err) {
+      setMessage(freeAgentErrorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const selectedAccount = accounts.find((account) => account.url === selectedAccountUrl);
   const canImport = Boolean(status?.validated && selectedAccountUrl);
-  const hasIncrementalCursor = Boolean(status?.sync_cursor_updated_since);
+  const hasIncrementalCursor = Boolean(selectedAccount?.sync_cursor_updated_since);
   const importingWithCursor = Boolean(useIncrementalCursor && hasIncrementalCursor);
+  const autoSyncAccounts = accounts.filter((account) => account.auto_sync_enabled);
+  const managedAccounts = accounts.filter((account) => account.managed);
   const authBaseUrl = form.auth_url || defaultFreeAgentAuthUrl(form.environment, form.base_url);
   const authorizationUrl =
     form.client_id && oauthRedirectUri
@@ -2296,16 +2375,85 @@ function FreeAgentIntegrationCard({ onImported }: { onImported: () => Promise<vo
             </span>
             <small>
               {hasIncrementalCursor
-                ? `Cursor: ${status?.sync_cursor_updated_since}`
+                ? `Cursor: ${selectedAccount?.sync_cursor_updated_since}`
                 : "First import needs a date range; a cursor is saved after transactions are imported."}
             </small>
           </div>
-          <button className="button-link" disabled={!canImport || busy} type="submit">
-            {busy ? "Importing..." : importingWithCursor ? "Run incremental import" : "Run date-range import"}
-          </button>
+          <div className="freeagent-action-row">
+            <button className="button-link" disabled={!canImport || busy} type="submit">
+              {busy ? "Importing..." : importingWithCursor ? "Import this account" : "Import selected dates"}
+            </button>
+            <button
+              className="button-link button-link-secondary"
+              disabled={!status?.validated || !autoSyncAccounts.length || busy}
+              onClick={() => void runFreeAgentSyncAll(false)}
+              type="button"
+            >
+              Sync due auto accounts
+            </button>
+            <button
+              className="button-link button-link-secondary"
+              disabled={!status?.validated || !managedAccounts.length || busy}
+              onClick={() => void runFreeAgentSyncAll(true)}
+              type="button"
+            >
+              Sync all now
+            </button>
+          </div>
         </form>
 
         <div className="freeagent-maintenance-grid" aria-label="FreeAgent setup maintenance">
+          <section className="freeagent-collapsible-panel freeagent-account-manager">
+            <div className="freeagent-collapsible-header freeagent-account-manager-header">
+              <span className="group-chevron open" aria-hidden="true" />
+              <span>
+                <strong>Manage bank accounts</strong>
+                <small>
+                  {accounts.length
+                    ? `${accounts.length} FreeAgent account(s), ${autoSyncAccounts.length} scheduled daily after 6 AM`
+                    : "Validate FreeAgent to discover available accounts"}
+                </small>
+              </span>
+            </div>
+            <div className="freeagent-account-list">
+              {accounts.length ? (
+                accounts.map((account) => (
+                  <div className="freeagent-account-row" key={account.url}>
+                    <button
+                      className={account.url === selectedAccountUrl ? "is-selected" : ""}
+                      onClick={() => {
+                        setSelectedAccountUrl(account.url);
+                        setUseIncrementalCursor(Boolean(account.sync_cursor_updated_since));
+                      }}
+                      type="button"
+                    >
+                      <strong>{account.name}</strong>
+                      <small>
+                        {account.currency} {account.current_balance ?? "n/a"} · {account.last_sync_status}
+                      </small>
+                    </button>
+                    <label className="freeagent-mini-toggle">
+                      <input
+                        checked={account.auto_sync_enabled}
+                        disabled={busy}
+                        onChange={(event) => void toggleAccountAutoSync(account, event.target.checked)}
+                        type="checkbox"
+                      />
+                      Auto
+                    </label>
+                    <small>
+                      {account.last_synced_at
+                        ? `Last ${new Date(account.last_synced_at).toLocaleString()}`
+                        : "Not synced yet"}
+                    </small>
+                  </div>
+                ))
+              ) : (
+                <p className="fine-print">No FreeAgent accounts loaded yet. Open Connect and validate to fetch them.</p>
+              )}
+            </div>
+          </section>
+
           <FreeAgentCollapsiblePanel
             meta={status?.validated ? "Saved connection" : status?.configured ? "Configured" : "Required setup"}
             onToggle={() => setConnectionOpen((current) => !current)}
@@ -2457,6 +2605,14 @@ function FreeAgentIntegrationCard({ onImported }: { onImported: () => Promise<vo
           <Metric label="Imported" value={String(importResult.imported_transaction_count)} />
           <Metric label="Duplicates" value={String(importResult.skipped_duplicate_count)} />
           <Metric label="Next cursor" value={importResult.next_updated_since ?? "not set"} />
+        </div>
+      ) : null}
+      {bulkSyncResult ? (
+        <div className="import-result-grid">
+          <Metric label="Accounts synced" value={`${bulkSyncResult.synced_account_count}/${bulkSyncResult.account_count}`} />
+          <Metric label="Skipped accounts" value={String(bulkSyncResult.skipped_account_count)} />
+          <Metric label="Imported total" value={String(bulkSyncResult.imported_transaction_count)} />
+          <Metric label="Duplicates total" value={String(bulkSyncResult.skipped_duplicate_count)} />
         </div>
       ) : null}
     </article>

@@ -1,3 +1,7 @@
+import asyncio
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -16,11 +20,26 @@ from app.routes import (
     transactions,
     transfers,
 )
+from app.services.freeagent_scheduler import run_freeagent_auto_sync_worker
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    settings = get_settings()
+    task: asyncio.Task | None = None
+    if settings.freeagent_auto_sync_worker_enabled:
+        task = asyncio.create_task(run_freeagent_auto_sync_worker(settings))
+        app.state.freeagent_auto_sync_task = task
+    try:
+        yield
+    finally:
+        if task is not None:
+            task.cancel()
 
 
 def create_app() -> FastAPI:
     settings = get_settings()
-    app = FastAPI(title=settings.app_name)
+    app = FastAPI(title=settings.app_name, lifespan=lifespan)
 
     app.add_middleware(
         CORSMiddleware,

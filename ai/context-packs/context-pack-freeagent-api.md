@@ -37,17 +37,25 @@ ai-eos-metadata:
 - Never log OAuth access tokens, refresh tokens, client secret, or raw Authorization headers.
 - Keep sandbox and production base URLs explicit and user-selectable.
 - Treat FreeAgent account URL and transaction URL/transaction ID as external identifiers for dedupe.
+- Keep account sync state per bank account, not just per FreeAgent connection.
 
 ## 5. Current Implementation
 
 - Backend: `app/routes/freeagent.py`, `app/services/freeagent_client.py`,
-  `app/services/freeagent_import.py`, `app/services/secret_store.py`.
-- Persistence: `integration_connections` stores encrypted client secret/tokens and import cursor;
-  FreeAgent account/transaction rows use existing `accounts`, `transactions`, and `import_logs`.
+  `app/services/freeagent_import.py`, `app/services/freeagent_scheduler.py`,
+  `app/services/secret_store.py`.
+- Persistence: `integration_connections` stores encrypted client secret/tokens and connection-level
+  metadata; `integration_accounts` stores one row per FreeAgent bank account with managed/auto-sync
+  flags, local account link, sync interval, per-account cursor, last sync status, and balance sync
+  timestamps. FreeAgent account/transaction rows use existing `accounts`, `transactions`, and
+  `import_logs`.
 - Transaction import must follow FreeAgent pagination links until no `rel="next"` page remains;
   otherwise first-run date windows silently truncate to the first result page and commitment
   detection sees too little history.
 - OAuth can be supplied manually for testing, but the preferred durable path is authorization-code
   exchange so the app stores an encrypted refresh token and can refresh expired access tokens.
+- The FreeAgent page should make one-account import obvious while keeping setup/refresh controls
+  collapsible. Account management should allow per-account auto-sync toggles; default interval is
+  once daily after 06:00.
 - Frontend: `#/freeagent` route in `frontend/src/App.tsx`.
 - Tests: `tests/test_freeagent_import.py` uses a mock FreeAgent client; no live API calls in CI.
