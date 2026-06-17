@@ -42,11 +42,16 @@ import {
   type FreeAgentCredentials,
   type FreeAgentImportResult,
   type FreeAgentSyncAllResult,
+  type GoogleSheetsImportResult,
+  type GoogleSheetsStatus,
   type HealthResponse,
   type ImportCommitResult,
   type ImportPreview,
   type InsightsResponse,
   type MerchantInsight,
+  type PlaidImportResult,
+  type PlaidPreview,
+  type PlaidStatus,
   type PlanningOverview,
   type TransactionFilters,
   type TransactionSummary,
@@ -55,8 +60,10 @@ import {
   type TransferDetectionResult,
   type UpcomingCommitmentsResponse,
   commitSnoopImport,
+  createPlaidLinkToken,
   createCommitment,
   deleteCommitment,
+  exchangePlaidPublicToken,
   exchangeFreeAgentOAuthCode,
   confirmDecision,
   detectCommitments,
@@ -70,22 +77,50 @@ import {
   getFreeAgentStatus,
   getHealth,
   getInsights,
+  getMonzoSheetsStatus,
+  getPlaidStatus,
   getPlanningOverview,
   getTransactions,
   getUpcomingCommitments,
   importFreeAgentTransactions,
+  importMonzoSheets,
+  importPlaid,
   manageFreeAgentBankAccount,
   markBillInstancePaid,
   previewSnoopImport,
+  previewPlaid,
   rejectDecision,
   resetImportedData,
   saveFreeAgentCredentials,
+  saveMonzoSheetsConfig,
   syncAllFreeAgentAccounts,
   updateAccount,
   updateCommitment,
   updateTransaction,
   validateFreeAgent,
+  validateMonzoSheets,
 } from "./api";
+
+type PlaidSuccessMetadata = {
+  institution?: {
+    institution_id?: string;
+    name?: string;
+  };
+};
+type PlaidHandler = { open: () => void };
+type PlaidCreateOptions = {
+  onExit?: (error: unknown) => void;
+  onSuccess: (publicToken: string, metadata: PlaidSuccessMetadata) => void;
+  token: string;
+};
+
+declare global {
+  interface Window {
+    Plaid?: {
+      create: (options: PlaidCreateOptions) => PlaidHandler;
+    };
+  }
+}
 
 type LoadState = "idle" | "loading" | "ready" | "error";
 type ReportGroupBy = "category" | "merchant";
@@ -329,11 +364,13 @@ const routeItems = [
   { label: "Reports", route: "reports" },
   { label: "Decision Queue", route: "decision-queue" },
   { label: "FreeAgent", route: "freeagent" },
+  { label: "Monzo Sheets", route: "monzo-sheets" },
+  { label: "Plaid", route: "plaid" },
   { label: "Import", route: "import" },
   { label: "Settings", route: "settings" },
 ] as const;
 
-const navItems = routeItems.filter((item) => item.route !== "import" && item.route !== "settings");
+const navItems = routeItems.filter((item) => !["import", "plaid", "settings"].includes(item.route));
 
 type RouteId = (typeof routeItems)[number]["route"];
 
@@ -352,6 +389,8 @@ const pageTitles: Record<RouteId, { eyebrow: string; title: string }> = {
   reports: { eyebrow: "Reports", title: "Spot spending patterns." },
   "decision-queue": { eyebrow: "Decision queue", title: "Resolve only the decisions that matter." },
   freeagent: { eyebrow: "FreeAgent", title: "Connect live bank data safely." },
+  "monzo-sheets": { eyebrow: "Monzo Sheets", title: "Sync Monzo from Google Sheets." },
+  plaid: { eyebrow: "Plaid", title: "Connect live bank feeds." },
   import: { eyebrow: "Import center", title: "Bring fresh data into the plan." },
   settings: { eyebrow: "Settings", title: "Shape the local money system." },
 };
@@ -514,7 +553,7 @@ export function App() {
         insightsResult,
         planningResult,
       ] = await Promise.allSettled([
-        getAccounts(),
+        getAccounts({ endDate: dateWindow.endDate, startDate: dateWindow.startDate }),
         getCommitments(),
         getDecisions(),
         getDashboardSummary(),
@@ -529,7 +568,10 @@ export function App() {
           startDate: dateWindow.startDate,
         }),
         getInsights({ endDate: dateWindow.endDate, startDate: dateWindow.startDate }),
-        getPlanningOverview(),
+        getPlanningOverview({
+          days: dateWindow.days,
+          startDate: dateWindow.startDate,
+        }),
       ]);
 
       if (cancelled) return;
@@ -685,7 +727,7 @@ export function App() {
       insightsResult,
       planningResult,
     ] = await Promise.all([
-      getAccounts(),
+      getAccounts({ endDate: dateWindow.endDate, startDate: dateWindow.startDate }),
       getTransactions(transactionQuery),
       getCommitments(),
       getDecisions(),
@@ -701,7 +743,10 @@ export function App() {
         startDate: dateWindow.startDate,
       }),
       getInsights({ endDate: dateWindow.endDate, startDate: dateWindow.startDate }),
-      getPlanningOverview(),
+      getPlanningOverview({
+        days: dateWindow.days,
+        startDate: dateWindow.startDate,
+      }),
     ]);
     setAccounts(accountsResult);
     setTransactions(transactionsResult);
@@ -784,11 +829,15 @@ export function App() {
     setError(null);
     setLoadState("loading");
     try {
+      const cleanedBalance = balance.trim();
+      const cleanedOverdraftLimit = overdraftLimit.trim();
       await updateAccount(accountId, {
         account_type: accountType,
-        current_balance: balance,
-        overdraft_limit: overdraftLimit || "0.00",
-        balance_as_of: new Date().toISOString().slice(0, 10),
+        ...(cleanedBalance ? {
+          current_balance: cleanedBalance,
+          balance_as_of: new Date().toISOString().slice(0, 10),
+        } : {}),
+        ...(cleanedOverdraftLimit ? { overdraft_limit: cleanedOverdraftLimit } : {}),
       });
       await refreshWorkspace();
       setLoadState("ready");
@@ -1282,12 +1331,13 @@ function AppPage({
   if (route === "accounts") {
     return (
       <section className="page-grid" aria-label="Accounts page">
-        <AccountPerformanceCard accounts={accounts} dashboard={dashboard} />
+        <AccountPerformanceCard accounts={accounts} dashboard={dashboard} periodLabel={periodLabel} />
         <AccountsCard
           accounts={accounts}
           busy={busy}
-          limit={12}
+          limit={50}
           onAccountBalanceUpdate={onAccountBalanceUpdate}
+          periodLabel={periodLabel}
           query={query}
         />
         <AssetSummaryCard accounts={accounts} />
@@ -1491,6 +1541,7 @@ function AppPage({
           insights={insights}
           onControlStateChange={onControlStateChange}
           onHealthCheck={onHealthCheck}
+          onImported={onRefreshWorkspace}
           onResetAppData={onResetAppData}
           onTransactionUpdate={onTransactionUpdate}
           transactions={transactions}
@@ -1503,6 +1554,22 @@ function AppPage({
     return (
       <section className="page-grid page-grid-single" aria-label="FreeAgent integration page">
         <FreeAgentIntegrationCard onImported={onRefreshWorkspace} />
+      </section>
+    );
+  }
+
+  if (route === "monzo-sheets") {
+    return (
+      <section className="page-grid page-grid-single" aria-label="Monzo Google Sheets integration page">
+        <MonzoSheetsIntegrationCard onImported={onRefreshWorkspace} />
+      </section>
+    );
+  }
+
+  if (route === "plaid") {
+    return (
+      <section className="page-grid page-grid-single" aria-label="Plaid integration page">
+        <PlaidIntegrationCard onImported={onRefreshWorkspace} />
       </section>
     );
   }
@@ -2044,6 +2111,459 @@ function GettingStartedCard({
       </div>
     </article>
   );
+}
+
+const defaultMonzoSheetUrl = "https://docs.google.com/spreadsheets/d/1nx6-x3vG1vDD7Wk1DpxUl0bH-gXvQKrF6nBqROfv8Ck/edit?gid=118050947#gid=118050947";
+const defaultGoogleRedirectUri = "http://127.0.0.1:8025/api/integrations/google-sheets/monzo/oauth/callback";
+
+function MonzoSheetsIntegrationCard({ onImported }: { onImported: () => Promise<void> }) {
+  const [status, setStatus] = useState<GoogleSheetsStatus | null>(null);
+  const [importResult, setImportResult] = useState<GoogleSheetsImportResult | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  const [form, setForm] = useState({
+    redirect_uri: defaultGoogleRedirectUri,
+    spreadsheet_url: defaultMonzoSheetUrl,
+    sheet_name: "Personal Account Transactions",
+  });
+
+  useEffect(() => {
+    async function hydrateMonzoSheets() {
+      try {
+        const nextStatus = await getMonzoSheetsStatus();
+        setStatus(nextStatus);
+        setMessage(nextStatus.message);
+        setForm((current) => ({
+          ...current,
+          spreadsheet_url: nextStatus.spreadsheet_url ?? current.spreadsheet_url,
+          sheet_name: nextStatus.sheet_name ?? current.sheet_name,
+        }));
+      } catch (err) {
+        setMessage(errorMessage(err));
+      }
+    }
+    void hydrateMonzoSheets();
+  }, []);
+
+  async function saveConfiguration(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setMessage("");
+    try {
+      const nextStatus = await saveMonzoSheetsConfig(form);
+      setStatus(nextStatus);
+      setMessage("Saved. Open Google authorization to grant read-only access.");
+    } catch (err) {
+      setMessage(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function validateSheet() {
+    setBusy(true);
+    setMessage("");
+    try {
+      const nextStatus = await validateMonzoSheets();
+      setStatus(nextStatus);
+      setMessage(nextStatus.message);
+    } catch (err) {
+      setMessage(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function runImport() {
+    setBusy(true);
+    setMessage("");
+    try {
+      const result = await importMonzoSheets();
+      setImportResult(result);
+      const nextStatus = await getMonzoSheetsStatus();
+      setStatus(nextStatus);
+      setMessage(`Imported ${result.imported_transaction_count}; skipped ${result.skipped_duplicate_count} duplicate(s).`);
+      await onImported();
+    } catch (err) {
+      setMessage(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const completedSetupSteps = [
+    status?.oauth_configured,
+    status?.configured,
+    status?.auth_url,
+    status?.validated,
+  ].filter(Boolean).length;
+
+  return (
+    <article className="card monzo-sheets-card">
+      <CardHeader
+        title="Monzo Google Sheets"
+        subtitle="Sign in with your personal Google account, then import current account and pots from the Monzo auto-export sheet."
+        helpText="This connector treats blank Pot name as Monzo Current and non-blank Pot name as pot accounts. Google tokens are encrypted locally."
+      />
+      <div className="monzo-sheets-hero">
+        <span className={status?.validated ? "status-pill status-pill-ok" : "status-pill status-pill-warn"}>
+          {status?.validated ? "Connected" : status?.configured ? "Configured" : "Setup needed"}
+        </span>
+        <div>
+          <strong>{status?.sheet_name ?? "Personal Account Transactions"}</strong>
+          <small>{status?.spreadsheet_id ?? "Paste your Google Sheet URL, then sign in with Google."}</small>
+        </div>
+        <div className="freeagent-progress-chip">
+          <strong>{completedSetupSteps}/4</strong>
+          <small>Setup progress</small>
+        </div>
+        <p>{status?.secret_storage ?? "Secret storage will be initialized on save."}</p>
+      </div>
+
+      <div className="monzo-sheets-grid">
+        <form className="monzo-sheets-panel" onSubmit={(event) => void saveConfiguration(event)}>
+          <div className="freeagent-panel-header">
+            <span>Step 1</span>
+            <div>
+              <strong>Choose your Monzo sheet</strong>
+              <small>Google sign-in uses the app OAuth settings from the backend; this screen only needs the sheet details.</small>
+            </div>
+          </div>
+          {!status?.oauth_configured ? (
+            <div className="monzo-sheets-sync-note monzo-sheets-config-warning">
+              <strong>Google login is not configured yet</strong>
+              <small>Add GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET to the backend .env, with redirect URI {defaultGoogleRedirectUri}.</small>
+            </div>
+          ) : null}
+          <div className="form-grid monzo-sheets-form-grid">
+            <label className="wide-field">
+              Google Sheet URL
+              <input
+                aria-label="Monzo Google Sheet URL"
+                onChange={(event) => setForm((current) => ({ ...current, spreadsheet_url: event.target.value }))}
+                required
+                type="url"
+                value={form.spreadsheet_url}
+              />
+            </label>
+            <label>
+              Sheet tab name
+              <input
+                aria-label="Monzo sheet tab name"
+                onChange={(event) => setForm((current) => ({ ...current, sheet_name: event.target.value }))}
+                required
+                value={form.sheet_name}
+              />
+            </label>
+          </div>
+          <div className="monzo-sheets-action-row">
+            <button className="button-link monzo-primary-action" disabled={busy || status?.oauth_configured === false} type="submit">Save setup</button>
+            <a
+              className={`button-link button-link-secondary ${!status?.auth_url ? "button-disabled" : ""}`}
+              href={status?.auth_url ?? "#"}
+              rel="noreferrer"
+              target="_blank"
+            >
+              Open Google authorization
+            </a>
+          </div>
+        </form>
+
+        <aside className="monzo-sheets-panel monzo-sheets-sync-panel">
+          <div className="freeagent-panel-header">
+            <span>Step 2</span>
+            <div>
+              <strong>Validate and import</strong>
+              <small>Blank Pot name becomes Monzo Current; named pots become separate pot accounts.</small>
+            </div>
+          </div>
+          <div className="monzo-sheets-checklist" aria-label="Monzo Sheets setup checklist">
+            <span className={status?.oauth_configured ? "is-complete" : ""}>Backend OAuth app ready</span>
+            <span className={status?.configured ? "is-complete" : ""}>Save sheet details</span>
+            <span className={status?.auth_url ? "is-complete" : ""}>Sign in with Google</span>
+            <span className={status?.validated ? "is-complete" : ""}>Validate sheet columns</span>
+          </div>
+          <div className="monzo-sheets-sync-actions">
+            <button
+              className="button-link button-link-secondary"
+              disabled={busy || !status?.configured}
+              onClick={() => void validateSheet()}
+              type="button"
+            >
+              Validate sheet
+            </button>
+            <button
+              className="button-link monzo-primary-action"
+              disabled={busy || !status?.validated}
+              onClick={() => void runImport()}
+              type="button"
+            >
+              Import transactions
+            </button>
+          </div>
+          <div className="monzo-sheets-sync-note">
+            <strong>Safe import rules</strong>
+            <small>Transactions dedupe by Monzo Transaction ID, so repeated syncs only add new rows.</small>
+          </div>
+        </aside>
+      </div>
+
+      {message ? <p className="fine-print">{message}</p> : null}
+      {importResult ? (
+        <div className="freeagent-result-grid">
+          <Metric label="Rows" value={String(importResult.row_count)} />
+          <Metric label="Imported" value={String(importResult.imported_transaction_count)} />
+          <Metric label="Duplicates" value={String(importResult.skipped_duplicate_count)} />
+          <Metric label="Date range" value={`${importResult.date_start ?? "-"} to ${importResult.date_end ?? "-"}`} />
+        </div>
+      ) : null}
+    </article>
+  );
+}
+
+function PlaidIntegrationCard({ onImported }: { onImported: () => Promise<void> }) {
+  const [status, setStatus] = useState<PlaidStatus | null>(null);
+  const [preview, setPreview] = useState<PlaidPreview | null>(null);
+  const [importResult, setImportResult] = useState<PlaidImportResult | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  const [days, setDays] = useState("30");
+
+  useEffect(() => {
+    async function hydratePlaid() {
+      try {
+        const nextStatus = await getPlaidStatus();
+        setStatus(nextStatus);
+        setMessage(nextStatus.message);
+      } catch (err) {
+        setMessage(errorMessage(err));
+      }
+    }
+    void hydratePlaid();
+  }, []);
+
+  async function openPlaidLink() {
+    setBusy(true);
+    setMessage("");
+    try {
+      await loadPlaidScript();
+      const token = await createPlaidLinkToken();
+      if (!window.Plaid) throw new Error("Plaid Link did not load.");
+      const handler = window.Plaid.create({
+        onExit: (error) => {
+          if (error) setMessage("Plaid Link closed before connection completed.");
+          setBusy(false);
+        },
+        onSuccess: (publicToken, metadata) => {
+          void exchangePlaidConnection(publicToken, metadata);
+        },
+        token: token.link_token,
+      });
+      handler.open();
+    } catch (err) {
+      setMessage(errorMessage(err));
+      setBusy(false);
+    }
+  }
+
+  async function exchangePlaidConnection(publicToken: string, metadata: PlaidSuccessMetadata) {
+    try {
+      const nextStatus = await exchangePlaidPublicToken({
+        institution_id: metadata.institution?.institution_id ?? null,
+        institution_name: metadata.institution?.name ?? null,
+        public_token: publicToken,
+      });
+      setStatus(nextStatus);
+      setMessage("Plaid bank connected. Preview accounts before importing.");
+    } catch (err) {
+      setMessage(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function loadPreview() {
+    setBusy(true);
+    setMessage("");
+    try {
+      const result = await previewPlaid(Number(days) || 30);
+      setPreview(result);
+      setMessage(`Previewed ${result.accounts.length} account(s) and ${result.transaction_count} transaction(s).`);
+    } catch (err) {
+      setMessage(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function runImport() {
+    setBusy(true);
+    setMessage("");
+    try {
+      const result = await importPlaid(Number(days) || 30);
+      setImportResult(result);
+      const nextStatus = await getPlaidStatus();
+      setStatus(nextStatus);
+      setMessage(`Imported ${result.imported_transaction_count}; skipped ${result.skipped_duplicate_count} duplicate(s).`);
+      await onImported();
+    } catch (err) {
+      setMessage(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const configured = status?.configured ?? false;
+  const connected = status?.connected ?? false;
+
+  return (
+    <article className="card plaid-card">
+      <CardHeader
+        title="Plaid live bank feed"
+        subtitle="Parked experimental connector. Keep using Snoop and Monzo Sheets unless Plaid UK access becomes available."
+        helpText="Plaid tokens are encrypted locally. Sandbox is useful for development; real-bank access needs Plaid Production or Trial access for the supported region."
+      />
+      <div className="plaid-hero">
+        <span className={connected ? "status-pill status-pill-ok" : configured ? "status-pill status-pill-warn" : "status-pill status-stale"}>
+          {connected ? "Connected" : configured ? "Ready" : "Needs keys"}
+        </span>
+        <div>
+          <strong>{status?.environment ?? "sandbox"} environment</strong>
+          <small>
+            {status?.client_id_last4 ? `Client ID ending ${status.client_id_last4}` : "Add Plaid client ID and secret to .env."}
+          </small>
+        </div>
+        <div className="freeagent-progress-chip">
+          <strong>{status?.item_count ?? 0}</strong>
+          <small>Bank login(s)</small>
+        </div>
+        <p>{status?.secret_storage ?? "Tokens will be encrypted after connection."}</p>
+      </div>
+
+      <div className="plaid-grid">
+        <section className="plaid-panel">
+          <div className="freeagent-panel-header">
+            <span>Step 1</span>
+            <div>
+              <strong>Connect a bank</strong>
+              <small>Use Plaid Link to connect one bank login. One login may expose multiple accounts.</small>
+            </div>
+          </div>
+          <div className="monzo-sheets-checklist" aria-label="Plaid setup checklist">
+            <span className={configured ? "is-complete" : ""}>Backend Plaid keys configured</span>
+            <span className={connected ? "is-complete" : ""}>At least one bank connected</span>
+            <span className={preview ? "is-complete" : ""}>Preview reviewed</span>
+            <span className={importResult ? "is-complete" : ""}>Import completed</span>
+          </div>
+          <button
+            className="button-link monzo-primary-action"
+            disabled={busy || !configured}
+            onClick={() => void openPlaidLink()}
+            type="button"
+          >
+            Connect with Plaid
+          </button>
+        </section>
+
+        <section className="plaid-panel">
+          <div className="freeagent-panel-header">
+            <span>Step 2</span>
+            <div>
+              <strong>Preview and import</strong>
+              <small>Preview first; imports dedupe by Plaid transaction ID.</small>
+            </div>
+          </div>
+          <label className="compact-field">
+            <span>Transaction lookback</span>
+            <select onChange={(event) => setDays(event.target.value)} value={days}>
+              <option value="30">30 days</option>
+              <option value="90">90 days</option>
+              <option value="180">180 days</option>
+              <option value="730">24 months</option>
+            </select>
+          </label>
+          <div className="plaid-action-row">
+            <button
+              className="button-link button-link-secondary"
+              disabled={busy || !connected}
+              onClick={() => void loadPreview()}
+              type="button"
+            >
+              Preview Plaid data
+            </button>
+            <button
+              className="button-link monzo-primary-action"
+              disabled={busy || !connected}
+              onClick={() => void runImport()}
+              type="button"
+            >
+              Import Plaid data
+            </button>
+          </div>
+        </section>
+      </div>
+
+      {message ? <p className="fine-print">{message}</p> : null}
+      {preview ? (
+        <div className="plaid-preview-grid">
+          <section className="plaid-preview-panel">
+            <strong>Accounts preview</strong>
+            <div className="plaid-preview-list">
+              {preview.accounts.slice(0, 10).map((account) => (
+                <div className="plaid-preview-row" key={account.account_id}>
+                  <span>
+                    {account.institution_name} · {account.name}
+                    {account.mask ? ` · ${account.mask}` : ""}
+                  </span>
+                  <small>{account.type} / {account.subtype ?? "unknown"}</small>
+                  <strong>{account.current_balance ? money(account.current_balance) : "No balance"}</strong>
+                </div>
+              ))}
+            </div>
+          </section>
+          <section className="plaid-preview-panel">
+            <strong>Transactions preview</strong>
+            <div className="plaid-preview-list">
+              {preview.transactions.slice(0, 10).map((transaction) => (
+                <div className="plaid-preview-row" key={transaction.transaction_id}>
+                  <span>{transaction.name}</span>
+                  <small>{transaction.date} · {transaction.category}</small>
+                  <strong>{money(transaction.amount)}</strong>
+                </div>
+              ))}
+            </div>
+          </section>
+        </div>
+      ) : null}
+      {importResult ? (
+        <div className="freeagent-result-grid">
+          <Metric label="Accounts" value={String(importResult.account_count)} />
+          <Metric label="Transactions" value={String(importResult.transaction_count)} />
+          <Metric label="Imported" value={String(importResult.imported_transaction_count)} />
+          <Metric label="Duplicates" value={String(importResult.skipped_duplicate_count)} />
+        </div>
+      ) : null}
+    </article>
+  );
+}
+
+function loadPlaidScript(): Promise<void> {
+  if (window.Plaid) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const existing = document.querySelector<HTMLScriptElement>("script[data-plaid-link]");
+    if (existing) {
+      existing.addEventListener("load", () => resolve(), { once: true });
+      existing.addEventListener("error", () => reject(new Error("Plaid Link failed to load.")), { once: true });
+      return;
+    }
+    const script = document.createElement("script");
+    script.async = true;
+    script.dataset.plaidLink = "true";
+    script.src = "https://cdn.plaid.com/link/v2/stable/link-initialize.js";
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error("Plaid Link failed to load."));
+    document.head.appendChild(script);
+  });
 }
 
 function FreeAgentIntegrationCard({ onImported }: { onImported: () => Promise<void> }) {
@@ -2851,7 +3371,7 @@ function DashboardHeroCard({
           Cash Position
           <HelpTip text="Included cash account balances today. This is a balance number, not income or spending for the selected period." />
         </span>
-        <strong>{cashReady && dashboard?.cash_on_hand ? money(dashboard.cash_on_hand) : "Needs balances"}</strong>
+        <strong>{cashOnHand === null ? "Needs balances" : money(String(cashOnHand))}</strong>
         {!cashReady ? (
           <p>{dashboard?.message ?? "Import data and enter balances to unlock trusted available-money planning."}</p>
         ) : null}
@@ -2899,9 +3419,11 @@ function DashboardHeroCard({
 function AccountPerformanceCard({
   accounts,
   dashboard,
+  periodLabel,
 }: {
   accounts: AccountsResponse | null;
   dashboard: DashboardSummary | null;
+  periodLabel: string;
 }) {
   const total = accountNetWorth(accounts);
   const series = performanceSeries(total || Number(dashboard?.cash_on_hand ?? 0));
@@ -2915,11 +3437,11 @@ function AccountPerformanceCard({
       <div className="report-card-toolbar">
         <CardHeader
           title="Net Worth Performance"
-          subtitle={`${accounts?.accounts.length ?? 0} accounts · 1 month change`}
+          subtitle={`${accounts?.accounts.length ?? 0} accounts · ${periodLabel}`}
         />
         <div className="segmented-control" aria-label="Account chart controls">
           <span>Net worth performance</span>
-          <span>1 month</span>
+          <span>{periodLabel}</span>
         </div>
       </div>
       <div className="net-worth-headline">
@@ -3845,6 +4367,7 @@ function SettingsWorkbenchCard({
   insights,
   onControlStateChange,
   onHealthCheck,
+  onImported,
   onResetAppData,
   onTransactionUpdate,
   transactions,
@@ -3854,16 +4377,17 @@ function SettingsWorkbenchCard({
   insights: InsightsResponse | null;
   onControlStateChange: (state: PlanningControlState | ((current: PlanningControlState) => PlanningControlState)) => void;
   onHealthCheck: () => Promise<void>;
+  onImported: () => Promise<void>;
   onResetAppData: () => Promise<void>;
   onTransactionUpdate: (transactionId: string, payload: TransactionUpdate) => Promise<void>;
   transactions: TransactionsResponse | null;
 }) {
-  const [section, setSection] = useState<"categories" | "dashboard" | "data" | "merchants" | "rules" | "system" | "tags">("categories");
+  const [section, setSection] = useState<"categories" | "dashboard" | "data" | "integrations" | "merchants" | "rules" | "system" | "tags">("categories");
   return (
     <article className="card settings-workbench">
       <div className="settings-layout">
         <nav className="settings-nav" aria-label="Settings sections">
-          {(["categories", "dashboard", "merchants", "rules", "tags", "data", "system"] as const).map((item) => (
+          {(["categories", "dashboard", "merchants", "rules", "tags", "data", "integrations", "system"] as const).map((item) => (
             <button
               className={section === item ? "active" : ""}
               key={item}
@@ -3902,10 +4426,40 @@ function SettingsWorkbenchCard({
           {section === "data" ? (
             <DataSettings controlState={controlState} onResetAppData={onResetAppData} />
           ) : null}
+          {section === "integrations" ? <IntegrationSettings onImported={onImported} /> : null}
           {section === "system" ? <SystemStatusCard health={health} onHealthCheck={onHealthCheck} /> : null}
         </div>
       </div>
     </article>
+  );
+}
+
+function IntegrationSettings({ onImported }: { onImported: () => Promise<void> }) {
+  return (
+    <div className="settings-section-stack">
+      <div className="settings-section-header">
+        <div>
+          <h3>Integrations</h3>
+          <p>Snoop CSV and Monzo Google Sheets are the main personal-data path. Plaid stays here as a parked experiment, not a daily workflow.</p>
+        </div>
+        <a className="settings-primary-action" href="#/monzo-sheets">Open Monzo Sheets</a>
+      </div>
+      <div className="integration-source-grid">
+        <a className="integration-source-card" href="#/import">
+          <strong>Snoop import</strong>
+          <span>Best for broad multi-bank snapshots and historical transaction exports.</span>
+        </a>
+        <a className="integration-source-card" href="#/monzo-sheets">
+          <strong>Monzo Sheets</strong>
+          <span>Best for Monzo current account and pots because it preserves pot-level evidence.</span>
+        </a>
+        <a className="integration-source-card" href="#/freeagent">
+          <strong>FreeAgent</strong>
+          <span>Kept for accounting reference, but not the personal-banking source of truth.</span>
+        </a>
+      </div>
+      <PlaidIntegrationCard onImported={onImported} />
+    </div>
   );
 }
 
@@ -4664,6 +5218,7 @@ function BudgetPageCard({
               <Metric label="Planned outflow" value={money(String(totals.plannedOutflow))} />
               <Metric label="Plan remaining" value={money(String(totals.remaining))} />
             </div>
+            <MonzoPotCoveragePanel planning={planning} />
             <div className="card-actions">
               <button className="button-link" onClick={() => setActiveSection("plan")} type="button">
                 Build monthly plan
@@ -4820,6 +5375,84 @@ function BudgetPageCard({
         ) : null}
       </section>
     </article>
+  );
+}
+
+function MonzoPotCoveragePanel({ planning }: { planning: PlanningOverview | null }) {
+  const pots = planning?.pot_coverage ?? [];
+  if (pots.length === 0) return null;
+
+  const totalRequired = pots.reduce((sum, pot) => sum + Number(pot.required_amount), 0);
+  const totalShortfall = pots.reduce(
+    (sum, pot) => sum + Math.max(0, -Number(pot.surplus_or_shortfall)),
+    0,
+  );
+  const shortPots = pots.filter((pot) => pot.status === "short");
+
+  return (
+    <section className="monzo-pot-coverage-card" aria-label="Monzo pot bill coverage">
+      <div className="monzo-pot-coverage-header">
+        <div>
+          <span className="hero-kicker">Monzo pot coverage</span>
+          <strong>Can each pot pay its own bills?</strong>
+          <small>
+            Pot money is ring-fenced: a bill assigned to one pot can fail even when another pot has enough.
+          </small>
+        </div>
+        <div className={`monzo-pot-summary ${totalShortfall > 0 ? "is-short" : "is-covered"}`}>
+          <span>{totalShortfall > 0 ? "Needs top-up" : "Covered"}</span>
+          <strong>{money(String(totalShortfall > 0 ? totalShortfall : totalRequired))}</strong>
+          <small>{shortPots.length} short pot(s) · selected period</small>
+        </div>
+      </div>
+      <div className="monzo-pot-grid">
+        {pots.map((pot) => {
+          const shortfall = Math.max(0, -Number(pot.surplus_or_shortfall));
+          const surplus = Math.max(0, Number(pot.surplus_or_shortfall));
+          return (
+            <article className={`monzo-pot-card monzo-pot-${pot.status}`} key={pot.account_id}>
+              <div className="monzo-pot-card-header">
+                <div>
+                  <strong>{pot.pot_name}</strong>
+                  <small>
+                    {pot.mapped_commitment_count
+                      ? `${pot.mapped_commitment_count} planned payment(s)`
+                      : "No mapped payments in period"}
+                  </small>
+                </div>
+                <span className={`status-pill status-${pot.status === "short" ? "stale" : "ready"}`}>
+                  {pot.status === "short" ? "Short" : pot.status === "no_planned_bills" ? "No bills" : "Covered"}
+                </span>
+              </div>
+              <div className="split-metrics">
+                <Metric label="In pot" value={money(pot.current_balance)} />
+                <Metric label="Needed" value={money(pot.required_amount)} />
+                <Metric
+                  label={shortfall > 0 ? "Top-up" : "Surplus"}
+                  value={money(String(shortfall > 0 ? shortfall : surplus))}
+                />
+              </div>
+              <div className="progress-track" aria-label={`${pot.pot_name} coverage`}>
+                <span style={{ width: `${Math.min(100, pot.coverage_percent)}%` }} />
+              </div>
+              {pot.items.length > 0 ? (
+                <div className="monzo-pot-items">
+                  {pot.items.slice(0, 4).map((item) => (
+                    <div className="monzo-pot-item" key={`${pot.account_id}-${item.commitment_id}`}>
+                      <span>{item.name}</span>
+                      <strong>{money(item.expected_amount)}</strong>
+                      <small>{formatShortDay(item.due_date)} · {item.category}</small>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="fine-print">No recurring bills are currently mapped to this pot.</p>
+              )}
+            </article>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
@@ -5251,8 +5884,9 @@ function TransactionReviewRow({
 function AccountsCard({
   accounts,
   busy,
-  limit = 6,
+  limit = 50,
   onAccountBalanceUpdate,
+  periodLabel,
   query,
 }: {
   accounts: AccountsResponse | null;
@@ -5264,6 +5898,7 @@ function AccountsCard({
     accountType: string,
     overdraftLimit: string,
   ) => Promise<void>;
+  periodLabel: string;
   query: string;
 }) {
   const rows = filterByQuery(accounts?.accounts ?? [], query, (account) =>
@@ -5272,7 +5907,10 @@ function AccountsCard({
   const groupedRows = accountGroups(rows);
   return (
     <article className="card">
-      <CardHeader title="Accounts" subtitle={accounts ? `${accounts.accounts.length} detected` : "Connect data"} />
+      <CardHeader
+        title="Accounts"
+        subtitle={accounts ? `${rows.length} shown · ${periodLabel} change in group headers · click any account to edit` : "Connect data"}
+      />
       {rows.length === 0 ? (
         <p className="empty-copy">Commit an import to see accounts.</p>
       ) : (
@@ -5283,6 +5921,7 @@ function AccountsCard({
               group={group}
               key={group.id}
               onAccountBalanceUpdate={onAccountBalanceUpdate}
+              periodLabel={periodLabel}
             />
           ))}
         </div>
@@ -5295,6 +5934,7 @@ function AccountGroupSection({
   busy,
   group,
   onAccountBalanceUpdate,
+  periodLabel,
 }: {
   busy: boolean;
   group: AccountGroup;
@@ -5304,6 +5944,7 @@ function AccountGroupSection({
     accountType: string,
     overdraftLimit: string,
   ) => Promise<void>;
+  periodLabel: string;
 }) {
   const [open, setOpen] = useState(group.defaultOpen);
   const changeClass = group.monthChange >= 0 ? "positive-text" : "negative-text";
@@ -5320,7 +5961,7 @@ function AccountGroupSection({
         <span className="account-group-title">
           <strong>{group.label}</strong>
           <small className={changeClass}>
-            {group.monthChange >= 0 ? "↗" : "↘"} {money(String(Math.abs(group.monthChange)))} month change
+            {group.monthChange >= 0 ? "↗" : "↘"} {money(String(Math.abs(group.monthChange)))} {periodLabel} change
           </small>
         </span>
         <strong className="account-group-total">{money(String(group.total))}</strong>
@@ -5358,26 +5999,56 @@ function AccountReviewRow({
   const [balance, setBalance] = useState(account.current_balance ?? "");
   const [accountType, setAccountType] = useState(account.account_type);
   const [overdraftLimit, setOverdraftLimit] = useState(account.overdraft_limit ?? "");
-  const balanceInvalid = !isValidMoneyInput(balance, { allowEmpty: false });
+  const [editing, setEditing] = useState(false);
+  const balanceInvalid = !isValidMoneyInput(balance, { allowEmpty: true });
   const overdraftInvalid = !isValidMoneyInput(overdraftLimit, { allowEmpty: true });
-  const supportsOverdraft = ["current", "unknown"].includes(accountType);
+  const liabilityTypes = ["bnpl", "credit_card", "loan"];
+  const isLiabilityAccount = liabilityTypes.includes(account.account_type);
+  const supportsLimit = ["current", "unknown", ...liabilityTypes].includes(accountType);
   const hasLiability = Number(account.liability_balance) > 0;
+  const effectiveBalance = account.effective_balance;
+  const isPot = account.account_type === "pot";
+  const balanceSourceLabel = isLiabilityAccount
+    ? "Outstanding"
+    : account.balance_source === "snoop_inferred" ? "Inferred" : "Balance";
+  const hasLimit = account.overdraft_limit !== null && account.overdraft_limit !== undefined;
 
   return (
-    <div className="account-review-row">
-      <div className="account-review-main">
+    <div className={`account-review-row ${editing ? "is-editing" : ""}`}>
+      <button
+        aria-expanded={editing}
+        className="account-summary-button"
+        onClick={() => setEditing((current) => !current)}
+        type="button"
+      >
         <div className="account-review-copy">
+          <span className={`account-type-badge account-type-${account.account_type}`}>{isPot ? "Pot" : titleCase(account.account_type)}</span>
           <strong>{account.display_name}</strong>
           <small>
             <span>{account.provider}</span>
-            <span>Imported net {money(account.net_total)}</span>
+            <span>{account.transaction_count} transactions</span>
+            <span>{balanceSourceLabel} as of {account.balance_as_of ?? "latest import"}</span>
+            {account.balance_source === "snoop_inferred" ? (
+              <span>Verify this inferred balance</span>
+            ) : null}
           </small>
         </div>
-        <div className="account-balance-pills" aria-label={`${account.display_name} balance treatment`}>
-          <span className="account-money-pill account-money-pill-available">
-            <small>Available</small>
-            <strong>{account.available_balance ? money(account.available_balance) : "Needs balance"}</strong>
+        <div className="account-balance-pills account-balance-pills-compact" aria-label={`${account.display_name} balance treatment`}>
+          <span className={`account-money-pill ${account.balance_source === "snoop_inferred" ? "account-money-pill-inferred" : "account-money-pill-snapshot"}`}>
+            <small>{balanceSourceLabel}</small>
+            <strong>{effectiveBalance !== null && effectiveBalance !== undefined ? money(effectiveBalance) : isLiabilityAccount ? "Needs balance" : "-"}</strong>
           </span>
+          {isLiabilityAccount ? (
+            <span className="account-money-pill account-money-pill-limit">
+              <small>Limit</small>
+              <strong>{hasLimit ? money(account.overdraft_limit ?? "0") : "Needs limit"}</strong>
+            </span>
+          ) : (
+            <span className="account-money-pill account-money-pill-available">
+              <small>{isPot ? "In pot" : "Available"}</small>
+              <strong>{account.available_balance !== null && account.available_balance !== undefined ? money(account.available_balance) : "Needs balance"}</strong>
+            </span>
+          )}
           {hasLiability ? (
             <span className="account-money-pill account-money-pill-liability">
               <small>Liability</small>
@@ -5385,62 +6056,71 @@ function AccountReviewRow({
             </span>
           ) : null}
         </div>
-      </div>
-      <div className="account-review-controls">
-        <label className="compact-field">
-          <span>Type</span>
-          <select
-            aria-label={`Type for ${account.display_name}`}
-            onChange={(event) => setAccountType(event.target.value)}
-            value={accountType}
-          >
-            <option value="unknown">Unknown</option>
-            <option value="current">Current</option>
-            <option value="savings">Savings</option>
-            <option value="pot">Pot</option>
-            <option value="credit_card">Credit card</option>
-            <option value="loan">Loan</option>
-            <option value="bnpl">BNPL</option>
-          </select>
-        </label>
-        <label className="compact-field">
-          <span>Balance</span>
-          <input
-            aria-label={`Balance for ${account.display_name}`}
-            aria-invalid={balanceInvalid}
-            inputMode="decimal"
-            onChange={(event) => setBalance(event.target.value)}
-            placeholder="0.00"
-            value={balance}
-          />
-        </label>
-        <label className="compact-field">
-          <span>Overdraft limit</span>
-          <input
-            aria-label={`Overdraft limit for ${account.display_name}`}
-            aria-invalid={overdraftInvalid}
-            disabled={!supportsOverdraft}
-            inputMode="decimal"
-            onChange={(event) => setOverdraftLimit(event.target.value)}
-            placeholder="0.00"
-            value={supportsOverdraft ? overdraftLimit : ""}
-          />
-        </label>
-        <button
-          disabled={busy || balanceInvalid || overdraftInvalid}
-          onClick={() => void onAccountBalanceUpdate(account.id, balance, accountType, overdraftLimit)}
-          type="button"
-        >
-          Save
-        </button>
-      </div>
-      {balanceInvalid || overdraftInvalid ? (
-        <div className="account-review-errors">
-          {balanceInvalid ? <small className="field-error account-balance-error">Enter a valid balance.</small> : null}
-          {overdraftInvalid ? (
-            <small className="field-error account-balance-error">Enter a valid overdraft limit.</small>
-          ) : null}
+        <div className="account-summary-meta">
+          <strong>{editing ? "Close" : "Edit"}</strong>
         </div>
+      </button>
+      {editing ? (
+        <>
+          <div className="account-review-controls">
+            <label className="compact-field">
+              <span>Type</span>
+              <select
+                aria-label={`Type for ${account.display_name}`}
+                onChange={(event) => setAccountType(event.target.value)}
+                value={accountType}
+              >
+                <option value="unknown">Unknown</option>
+                <option value="current">Current</option>
+                <option value="savings">Savings</option>
+                <option value="pot">Pot</option>
+                <option value="credit_card">Credit card</option>
+                <option value="loan">Loan</option>
+                <option value="bnpl">BNPL</option>
+              </select>
+            </label>
+            <label className="compact-field">
+              <span>{liabilityTypes.includes(accountType) ? "Outstanding balance" : "Balance"}</span>
+              <input
+                aria-label={`Balance for ${account.display_name}`}
+                aria-invalid={balanceInvalid}
+                inputMode="decimal"
+                onChange={(event) => setBalance(event.target.value)}
+                placeholder="0.00"
+                value={balance}
+              />
+            </label>
+            <label className="compact-field">
+              <span>{liabilityTypes.includes(accountType) ? "Credit / BNPL limit" : "Overdraft limit"}</span>
+              <input
+                aria-label={`Overdraft limit for ${account.display_name}`}
+                aria-invalid={overdraftInvalid}
+                disabled={!supportsLimit}
+                inputMode="decimal"
+                onChange={(event) => setOverdraftLimit(event.target.value)}
+                placeholder="0.00"
+                value={supportsLimit ? overdraftLimit : ""}
+              />
+            </label>
+            <button
+              disabled={busy || balanceInvalid || overdraftInvalid}
+              onClick={() => void onAccountBalanceUpdate(account.id, balance, accountType, overdraftLimit)}
+              type="button"
+            >
+              Save
+            </button>
+          </div>
+          {balanceInvalid || overdraftInvalid ? (
+            <div className="account-review-errors">
+              {balanceInvalid ? (
+                <small className="field-error account-balance-error">Enter a valid balance, or leave blank to use the inferred Snoop value.</small>
+              ) : null}
+              {overdraftInvalid ? (
+                <small className="field-error account-balance-error">Enter a valid overdraft limit.</small>
+              ) : null}
+            </div>
+          ) : null}
+        </>
       ) : null}
     </div>
   );
@@ -6770,6 +7450,10 @@ function SpendingPlanCard({
               <small>
                 Tune assumptions in Budget before treating this as decision-grade.
               </small>
+            ) : dashboard?.confidence === "inferred_balance" ? (
+              <small>
+                Using inferred Snoop balances. Verify them in <a href="#/accounts">Accounts</a> when you want decision-grade confidence.
+              </small>
             ) : dashboard?.confidence !== "ready" ? (
               <small>
                 Add balances in <a href="#/accounts">Accounts</a> to improve confidence.
@@ -8024,7 +8708,7 @@ function countBy<T>(rows: T[], getKey: (row: T) => string) {
 
 function accountNetWorth(accounts: AccountsResponse | null) {
   return (accounts?.accounts ?? []).reduce((total, account) => {
-    return total + Number(account.current_balance ?? account.net_total);
+    return total + Number(account.effective_balance ?? account.net_total);
   }, 0);
 }
 
@@ -8034,7 +8718,7 @@ function accountBuckets(accounts: AccountsResponse | null) {
     liabilities: Record<string, number>;
   }>(
     (groups, account) => {
-      const value = Number(account.current_balance ?? account.net_total);
+      const value = Number(account.effective_balance ?? account.net_total);
       const liability = Number(account.liability_balance ?? 0);
       const label = titleCase(account.account_type === "unknown" ? account.provider : account.account_type);
       if (value > 0 && !["credit_card", "loan", "bnpl"].includes(account.account_type)) {
@@ -8054,9 +8738,10 @@ function accountBuckets(accounts: AccountsResponse | null) {
 }
 
 function accountGroups(accounts: AccountRow[]): AccountGroup[] {
-  const order = ["cash", "investments", "credit", "debt", "other"];
+  const order = ["cash", "pots", "investments", "credit", "debt", "other"];
   const labels: Record<string, string> = {
     cash: "Cash",
+    pots: "Pots",
     credit: "Credit Cards",
     debt: "Loans & Debt",
     investments: "Investments",
@@ -8074,20 +8759,29 @@ function accountGroups(accounts: AccountRow[]): AccountGroup[] {
       const groupAccounts = grouped[key];
       return {
         accounts: groupAccounts,
-        defaultOpen: key === "cash" || key === "credit",
+        defaultOpen: key === "cash" || key === "pots" || key === "credit" || key === "debt",
         id: key,
         label: labels[key],
-        monthChange: groupAccounts.reduce((sum, account) => sum + Number(account.net_total), 0),
-        total: groupAccounts.reduce(
-          (sum, account) => sum + Math.abs(Number(account.current_balance ?? account.net_total)),
-          0,
-        ),
+        monthChange: groupAccounts.reduce((sum, account) => sum + Number(account.period_net_total), 0),
+        total: accountGroupTotal(key, groupAccounts),
       };
     });
 }
 
+function accountGroupTotal(groupKey: string, accounts: AccountRow[]) {
+  return accounts.reduce((sum, account) => {
+    const effectiveBalance = Number(account.effective_balance ?? account.net_total);
+    if (["credit", "debt"].includes(groupKey)) {
+      const liability = Number(account.liability_balance ?? 0);
+      return sum + Math.max(liability, Math.abs(Math.min(effectiveBalance, 0)));
+    }
+    return sum + effectiveBalance;
+  }, 0);
+}
+
 function accountGroupKey(account: AccountRow) {
-  if (["current", "savings", "pot"].includes(account.account_type)) return "cash";
+  if (account.account_type === "pot") return "pots";
+  if (["current", "savings"].includes(account.account_type)) return "cash";
   if (account.account_type === "credit_card") return "credit";
   if (["loan", "bnpl"].includes(account.account_type)) return "debt";
   if (/investment|pension|isa|401|brokerage/i.test(`${account.provider} ${account.display_name}`)) {

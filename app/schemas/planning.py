@@ -81,6 +81,28 @@ class StaleCommitmentReview(BaseModel):
     reason: str
 
 
+class PotCoverageItem(BaseModel):
+    commitment_id: str
+    name: str
+    category: str
+    expected_amount: str
+    due_date: str
+    status: str
+
+
+class PotCoveragePlan(BaseModel):
+    account_id: str
+    pot_name: str
+    source_account_name: str
+    current_balance: str
+    required_amount: str
+    surplus_or_shortfall: str
+    coverage_percent: int
+    status: str
+    mapped_commitment_count: int
+    items: list[PotCoverageItem]
+
+
 class PlanningOverview(BaseModel):
     entity_id: str
     entity_name: str
@@ -91,3 +113,4 @@ class PlanningOverview(BaseModel):
     saved_filters: list[SavedReportFilter]
     import_freshness: ImportFreshness
     stale_commitments: list[StaleCommitmentReview]
+    pot_coverage: list[PotCoveragePlan]

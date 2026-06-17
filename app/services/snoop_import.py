@@ -4,7 +4,7 @@ import csv
 import hashlib
 import io
 from collections import Counter, defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
 from decimal import Decimal, InvalidOperation
 
@@ -22,6 +22,8 @@ REQUIRED_COLUMNS = {
     "Status",
     "Sub Type",
 }
+
+IGNORED_ACCOUNT_PROVIDERS = {"monzo"}
 
 CATEGORY_GROUPS = {
     "cash": "flexible",
@@ -62,7 +64,7 @@ class ParsedSnoopRow:
 
 def preview_snoop_csv(contents: bytes, source_filename: str) -> SnoopImportPreview:
     rows, warnings = parse_snoop_csv(contents)
-    fingerprints = [row.fingerprint for row in rows]
+    fingerprints = [base_transaction_fingerprint(row) for row in rows]
     duplicate_fingerprint_count = sum(
         count - 1 for count in Counter(fingerprints).values() if count > 1
     )
@@ -102,16 +104,26 @@ def parse_snoop_csv(contents: bytes) -> tuple[list[ParsedSnoopRow], list[str]]:
 
     warnings: list[str] = []
     rows: list[ParsedSnoopRow] = []
+    ignored_provider_counts: Counter[str] = Counter()
     for index, row in enumerate(reader, start=2):
         try:
-            rows.append(parse_row(row))
+            parsed = parse_row(row)
+            if should_ignore_provider(parsed.account_provider):
+                ignored_provider_counts[parsed.account_provider] += 1
+                continue
+            rows.append(parsed)
         except (InvalidOperation, ValueError) as exc:
             warnings.append(f"Row {index} skipped: {exc}")
+
+    for provider, count in sorted(ignored_provider_counts.items()):
+        warnings.append(
+            f"Ignored {count} {provider} row(s); use the dedicated Monzo import instead."
+        )
 
     if not rows:
         raise SnoopImportError("No valid Snoop transactions found.")
 
-    return rows, warnings
+    return assign_occurrence_fingerprints(rows), warnings
 
 
 def parse_row(row: dict[str, str]) -> ParsedSnoopRow:
@@ -151,6 +163,44 @@ def parse_row(row: dict[str, str]) -> ParsedSnoopRow:
             description=description,
         ),
     )
+
+
+def should_ignore_provider(provider: str) -> bool:
+    return provider.strip().lower() in IGNORED_ACCOUNT_PROVIDERS
+
+
+def assign_occurrence_fingerprints(rows: list[ParsedSnoopRow]) -> list[ParsedSnoopRow]:
+    """Preserve legitimate repeated Snoop rows while keeping re-imports idempotent."""
+    occurrence_counts: Counter[str] = Counter()
+    unique_rows: list[ParsedSnoopRow] = []
+    for row in rows:
+        base_fingerprint = base_transaction_fingerprint(row)
+        occurrence_counts[base_fingerprint] += 1
+        occurrence = occurrence_counts[base_fingerprint]
+        unique_rows.append(
+            row
+            if occurrence == 1
+            else replace(
+                row,
+                fingerprint=occurrence_fingerprint(base_fingerprint, occurrence),
+            )
+        )
+    return unique_rows
+
+
+def base_transaction_fingerprint(row: ParsedSnoopRow) -> str:
+    return build_fingerprint(
+        transaction_date=row.transaction_date,
+        amount=row.amount,
+        account_provider=row.account_provider,
+        account_name=row.account_name,
+        merchant_name=row.merchant_name,
+        description=row.description,
+    )
+
+
+def occurrence_fingerprint(base_fingerprint: str, occurrence: int) -> str:
+    return hashlib.sha256(f"{base_fingerprint}|occurrence:{occurrence}".encode()).hexdigest()
 
 
 def detect_accounts(rows: list[ParsedSnoopRow]) -> list[DetectedAccount]:
@@ -227,6 +277,11 @@ def suggest_account_type(provider: str, name: str) -> str:
         return "loan"
     if "savings" in haystack or "pot" in haystack:
         return "savings"
+    if any(
+        token in haystack
+        for token in ["barclays personal", "hsbc personal", "monzo", "natwest", "starling"]
+    ):
+        return "current"
     return "unknown"
 
 

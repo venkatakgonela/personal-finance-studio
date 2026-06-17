@@ -8,7 +8,10 @@ from sqlalchemy.orm import Session
 
 from app.models import Account, BillInstance, Commitment, Entity, Transaction
 from app.schemas.dashboard import DashboardSummary
-from app.services.account_balances import available_for_bills, is_cash_availability_account
+from app.services.account_balances import (
+    available_for_bills_from_values,
+    is_cash_availability_account,
+)
 from app.services.categories import normalized_group_for_transaction
 from app.services.decisions import count_decisions
 
@@ -37,11 +40,30 @@ def get_dashboard_summary(
         for account in accounts
         if is_cash_availability_account(account)
     ]
-    accounts_with_balances = [
-        account for account in cash_accounts if account.current_balance is not None
+    account_balances = [
+        effective_account_balance(session, account)
+        for account in cash_accounts
     ]
+    accounts_with_balances = [
+        account_balance
+        for account_balance in account_balances
+        if account_balance["balance"] is not None
+    ]
+    inferred_balance_count = sum(
+        1
+        for account_balance in accounts_with_balances
+        if account_balance["source"] == "snoop_inferred"
+    )
     cash_on_hand = sum(
-        (available_for_bills(account) or Decimal("0.00") for account in accounts_with_balances),
+        (
+            available_for_bills_from_values(
+                account_balance["balance"],
+                account_balance["account"].account_type,
+                account_balance["account"].overdraft_limit,
+            )
+            or Decimal("0.00")
+            for account_balance in accounts_with_balances
+        ),
         Decimal("0.00"),
     )
 
@@ -68,7 +90,12 @@ def get_dashboard_summary(
     )
 
     missing_balance_count = len(cash_accounts) - len(accounts_with_balances)
-    confidence = "ready" if cash_accounts and missing_balance_count == 0 else "needs_balance_review"
+    if not cash_accounts or missing_balance_count:
+        confidence = "needs_balance_review"
+    elif inferred_balance_count:
+        confidence = "inferred_balance"
+    else:
+        confidence = "ready"
     trusted_cash = cash_on_hand if accounts_with_balances and missing_balance_count == 0 else None
     available_after_commitments = (
         trusted_cash - upcoming_confirmed_total if trusted_cash is not None else None
@@ -88,6 +115,11 @@ def get_dashboard_summary(
     message = (
         "Balances are ready for cash-on-hand calculations."
         if confidence == "ready"
+        else (
+            "Using Snoop-inferred balances from exported net movement; "
+            "verify against bank balances."
+        )
+        if confidence == "inferred_balance"
         else "Enter current balances for included cash accounts before trusting cash-on-hand."
     )
 
@@ -111,6 +143,29 @@ def get_dashboard_summary(
         confidence=confidence,
         message=message,
     )
+
+
+def effective_account_balance(
+    session: Session,
+    account: Account,
+) -> dict[str, Account | Decimal | str | None]:
+    if account.current_balance is not None:
+        return {"account": account, "balance": account.current_balance, "source": "entered"}
+    net_total = session.scalar(
+        select(func.coalesce(func.sum(Transaction.amount), 0)).where(
+            Transaction.account_id == account.id,
+        )
+    )
+    transaction_count = session.scalar(
+        select(func.count(Transaction.id)).where(Transaction.account_id == account.id)
+    )
+    if not transaction_count:
+        return {"account": account, "balance": None, "source": "missing"}
+    return {
+        "account": account,
+        "balance": Decimal(net_total or 0).quantize(Decimal("0.01")),
+        "source": "snoop_inferred",
+    }
 
 
 def bill_instance_total(

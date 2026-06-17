@@ -184,9 +184,11 @@ imported transactions, commitments, accounts, or explicit user-entered plan valu
 - [x] FreeAgent API read-only bank account balance and transaction fetch, manual-token phase.
 - [x] FreeAgent authorization-code token exchange and automatic refresh-token use.
 - [x] FreeAgent multi-account management with per-account cursor and once-daily post-06:00 local sync.
+- [x] Monzo Google Sheets connector for personal OAuth, current account imports, and pot-level account treatment.
+- [x] Plaid sandbox connector parked under Settings > Integrations after UK personal real-bank access proved unsuitable for the current path.
 - [ ] FreeAgent full in-app browser OAuth callback.
 - [ ] FreeAgent pre-commit import preview and richer sync health.
-- Personal-bank source-of-truth connector evaluation: Monzo direct first, then Open Banking
-  aggregator shortlist starting with GoCardless Bank Account Data.
+- Personal-bank source-of-truth connector evaluation: Snoop CSV + Monzo Google Sheets first, then
+  Open Banking aggregator shortlist starting with GoCardless Bank Account Data if direct coverage is needed.
 - Connection freshness dashboard.
 - Optional cross-device/cloud strategy if explicitly approved.

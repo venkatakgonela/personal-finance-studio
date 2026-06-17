@@ -42,6 +42,7 @@ describe("App", () => {
         unreviewed_count: 0,
       },
       saved_filters: [],
+      pot_coverage: [],
       sinking_funds: [],
       stale_commitments: [],
       subscriptions: [],

@@ -50,10 +50,14 @@ sources instead.
 
 Recommended connector path:
 
-- **Monzo first**: use Monzo's official OAuth/API for Monzo accounts, balances, pots, transactions,
-  and webhooks.
-- **Open Banking aggregator next**: evaluate GoCardless Bank Account Data first, then TrueLayer,
-  Plaid, Yapily, Tink, Moneyhub, or Salt Edge if coverage/commercial needs require it.
+- **Snoop CSV for broad coverage**: use Snoop exports for multi-bank snapshots and historical
+  transactions when direct feeds are not available.
+- **Monzo Google Sheets for pot-level truth**: use the Monzo auto-export sheet for current account,
+  pot, and transaction evidence because bills may depend on a specific pot rather than household
+  cash overall.
+- **Open Banking aggregator later**: evaluate GoCardless Bank Account Data first, then TrueLayer,
+  Yapily, Tink, Moneyhub, Salt Edge, or Plaid only if UK personal access, consent refresh, and
+  pricing make sense.
 - **Provider abstraction**: normalize all external connectors into the app's account, balance,
   transaction, consent, cursor, and sync-health model.
 - **Regulatory boundary**: keep this local/personal until a regulated provider or FCA-authorised
@@ -82,6 +86,9 @@ uv run uvicorn app.main:app --reload --host 127.0.0.1 --port 8025
 Optional local settings:
 
 - `PFS_SECRET_KEY` or `PFS_SECRET_KEY_FILE`: encrypts local OAuth client secrets and tokens.
+- `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET`: one-time Google OAuth app
+  settings for the Monzo Google Sheets connector. The user still signs in with their personal
+  Google account; these values are app configuration, not day-to-day user credentials.
 - `FREEAGENT_AUTO_SYNC_WORKER_ENABLED=true|false`: enables the local FreeAgent auto-sync worker.
 - `FREEAGENT_AUTO_SYNC_CHECK_SECONDS=300`: how often the worker checks for FreeAgent accounts due
   for the once-daily post-06:00 sync.

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 
 from sqlalchemy import select
@@ -13,14 +13,16 @@ from app.schemas.planning import (
     MonthlyReviewSummary,
     PlanningGoal,
     PlanningOverview,
+    PotCoverageItem,
+    PotCoveragePlan,
     SavedReportFilter,
     SinkingFundPlan,
     StaleCommitmentReview,
     SubscriptionReviewItem,
 )
-from app.services.account_balances import available_for_bills
+from app.services.account_balances import available_for_bills_from_values
 from app.services.categories import normalized_group_for_transaction
-from app.services.dashboard import latest_transaction_date
+from app.services.dashboard import effective_account_balance, latest_transaction_date
 from app.services.decisions import count_decisions
 
 SUBSCRIPTION_TOKENS = {
@@ -32,12 +34,26 @@ SUBSCRIPTION_TOKENS = {
     "youtube",
 }
 
+POT_COVERAGE_DAYS = 30
+
+POT_RULES: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("credit cards", ("credit card", "credit cards", "amex", "aqua", "barclaycard", "vanquis")),
+    ("pay later", ("bnpl", "pay later", "klarna", "clearpay", "very")),
+    ("subscriptions", ("subscription", "subscriptions", "netflix", "prime", "youtube", "ring")),
+    ("utilities", ("utilities", "utility", "energy", "octopus", "water", "gas", "electric")),
+    ("mobile & broadband", ("mobile", "broadband", "telecom", "lebara", "vodafone", "ee ")),
+    ("kids", ("kids", "school", "tuition", "academy", "childcare", "tutorial")),
+    ("ev charging", ("ev", "charging", "tesla")),
+)
+
 
 def get_planning_overview(
     session: Session,
     entity_id: str,
     *,
     today: date | None = None,
+    pot_coverage_start: date | None = None,
+    pot_coverage_days: int = POT_COVERAGE_DAYS,
 ) -> PlanningOverview:
     entity = session.get(Entity, entity_id)
     if entity is None:
@@ -64,6 +80,13 @@ def get_planning_overview(
         saved_filters=saved_filters(),
         import_freshness=import_freshness(session, entity_id, today),
         stale_commitments=stale_commitments(session, commitments, today),
+        pot_coverage=monzo_pot_coverage(
+            session,
+            entity_id,
+            commitments,
+            pot_coverage_start or today,
+            days=pot_coverage_days,
+        ),
     )
 
 
@@ -238,13 +261,30 @@ def known_cash_on_hand(session: Session, entity_id: str) -> Decimal:
             Account.entity_id == entity_id,
             Account.status == "active",
             Account.include_in_cash_on_hand.is_(True),
-            Account.current_balance.is_not(None),
             Account.account_type.not_in(["credit_card", "loan", "bnpl"]),
         )
     ).all()
     return sum(
-        (available_for_bills(account) or Decimal("0.00") for account in accounts),
+        (
+            available_for_bills_from_effective(session, account)
+            for account in accounts
+        ),
         Decimal("0.00"),
+    )
+
+
+def available_for_bills_from_effective(session: Session, account: Account) -> Decimal:
+    effective = effective_account_balance(session, account)
+    balance = effective["balance"]
+    if not isinstance(balance, Decimal):
+        return Decimal("0.00")
+    return (
+        available_for_bills_from_values(
+            balance,
+            account.account_type,
+            account.overdraft_limit,
+        )
+        or Decimal("0.00")
     )
 
 
@@ -397,6 +437,105 @@ def stale_commitments(
             )
         )
     return sorted(stale, key=lambda item: item.next_due_date or "9999-12-31")[:10]
+
+
+def monzo_pot_coverage(
+    session: Session,
+    entity_id: str,
+    commitments: list[Commitment],
+    start_date: date,
+    *,
+    days: int = POT_COVERAGE_DAYS,
+) -> list[PotCoveragePlan]:
+    pots = session.scalars(
+        select(Account)
+        .where(
+            Account.entity_id == entity_id,
+            Account.provider == "Monzo",
+            Account.account_type == "pot",
+            Account.status == "active",
+        )
+        .order_by(Account.display_name.asc())
+    ).all()
+    if not pots:
+        return []
+
+    end_date = start_date + timedelta(days=days)
+    plans: list[PotCoveragePlan] = []
+    for pot in pots:
+        pot_key = normalized_pot_key(pot.source_account_name)
+        mapped_commitments = [
+            commitment
+            for commitment in commitments
+            if commitment.status != "rejected" and commitment.next_due_date is not None
+            if start_date <= commitment.next_due_date <= end_date
+            if commitment_matches_pot(commitment, pot_key)
+        ]
+        items = [
+            PotCoverageItem(
+                commitment_id=commitment.id,
+                name=commitment.name,
+                category=commitment.category,
+                expected_amount=format_money(commitment.expected_amount),
+                due_date=commitment.next_due_date.isoformat()
+                if commitment.next_due_date
+                else "",
+                status=commitment.status,
+            )
+            for commitment in mapped_commitments
+        ]
+        required = sum(
+            (commitment.expected_amount for commitment in mapped_commitments),
+            Decimal("0.00"),
+        )
+        balance = pot.current_balance or Decimal("0.00")
+        gap = balance - required
+        plans.append(
+            PotCoveragePlan(
+                account_id=pot.id,
+                pot_name=pot.display_name.removeprefix("Monzo Pot: ").strip() or pot.display_name,
+                source_account_name=pot.source_account_name,
+                current_balance=format_money(balance),
+                required_amount=format_money(required),
+                surplus_or_shortfall=format_money(gap),
+                coverage_percent=progress_percent(balance, required) if required > 0 else 100,
+                status=pot_coverage_status(balance, required),
+                mapped_commitment_count=len(mapped_commitments),
+                items=items,
+            )
+        )
+    return sorted(
+        plans,
+        key=lambda plan: (
+            {"short": 0, "exact": 1, "covered": 2, "no_planned_bills": 3}.get(plan.status, 9),
+            plan.pot_name,
+        ),
+    )
+
+
+def normalized_pot_key(source_account_name: str) -> str:
+    return source_account_name.lower().replace("monzo pot:", "").strip()
+
+
+def commitment_matches_pot(commitment: Commitment, pot_key: str) -> bool:
+    text = (
+        f"{commitment.name} {commitment.source_label or ''} "
+        f"{commitment.category} {commitment.commitment_type}"
+    ).lower()
+    for rule_key, tokens in POT_RULES:
+        if rule_key in pot_key and any(token in text for token in tokens):
+            return True
+    return False
+
+
+def pot_coverage_status(balance: Decimal, required: Decimal) -> str:
+    if required <= 0:
+        return "no_planned_bills"
+    if balance < required:
+        return "short"
+    if balance == required:
+        return "exact"
+    return "covered"
 
 
 def monthly_equivalent(commitment: Commitment) -> Decimal:

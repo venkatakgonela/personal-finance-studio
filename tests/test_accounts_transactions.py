@@ -29,6 +29,36 @@ def test_accounts_summary_returns_detected_accounts_and_totals(db_session: Sessi
     assert hsbc.inflow_total == "3250.00"
     assert hsbc.outflow_total == "-388.99"
     assert hsbc.net_total == "2861.01"
+    assert hsbc.period_inflow_total == "3250.00"
+    assert hsbc.period_outflow_total == "-388.99"
+    assert hsbc.period_net_total == "2861.01"
+    assert hsbc.current_balance is None
+    assert hsbc.inferred_balance == "2861.01"
+    assert hsbc.effective_balance == "2861.01"
+    assert hsbc.balance_source == "snoop_inferred"
+
+
+def test_accounts_summary_period_movement_is_date_windowed(db_session: Session) -> None:
+    contents = (FIXTURES / "snoop_minimal.csv").read_bytes()
+    import_result = commit_snoop_csv(
+        contents,
+        source_filename="snoop_minimal.csv",
+        session=db_session,
+    )
+
+    summary = get_accounts_summary(
+        db_session,
+        import_result.entity_id,
+        end_date=date(2026, 6, 10),
+        start_date=date(2026, 6, 10),
+    )
+
+    hsbc = next(account for account in summary.accounts if account.provider == "HSBC Personal")
+    assert hsbc.net_total == "2861.01"
+    assert hsbc.effective_balance == "2861.01"
+    assert hsbc.period_inflow_total == "2000.00"
+    assert hsbc.period_outflow_total == "-340.00"
+    assert hsbc.period_net_total == "1660.00"
 
 
 def test_update_account_sets_balance_and_excludes_credit_cards(db_session: Session) -> None:

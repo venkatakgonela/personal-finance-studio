@@ -27,8 +27,8 @@ def test_dashboard_summary_requires_balances_then_calculates_cash(
     account = get_accounts_summary(db_session, import_result.entity_id).accounts[0]
 
     initial = get_dashboard_summary(db_session, import_result.entity_id)
-    assert initial.cash_on_hand is None
-    assert initial.confidence == "needs_balance_review"
+    assert initial.cash_on_hand == "1150.04"
+    assert initial.confidence == "inferred_balance"
 
     update_account(
         db_session,

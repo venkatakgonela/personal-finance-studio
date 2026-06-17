@@ -8,6 +8,10 @@ class AccountSummary(BaseModel):
     source_account_name: str
     account_type: str
     current_balance: str | None
+    inferred_balance: str | None
+    effective_balance: str | None
+    balance_source: str
+    balance_as_of: str | None
     overdraft_limit: str | None
     available_balance: str | None
     liability_balance: str
@@ -17,6 +21,9 @@ class AccountSummary(BaseModel):
     inflow_total: str
     outflow_total: str
     net_total: str
+    period_inflow_total: str
+    period_outflow_total: str
+    period_net_total: str
 
 
 class AccountUpdate(BaseModel):

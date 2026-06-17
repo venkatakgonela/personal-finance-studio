@@ -54,10 +54,33 @@ def test_parse_snoop_csv_rejects_missing_required_columns() -> None:
         parse_snoop_csv(contents)
 
 
-def test_duplicate_fingerprints_are_reported() -> None:
+def test_snoop_import_ignores_monzo_rows_for_dedicated_import() -> None:
+    original = (FIXTURES / "snoop_minimal.csv").read_text()
+    monzo_row = (
+        "2026-06-15,Monzo Merchant,Monzo only,-10.00,General,,Monzo,"
+        "Personal,,\n"
+    )
+
+    mixed_csv = f"{original.strip()}\n{monzo_row}".encode()
+
+    rows, warnings = parse_snoop_csv(mixed_csv)
+    preview = preview_snoop_csv(
+        mixed_csv,
+        source_filename="mixed.csv",
+    )
+
+    assert len(rows) == 5
+    assert preview.row_count == 5
+    assert all(row.account_provider != "Monzo" for row in rows)
+    assert warnings == ["Ignored 1 Monzo row(s); use the dedicated Monzo import instead."]
+    assert preview.warnings == warnings
+
+
+def test_repeated_snoop_rows_are_reported_but_kept_importable() -> None:
     original = (FIXTURES / "snoop_minimal.csv").read_text()
     duplicate_first_transaction = "\n".join([original.strip(), original.splitlines()[1]]) + "\n"
 
+    rows, _warnings = parse_snoop_csv(duplicate_first_transaction.encode("utf-8"))
     preview = preview_snoop_csv(
         duplicate_first_transaction.encode("utf-8"),
         source_filename="duplicate.csv",
@@ -65,3 +88,4 @@ def test_duplicate_fingerprints_are_reported() -> None:
 
     assert preview.row_count == 6
     assert preview.duplicate_fingerprint_count == 1
+    assert len({row.fingerprint for row in rows}) == 6

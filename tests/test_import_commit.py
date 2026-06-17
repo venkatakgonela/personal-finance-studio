@@ -75,6 +75,24 @@ def test_duplicate_snoop_import_preserves_reviewed_transaction_updates(
     assert len(db_session.scalars(select(Transaction)).all()) == 5
 
 
+def test_repeated_snoop_rows_are_imported_once_and_remain_idempotent(
+    db_session: Session,
+) -> None:
+    original = (FIXTURES / "snoop_minimal.csv").read_text()
+    duplicate_first_transaction = "\n".join([original.strip(), original.splitlines()[1]]) + "\n"
+    contents = duplicate_first_transaction.encode("utf-8")
+
+    first = commit_snoop_csv(contents, source_filename="duplicate.csv", session=db_session)
+    second = commit_snoop_csv(contents, source_filename="duplicate.csv", session=db_session)
+
+    assert first.row_count == 6
+    assert first.imported_transaction_count == 6
+    assert first.skipped_duplicate_count == 0
+    assert second.imported_transaction_count == 0
+    assert second.skipped_duplicate_count == 6
+    assert len(db_session.scalars(select(Transaction)).all()) == 6
+
+
 def test_commit_marks_initial_transaction_types(db_session: Session) -> None:
     contents = (FIXTURES / "snoop_minimal.csv").read_bytes()
 

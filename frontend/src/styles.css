@@ -2940,21 +2940,41 @@ button.collapsible-block-header:focus {
 .account-review-row {
   display: grid;
   grid-template-columns: 1fr;
-  gap: var(--space-md);
-  padding: var(--space-md);
+  gap: 0;
+  padding: 0;
   border: 1px solid rgba(203, 196, 184, 0.82);
   border-radius: var(--radius-row);
   background:
     linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(250, 248, 243, 0.98)),
     white;
-  box-shadow: 0 14px 28px rgba(38, 41, 35, 0.06);
+  box-shadow: 0 10px 20px rgba(38, 41, 35, 0.04);
 }
 
-.account-review-main {
+.account-review-row.is-editing {
+  border-color: rgba(47, 125, 92, 0.22);
+  box-shadow: 0 16px 34px rgba(47, 125, 92, 0.08);
+}
+
+.account-summary-button {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   gap: var(--space-sm);
-  align-items: start;
+  align-items: center;
+  width: 100%;
+  min-height: 76px;
+  padding: var(--space-sm);
+  border: 0;
+  border-radius: var(--radius-row);
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  transform: none;
+}
+
+.account-summary-button:hover,
+.account-summary-button:focus {
+  background: rgba(255, 255, 255, 0.62);
+  transform: none;
 }
 
 .account-review-copy {
@@ -2998,11 +3018,15 @@ button.collapsible-block-header:focus {
   gap: var(--space-xs);
 }
 
+.account-balance-pills-compact {
+  flex-wrap: nowrap;
+}
+
 .account-money-pill {
   display: grid;
-  min-width: 112px;
+  min-width: 104px;
   gap: 2px;
-  padding: 9px 11px;
+  padding: 8px 10px;
   border: 1px solid var(--line);
   border-radius: var(--radius-control);
   background: rgba(255, 255, 255, 0.72);
@@ -3031,6 +3055,33 @@ button.collapsible-block-header:focus {
   color: var(--positive);
 }
 
+.account-money-pill-limit {
+  border-color: rgba(217, 154, 43, 0.22);
+  background: #fff7e7;
+}
+
+.account-money-pill-limit strong {
+  color: #8a621d;
+}
+
+.account-money-pill-snapshot {
+  border-color: rgba(37, 99, 235, 0.18);
+  background: rgba(235, 243, 255, 0.78);
+}
+
+.account-money-pill-snapshot strong {
+  color: #2d5f9f;
+}
+
+.account-money-pill-inferred {
+  border-color: rgba(181, 118, 43, 0.22);
+  background: #fff7e7;
+}
+
+.account-money-pill-inferred strong {
+  color: #8a621d;
+}
+
 .account-money-pill-liability {
   border-color: rgba(184, 92, 92, 0.18);
   background: rgba(255, 242, 236, 0.78);
@@ -3040,13 +3091,61 @@ button.collapsible-block-header:focus {
   color: #9a4d4d;
 }
 
+.account-type-badge {
+  display: inline-flex;
+  width: fit-content;
+  margin-bottom: 4px;
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--card-muted);
+  color: var(--muted);
+  font-size: 0.64rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.account-type-pot {
+  border-color: rgba(37, 135, 166, 0.2);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.account-summary-meta {
+  display: grid;
+  gap: 4px;
+  justify-items: end;
+  min-width: 86px;
+}
+
+.account-summary-meta span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.account-summary-meta strong {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  padding: 5px 10px;
+  border: 1px solid rgba(47, 125, 92, 0.28);
+  border-radius: var(--radius-control);
+  background: var(--positive-soft);
+  color: var(--positive);
+  font-size: 0.76rem;
+  font-weight: 900;
+}
+
 .account-review-controls {
   display: grid;
   grid-template-columns: minmax(140px, 1.15fr) repeat(2, minmax(120px, 1fr)) auto;
   align-items: end;
   gap: var(--space-xs);
   min-width: 0;
-  padding-top: var(--space-sm);
+  padding: var(--space-sm);
   border-top: 1px solid rgba(203, 196, 184, 0.62);
 }
 
@@ -3084,7 +3183,7 @@ button.collapsible-block-header:focus {
   box-shadow: 0 0 0 3px rgba(37, 135, 166, 0.14);
 }
 
-.account-review-row button {
+.account-review-controls button {
   align-self: end;
   min-height: 40px;
   padding: 9px var(--space-md);
@@ -3096,7 +3195,7 @@ button.collapsible-block-header:focus {
   font-weight: 850;
 }
 
-.account-review-row button:disabled {
+.account-review-controls button:disabled {
   border-color: var(--line);
   background: var(--card-muted);
   color: var(--soft);
@@ -3379,6 +3478,73 @@ button.collapsible-block-header:focus {
   background: transparent;
 }
 
+.settings-section-stack {
+  display: grid;
+  gap: var(--space-md);
+  max-width: 920px;
+}
+
+.settings-section-header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-md);
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: var(--space-sm);
+  border-bottom: 1px solid var(--line);
+}
+
+.settings-section-header h3,
+.settings-section-header p {
+  margin: 0;
+}
+
+.settings-section-header h3 {
+  color: var(--ink);
+  font-size: 1.08rem;
+}
+
+.settings-section-header p {
+  max-width: 680px;
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.integration-source-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-sm);
+}
+
+.integration-source-card {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: var(--space-md);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-row);
+  background: rgba(255, 255, 255, 0.82);
+  color: inherit;
+  text-decoration: none;
+  box-shadow: 0 12px 26px rgba(38, 41, 35, 0.04);
+}
+
+.integration-source-card:hover {
+  border-color: rgba(37, 135, 166, 0.26);
+  transform: translateY(-1px);
+}
+
+.integration-source-card strong {
+  color: var(--ink);
+}
+
+.integration-source-card span {
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
 .control-form {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
@@ -3626,6 +3792,144 @@ button.collapsible-block-header:focus {
   color: var(--muted);
   font-size: 0.95rem;
   line-height: 1.5;
+}
+
+.monzo-pot-coverage-card {
+  display: grid;
+  gap: var(--space-md);
+  margin-top: var(--space-md);
+  padding: var(--space-md);
+  border: 1px solid rgba(37, 135, 166, 0.16);
+  border-radius: var(--radius-card);
+  background:
+    radial-gradient(circle at 8% 0%, rgba(78, 205, 196, 0.12), transparent 28%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(247, 245, 240, 0.92));
+}
+
+.monzo-pot-coverage-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(210px, 0.28fr);
+  gap: var(--space-md);
+  align-items: stretch;
+}
+
+.monzo-pot-coverage-header strong {
+  display: block;
+  margin-top: var(--space-xxs);
+  color: var(--ink);
+  font-size: clamp(1.05rem, 1.8vw, 1.45rem);
+  letter-spacing: -0.02em;
+}
+
+.monzo-pot-coverage-header small {
+  display: block;
+  margin-top: var(--space-xxs);
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.monzo-pot-summary {
+  display: grid;
+  align-content: center;
+  gap: var(--space-xxs);
+  padding: var(--space-sm);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-row);
+  background: white;
+}
+
+.monzo-pot-summary span {
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.monzo-pot-summary strong {
+  margin: 0;
+  font-family: var(--font-number);
+}
+
+.monzo-pot-summary.is-short strong {
+  color: var(--danger);
+}
+
+.monzo-pot-summary.is-covered strong {
+  color: var(--positive);
+}
+
+.monzo-pot-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-sm);
+}
+
+.monzo-pot-card {
+  display: grid;
+  gap: var(--space-sm);
+  min-width: 0;
+  padding: var(--space-sm);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-row);
+  background: rgba(255, 255, 255, 0.86);
+}
+
+.monzo-pot-short {
+  border-color: rgba(184, 92, 92, 0.28);
+  background: #fff8f6;
+}
+
+.monzo-pot-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}
+
+.monzo-pot-card-header strong {
+  display: block;
+  color: var(--ink);
+}
+
+.monzo-pot-card-header small {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.monzo-pot-items {
+  display: grid;
+  gap: 6px;
+}
+
+.monzo-pot-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px var(--space-sm);
+  padding: 8px 0;
+  border-top: 1px solid rgba(203, 196, 184, 0.5);
+}
+
+.monzo-pot-item span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 0.82rem;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.monzo-pot-item strong {
+  font-family: var(--font-number);
+  font-size: 0.82rem;
+}
+
+.monzo-pot-item small {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 0.72rem;
 }
 
 .budget-boundary-card {
@@ -4428,6 +4732,301 @@ button.collapsible-block-header:focus {
   gap: var(--space-md);
 }
 
+.monzo-sheets-card {
+  gap: var(--space-md);
+  overflow: visible;
+}
+
+.monzo-sheets-hero {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--space-md);
+  align-items: center;
+  padding: var(--space-md);
+  border: 1px solid rgba(47, 125, 92, 0.16);
+  border-radius: var(--radius-card);
+  background:
+    radial-gradient(circle at 4% 0%, rgba(78, 205, 196, 0.16), transparent 30%),
+    linear-gradient(135deg, rgba(248, 251, 246, 0.96), rgba(245, 241, 232, 0.96));
+}
+
+.monzo-sheets-hero strong {
+  display: block;
+  color: var(--ink);
+  font-size: clamp(1rem, 1.6vw, 1.22rem);
+}
+
+.monzo-sheets-hero small,
+.monzo-sheets-hero p {
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.monzo-sheets-hero p {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding-top: var(--space-xs);
+  border-top: 1px solid rgba(203, 196, 184, 0.58);
+  font-size: 0.78rem;
+}
+
+.monzo-sheets-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(280px, 0.75fr);
+  gap: var(--space-md);
+  align-items: start;
+}
+
+.monzo-sheets-panel {
+  display: grid;
+  gap: var(--space-md);
+  align-content: start;
+  min-width: 0;
+  padding: var(--space-md);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background:
+    linear-gradient(#ffffff, #ffffff) padding-box,
+    linear-gradient(135deg, rgba(47, 125, 92, 0.12), rgba(217, 154, 43, 0.12)) border-box;
+  box-shadow: 0 14px 34px rgba(38, 41, 35, 0.05);
+}
+
+.monzo-sheets-panel .freeagent-panel-header {
+  align-items: start;
+}
+
+.monzo-sheets-form-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.monzo-sheets-form-grid .wide-field {
+  grid-column: 1 / -1;
+}
+
+.monzo-sheets-action-row,
+.monzo-sheets-sync-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  align-items: center;
+}
+
+.monzo-sheets-action-row {
+  padding-top: var(--space-xs);
+  border-top: 1px solid rgba(203, 196, 184, 0.44);
+}
+
+.monzo-primary-action {
+  border-color: rgba(47, 125, 92, 0.28);
+  background: var(--positive);
+  color: white;
+  box-shadow: 0 10px 22px rgba(47, 125, 92, 0.12);
+}
+
+.monzo-primary-action:disabled {
+  border-color: rgba(47, 125, 92, 0.16);
+  background: rgba(231, 245, 236, 0.72);
+  color: rgba(47, 125, 92, 0.78);
+  box-shadow: none;
+}
+
+.monzo-sheets-checklist {
+  display: grid;
+  gap: 8px;
+  padding: var(--space-sm);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-row);
+  background: rgba(247, 245, 240, 0.72);
+}
+
+.monzo-sheets-checklist span {
+  position: relative;
+  min-height: 30px;
+  padding: 7px 10px 7px 34px;
+  border: 1px solid rgba(203, 196, 184, 0.6);
+  border-radius: var(--radius-control);
+  background: white;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.monzo-sheets-checklist span::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 10px;
+  width: 13px;
+  height: 13px;
+  border: 1px solid rgba(116, 120, 111, 0.34);
+  border-radius: 999px;
+  transform: translateY(-50%);
+}
+
+.monzo-sheets-checklist span.is-complete {
+  border-color: rgba(47, 125, 92, 0.2);
+  background: var(--positive-soft);
+  color: var(--positive);
+}
+
+.monzo-sheets-checklist span.is-complete::before {
+  border-color: var(--positive);
+  background: var(--positive);
+  box-shadow: inset 0 0 0 3px var(--positive-soft);
+}
+
+.monzo-sheets-sync-actions {
+  display: grid;
+  grid-template-columns: 1fr;
+}
+
+.monzo-sheets-sync-actions button,
+.monzo-sheets-sync-actions .button-link {
+  width: 100%;
+  justify-content: center;
+  min-height: 40px;
+}
+
+.monzo-sheets-sync-note {
+  padding: var(--space-sm);
+  border: 1px dashed rgba(47, 125, 92, 0.28);
+  border-radius: var(--radius-row);
+  background: rgba(231, 245, 236, 0.42);
+}
+
+.monzo-sheets-sync-note strong {
+  display: block;
+  color: var(--ink);
+}
+
+.monzo-sheets-sync-note small {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.monzo-sheets-config-warning {
+  border-style: solid;
+  border-color: rgba(217, 154, 43, 0.3);
+  background: #fff6df;
+}
+
+.plaid-card {
+  gap: var(--space-md);
+}
+
+.plaid-hero {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--space-md);
+  align-items: center;
+  padding: var(--space-md);
+  border: 1px solid rgba(37, 99, 235, 0.14);
+  border-radius: var(--radius-card);
+  background:
+    radial-gradient(circle at 6% 0%, rgba(37, 99, 235, 0.12), transparent 28%),
+    linear-gradient(135deg, #f9fbff, rgba(245, 241, 232, 0.96));
+}
+
+.plaid-hero strong,
+.plaid-hero small,
+.plaid-hero p {
+  display: block;
+}
+
+.plaid-hero strong {
+  color: var(--ink);
+  font-size: clamp(1rem, 1.5vw, 1.22rem);
+}
+
+.plaid-hero small,
+.plaid-hero p {
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.plaid-hero p {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding-top: var(--space-xs);
+  border-top: 1px solid rgba(203, 196, 184, 0.58);
+  font-size: 0.78rem;
+}
+
+.plaid-grid,
+.plaid-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-md);
+}
+
+.plaid-panel,
+.plaid-preview-panel {
+  display: grid;
+  gap: var(--space-md);
+  align-content: start;
+  min-width: 0;
+  padding: var(--space-md);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 14px 34px rgba(38, 41, 35, 0.05);
+}
+
+.plaid-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}
+
+.plaid-action-row button {
+  flex: 1 1 180px;
+}
+
+.plaid-preview-panel > strong {
+  color: var(--ink);
+  font-size: 1rem;
+}
+
+.plaid-preview-list {
+  display: grid;
+  gap: var(--space-xs);
+}
+
+.plaid-preview-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px var(--space-sm);
+  padding: var(--space-xs);
+  border: 1px solid rgba(203, 196, 184, 0.58);
+  border-radius: var(--radius-row);
+  background: rgba(247, 245, 240, 0.46);
+}
+
+.plaid-preview-row span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink);
+  font-weight: 850;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plaid-preview-row small {
+  grid-column: 1;
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 750;
+}
+
+.plaid-preview-row strong {
+  grid-row: 1 / span 2;
+  grid-column: 2;
+  align-self: center;
+  font-family: var(--font-number);
+}
+
 .freeagent-status-strip {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -4515,6 +5114,17 @@ button.collapsible-block-header:focus {
   display: grid;
   gap: var(--space-md);
   min-width: 0;
+}
+
+.freeagent-result-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-sm);
+}
+
+.button-disabled {
+  opacity: 0.48;
+  pointer-events: none;
 }
 
 .freeagent-collapsible-panel {
@@ -5931,6 +6541,15 @@ button.collapsible-block-header:focus {
 }
 
 @media (max-width: 900px) {
+  html,
+  body,
+  #root {
+    height: auto;
+    min-height: 100%;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
   .app-frame {
     grid-template-columns: 1fr;
     height: auto;
@@ -5966,6 +6585,21 @@ button.collapsible-block-header:focus {
   .import-page-grid {
     grid-template-columns: 1fr;
   }
+
+  .monzo-sheets-grid,
+  .monzo-sheets-form-grid,
+  .monzo-sheets-hero,
+  .plaid-grid,
+  .plaid-hero,
+  .plaid-preview-grid,
+  .monzo-pot-coverage-header,
+  .monzo-pot-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .monzo-sheets-form-grid .wide-field {
+    grid-column: auto;
+  }
 }
 
 @media (max-width: 1120px) and (min-width: 901px) {
@@ -5983,6 +6617,8 @@ button.collapsible-block-header:focus {
 
   .hero-stat-grid,
   .budget-control-hero,
+  .monzo-pot-coverage-header,
+  .monzo-pot-grid,
   .budget-summary-grid,
   .budget-decision-grid,
   .budget-review-grid,
@@ -6016,6 +6652,26 @@ button.collapsible-block-header:focus {
 
   .account-review-row {
     grid-template-columns: 1fr;
+  }
+
+  .account-summary-button {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .account-balance-pills-compact {
+    flex-wrap: wrap;
+    justify-content: stretch;
+  }
+
+  .account-balance-pills-compact .account-money-pill {
+    flex: 1 1 132px;
+  }
+
+  .account-summary-meta {
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    justify-items: start;
   }
 
   .account-review-errors {
@@ -6083,6 +6739,16 @@ button.collapsible-block-header:focus {
   .widget-preference-grid,
   .custom-widget-form {
     grid-template-columns: 1fr;
+  }
+
+  .monzo-sheets-action-row {
+    display: grid;
+  }
+
+  .monzo-sheets-action-row button,
+  .monzo-sheets-action-row .button-link {
+    width: 100%;
+    justify-content: center;
   }
 
   .subscription-hero,
@@ -6155,6 +6821,7 @@ button.collapsible-block-header:focus {
   }
 
   .settings-layout,
+  .integration-source-grid,
   .budget-control-hero,
   .budget-decision-grid,
   .budget-review-grid,
@@ -6275,12 +6942,13 @@ button.collapsible-block-header:focus {
     grid-template-columns: 1fr;
   }
 
-  .account-review-controls {
-    display: grid;
+  .account-summary-button {
     grid-template-columns: 1fr;
+    align-items: stretch;
   }
 
-  .account-review-main {
+  .account-review-controls {
+    display: grid;
     grid-template-columns: 1fr;
   }
 
@@ -6288,11 +6956,15 @@ button.collapsible-block-header:focus {
     justify-content: stretch;
   }
 
+  .account-balance-pills-compact {
+    flex-wrap: wrap;
+  }
+
   .account-money-pill {
     flex: 1 1 130px;
   }
 
-  .account-review-row button {
+  .account-review-controls button {
     width: 100%;
   }
 

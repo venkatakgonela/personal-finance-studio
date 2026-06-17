@@ -105,10 +105,19 @@ def test_accounts_and_transactions_endpoints(api_client, db_session: Session) ->
     client.post("/api/transfers/detect")
 
     accounts_response = client.get("/api/accounts")
+    period_accounts_response = client.get("/api/accounts?start_date=2026-06-10&end_date=2026-06-10")
     transactions_response = client.get("/api/transactions?include_transfer_candidates=false")
 
     assert accounts_response.status_code == 200
     assert len(accounts_response.json()["accounts"]) == 2
+    assert period_accounts_response.status_code == 200
+    hsbc = next(
+        account
+        for account in period_accounts_response.json()["accounts"]
+        if account["provider"] == "HSBC Personal"
+    )
+    assert hsbc["net_total"] == "2861.01"
+    assert hsbc["period_net_total"] == "1660.00"
     assert transactions_response.status_code == 200
     assert transactions_response.json()["total_count"] == 3
 

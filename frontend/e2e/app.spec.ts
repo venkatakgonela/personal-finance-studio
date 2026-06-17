@@ -2,12 +2,16 @@ import { expect, type Page, test } from "@playwright/test";
 
 const account = {
   account_type: "current",
+  balance_as_of: "2026-06-14",
+  balance_source: "entered",
   current_balance: "1000.00",
+  effective_balance: "1000.00",
   display_name: "HSBC Personal",
   id: "account-1",
   include_in_cash_on_hand: true,
   include_in_forecast: true,
   inflow_total: "3250.00",
+  inferred_balance: "2861.01",
   net_total: "2861.01",
   outflow_total: "-388.99",
   provider: "HSBC Personal",

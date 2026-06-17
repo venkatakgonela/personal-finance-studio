@@ -14,8 +14,10 @@ from app.routes import (
     decisions,
     forecast,
     freeagent,
+    google_sheets,
     imports,
     insights,
+    plaid,
     planning,
     transactions,
     transfers,
@@ -55,6 +57,12 @@ def create_app() -> FastAPI:
 
     app.include_router(imports.router, prefix="/api/imports", tags=["imports"])
     app.include_router(freeagent.router, prefix="/api/integrations/freeagent", tags=["freeagent"])
+    app.include_router(
+        google_sheets.router,
+        prefix="/api/integrations/google-sheets/monzo",
+        tags=["google-sheets"],
+    )
+    app.include_router(plaid.router, prefix="/api/integrations/plaid", tags=["plaid"])
     app.include_router(transfers.router, prefix="/api/transfers", tags=["transfers"])
     app.include_router(commitments.router, prefix="/api/commitments", tags=["commitments"])
     app.include_router(decisions.router, prefix="/api/decisions", tags=["decisions"])
